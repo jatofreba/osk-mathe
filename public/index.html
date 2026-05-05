@@ -233,7 +233,12 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
     <label style="font-size:13px;font-weight:600;color:#374151;margin-right:8px;">Lerntheke:</label>
     <select id="lt-select" onchange="switchLerntheke(this.value)" style="padding:6px 10px;border-radius:7px;border:1.5px solid #e2e8f0;font-size:14px;background:white;"></select>
   </div>
-  <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;"></iframe>
+  <div id="lt-admin-placeholder" style="display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:#64748b;background:#f8fafc;">
+      <div style="font-size:48px;">📊</div>
+      <div style="font-size:16px;font-weight:600;color:#1e293b;">Admin-Ansicht</div>
+      <div style="font-size:14px;text-align:center;max-width:300px;">Wechsle zur Klassen-Übersicht.</div>
+    </div>
+    <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;"></iframe>
   </div>
 
   <div id="view-admin">
@@ -489,14 +494,18 @@ async function showApp() {
   document.getElementById('bar-klasse').textContent = 'Klasse ' + me.klasse;
 
   if (me.role === 'admin') {
-    document.getElementById('bar-role').style.display = '';
-    document.getElementById('tab-admin').style.display = '';
+    const barRole = document.getElementById('bar-role');
+    const tabAdmin = document.getElementById('tab-admin');
+    if (barRole) barRole.style.display = '';
+    if (tabAdmin) tabAdmin.style.display = '';
   }
 
   if (me.role === 'admin') {
     // Admins see admin view, no iframe needed
-    document.getElementById('lerntheke-frame').style.display = 'none';
-    document.getElementById('lt-admin-placeholder').style.display = 'flex';
+    const ltFrame = document.getElementById('lerntheke-frame');
+    const ltPlaceholder = document.getElementById('lt-admin-placeholder');
+    if (ltFrame) ltFrame.style.display = 'none';
+    if (ltPlaceholder) ltPlaceholder.style.display = 'flex';
     showView('admin');
   } else {
     showView('lerntheke');
