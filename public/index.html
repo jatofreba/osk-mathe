@@ -633,7 +633,8 @@ function renderTable(students) {
       const k = kor[gr] || {};
       const st = k.status || 'ausstehend';
       const hasAbgabe = g[gr] && g[gr].abgabe;
-      // Always show korrektur buttons so admin can always correct
+      // Only show korrektur buttons if student submitted this group
+      if (!hasAbgabe) return '';
       return `<div class="kor-cell" style="margin-bottom:2px;">
         <span style="font-size:10px;color:var(--ink2);font-weight:600;">${gr}${hasAbgabe?' 📋':''}</span>
         <div style="display:flex;gap:4px;">
