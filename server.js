@@ -39,8 +39,19 @@ async function initDB() {
       sess   JSON NOT NULL,
       expire TIMESTAMPTZ NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS korrektur (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      gruppe     TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'ausstehend',
+      notiz      TEXT DEFAULT '',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      admin_id   INTEGER REFERENCES users(id),
+      UNIQUE(user_id, gruppe)
+    );
     CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
     CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
+    CREATE INDEX IF NOT EXISTS idx_korrektur_user ON korrektur(user_id);
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -171,7 +182,9 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
         (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_kreise_v10') AS prog,
         (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_abgabe_v1')  AS abgabe,
         (SELECT updated_at FROM progress WHERE user_id=u.id
-         ORDER BY updated_at DESC LIMIT 1) AS last_active
+         ORDER BY updated_at DESC LIMIT 1) AS last_active,
+        (SELECT json_object_agg(gruppe, json_build_object('status',status,'notiz',notiz))
+         FROM korrektur WHERE user_id=u.id) AS korrektur
       FROM users u
       WHERE u.role='student' AND u.klasse=$1
       ORDER BY u.username
@@ -262,6 +275,52 @@ app.delete('/api/admin/student/:id', requireAdmin, async (req, res) => {
 function safeJSON(s) {
   try { return s ? JSON.parse(s) : {}; } catch { return {}; }
 }
+
+
+// ── Korrektur (Admin bewertet Abgaben) ───────────────────────────────────────
+
+// Admin: get all korrektur status for a student
+app.get('/api/admin/korrektur/:userId', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT gruppe, status, notiz, updated_at FROM korrektur WHERE user_id=$1',
+      [req.params.userId]
+    );
+    const out = {};
+    r.rows.forEach(row => { out[row.gruppe] = { status: row.status, notiz: row.notiz, updated_at: row.updated_at }; });
+    res.json(out);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Admin: set korrektur status
+app.post('/api/admin/korrektur', requireAdmin, async (req, res) => {
+  try {
+    const { userId, gruppe, status, notiz } = req.body;
+    if (!userId || !gruppe || !status) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (!['ausstehend','bestanden','nicht_bestanden'].includes(status))
+      return res.status(400).json({ error: 'Ungültiger Status' });
+    await pool.query(`
+      INSERT INTO korrektur (user_id, gruppe, status, notiz, admin_id, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      ON CONFLICT (user_id, gruppe) DO UPDATE
+      SET status=$3, notiz=$4, admin_id=$5, updated_at=NOW()
+    `, [userId, gruppe, status, notiz||'', req.session.userId]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Student: get own korrektur status
+app.get('/api/korrektur', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT gruppe, status, notiz FROM korrektur WHERE user_id=$1',
+      [req.session.userId]
+    );
+    const out = {};
+    r.rows.forEach(row => { out[row.gruppe] = { status: row.status, notiz: row.notiz }; });
+    res.json(out);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
 
 // ── Catch-all ─────────────────────────────────────────────────────────────────
 app.get('*', (req, res) =>

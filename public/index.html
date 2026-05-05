@@ -180,6 +180,14 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
   .admin-title{font-size:17px;}
   #view-admin{padding:14px;}
 }
+
+.kor-btn{padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700;border:1.5px solid;cursor:pointer;transition:all .15s;}
+.kor-btn.bestanden{background:#f0fdf4;border-color:#bbf7d0;color:#16a34a;}
+.kor-btn.bestanden.active{background:#16a34a;color:white;border-color:#16a34a;}
+.kor-btn.nicht_bestanden{background:#fef2f2;border-color:#fecaca;color:#dc2626;}
+.kor-btn.nicht_bestanden.active{background:#dc2626;color:white;border-color:#dc2626;}
+.kor-btn.ausstehend{background:#f8fafc;border-color:#e2e8f0;color:#94a3b8;}
+.kor-cell{display:flex;flex-direction:column;gap:3px;}
 </style>
 </head>
 <body>
@@ -249,7 +257,7 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
             <th>🔵 Basis</th>
             <th>🟢 Aufbau</th>
             <th>🟣 Abflug</th>
-            <th>Abgaben</th>
+            <th>Abgaben</th><th>Korrektur</th>
             <th>Zuletzt aktiv</th>
             <th></th>
           </tr>
@@ -350,11 +358,11 @@ const ST_GROUP = [
 const G_REQ = { Pflicht:2, Basis:4, Aufbau:4, Abflug:1 };
 const G_TOTAL = { Pflicht:3, Basis:7, Aufbau:6, Abflug:2 };
 
-function parseGroups(progStr, abgabeStr) {
+function parseGroups(progStr, abgabeStr, korrekturObj) {
   const prog = safeJSON(progStr);
   const abg  = safeJSON(abgabeStr);
+  const kor  = korrekturObj || {};
   const done = new Set();
-  // prog is the serialized localStorage value: JSON of {0:true,1:true,...} or a Set
   if (typeof prog === 'object') {
     Object.keys(prog).forEach(k => { if (prog[k]) done.add(Number(k)); });
   }
@@ -362,11 +370,16 @@ function parseGroups(progStr, abgabeStr) {
   Object.keys(G_REQ).forEach(g => {
     const ids = ST_GROUP.map((gr,i) => gr===g ? i : -1).filter(i=>i>=0);
     const cnt = ids.filter(i=>done.has(i)).length;
+    const abgabe = !!(abg && abg[g]);
+    const korStatus = (kor[g] && kor[g].status) || 'ausstehend';
+    const korOk = korStatus === 'bestanden';
     result[g] = {
       done: cnt, req: G_REQ[g], total: G_TOTAL[g],
       stationsOk: cnt >= G_REQ[g],
-      abgabe: !!(abg && abg[g]),
-      complete: cnt >= G_REQ[g] && (g==='Pflicht' || !!(abg && abg[g]))
+      abgabe,
+      korStatus,
+      korOk,
+      complete: cnt >= G_REQ[g] && (g==='Pflicht' || korOk)
     };
   });
   return result;
@@ -537,9 +550,9 @@ async function loadStudents() {
     document.getElementById('stats-row').innerHTML = `
       <div class="stat-card"><div class="stat-val">${stats.total}</div><div class="stat-lbl">Schüler:innen</div></div>
       <div class="stat-card"><div class="stat-val">${stats.active}</div><div class="stat-lbl">Aktiv (7 Tage)</div></div>
-      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe);return g.Pflicht.complete;}).length}</div><div class="stat-lbl">Pflicht ✓</div></div>
-      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe);return g.Basis.complete;}).length}</div><div class="stat-lbl">Basis LZK bereit</div></div>
-      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe);return g.Aufbau.complete;}).length}</div><div class="stat-lbl">Aufbau LZK bereit</div></div>
+      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe,s.korrektur);return g.Pflicht.complete;}).length}</div><div class="stat-lbl">Pflicht ✓</div></div>
+      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe,s.korrektur);return g.Basis.complete;}).length}</div><div class="stat-lbl">Basis LZK bereit</div></div>
+      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe,s.korrektur);return g.Aufbau.complete;}).length}</div><div class="stat-lbl">Aufbau LZK bereit</div></div>
     `;
   }
   renderTable(allStudents);
@@ -552,7 +565,7 @@ function renderTable(students) {
     return;
   }
   tbody.innerHTML = students.map(s => {
-    const g = parseGroups(s.prog, s.abgabe);
+    const g = parseGroups(s.prog, s.abgabe, s.korrektur);
     const groupCells = ['Pflicht','Basis','Aufbau','Abflug'].map(grp => {
       const st = g[grp];
       const pct = Math.min(100, Math.round(st.done/st.total*100));
@@ -571,6 +584,23 @@ function renderTable(students) {
       .map(gr => `<span class="gpill gpill-ok">${gr}</span>`)
       .join('') || '<span style="color:var(--ink2);font-size:12px;">–</span>';
 
+    const kor = s.korrektur || {};
+    const korCell = ['Basis','Aufbau','Abflug'].map(gr => {
+      const k = kor[gr] || {};
+      const st = k.status || 'ausstehend';
+      const hasAbgabe = g[gr] && g[gr].abgabe;
+      if (!hasAbgabe) return '';
+      return `<div class="kor-cell" style="margin-bottom:2px;">
+        <span style="font-size:10px;color:var(--ink2);font-weight:600;">${gr}</span>
+        <div style="display:flex;gap:4px;">
+          <button class="kor-btn bestanden ${st==='bestanden'?'active':''}"
+            onclick="setKorrektur(${s.id},'${gr}','bestanden',event)">✓ Bestanden</button>
+          <button class="kor-btn nicht_bestanden ${st==='nicht_bestanden'?'active':''}"
+            onclick="setKorrektur(${s.id},'${gr}','nicht_bestanden',event)">✗ Nicht best.</button>
+        </div>
+      </div>`;
+    }).join('');
+
     const lastActive = s.last_active
       ? new Date(s.last_active).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
       : '–';
@@ -579,6 +609,7 @@ function renderTable(students) {
       <td style="font-weight:600;">${s.username}</td>
       ${groupCells}
       <td>${abgaben}</td>
+      <td>${korCell||'<span style="color:var(--ink2);font-size:12px;">–</span>'}</td>
       <td style="color:var(--ink2);">${lastActive}</td>
       <td>
         <div class="action-btns">
@@ -690,10 +721,21 @@ async function doChangePw() {
 }
 
 // ══ CSV Export ════════════════════════════════════════════════════════════════
+
+async function setKorrektur(userId, gruppe, status, event) {
+  event.stopPropagation();
+  await fetch('/api/admin/korrektur', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId, gruppe, status })
+  });
+  loadStudents();
+}
+
 function exportCSV() {
   const header = 'Name,Pflicht,Basis,Aufbau,Abflug,Basis-Abgabe,Aufbau-Abgabe,Zuletzt aktiv\n';
   const rows = allStudents.map(s => {
-    const g = parseGroups(s.prog, s.abgabe);
+    const g = parseGroups(s.prog, s.abgabe, s.korrektur);
     return [
       s.username,
       g.Pflicht.done+'/'+g.Pflicht.req,

@@ -244,6 +244,10 @@ td.row-label{font-weight:700;color:var(--ink2);background:#fafaf9;font-family:'D
 .video-link-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--ink);margin-bottom:2px;}
 .video-link-sub{font-size:12px;color:var(--ink2);line-height:1.4;}
 .video-link-arrow{font-size:18px;color:#94a3b8;flex-shrink:0;}
+.korrektur-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:8px;margin-top:6px;}
+.korrektur-badge.bestanden{background:#f0fdf4;color:#16a34a;border:1.5px solid #bbf7d0;}
+.korrektur-badge.nicht_bestanden{background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;}
+.korrektur-badge.ausstehend{background:#fffbeb;color:#d97706;border:1.5px solid #fde68a;}
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
@@ -414,6 +418,7 @@ function buildReqCards(stats){
       ${g!=='Pflicht'?`<div class="abgabe-row" style="border-color:${info.border};color:${info.color};">
         <input type="checkbox" class="abgabe-cb" id="abgabe-${g}" ${abgabeChecked(g)?'checked':''} onchange="toggleAbgabe('${g}',this.checked)" style="accent-color:${info.color};">
         <label class="abgabe-label" for="abgabe-${g}" style="color:${info.color};cursor:pointer;">Aufgabe zur Korrektur abgegeben</label>
+        ${(()=>{const k=korrekturState[g];if(k&&k.status==='bestanden')return '<div class="korrektur-badge bestanden">✓ Bestanden</div>';if(k&&k.status==='nicht_bestanden')return '<div class="korrektur-badge nicht_bestanden">✗ Nicht bestanden – bitte erneut einreichen</div>';return abgabeChecked(g)?'<div class="korrektur-badge ausstehend">⏳ Wartet auf Korrektur</div>':'';})()} 
       </div>`:''}
     `;
     grid.appendChild(card);
@@ -1026,6 +1031,12 @@ const checkLondon=makeCheckGeneric('check-result-london','sol-lock-london');
 const resetLondon=makeResetGeneric('check-result-london');
 
 const ABGABE_KEY='lerntheke_abgabe_v1';
+let korrekturState={{}};
+async function loadKorrektur(){{
+  try{{const r=await fetch('/api/korrektur');if(r.ok)korrekturState=await r.json();}}catch(e){{}}
+  buildOverview();
+}}
+if(window.self!==window.top)loadKorrektur();
 let abgabeState=JSON.parse(localStorage.getItem(ABGABE_KEY)||'{}');
 function abgabeChecked(g){return !!abgabeState[g];}
 function toggleAbgabe(g,val){
