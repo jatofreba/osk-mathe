@@ -1,119 +1,53 @@
 # Lerntheke Kreise & Zylinder – Server
 
 Multi-User-Server mit Login, Fortschrittsspeicherung und Admin-Dashboard.
-Hosting: **fly.io** (dauerhaft kostenlos, EU-Server Frankfurt)
+Hosting: **Glitch.com** (dauerhaft kostenlos, kein Kreditkarte nötig)
 
 ---
 
-## Einrichten (einmalig, ca. 20 Minuten)
+## Einrichten (einmalig, ~10 Minuten, alles im Browser)
 
-### Was du brauchst
-- GitHub-Account (hast du bereits)
-- Ein Terminal / eine Kommandozeile
-  - **Mac:** Terminal (vorinstalliert, in Programme → Dienstprogramme)
-  - **Windows:** PowerShell oder Windows Terminal
+### Schritt 1: Glitch-Account erstellen
 
----
-
-### Schritt 1: flyctl installieren
-
-**Mac:**
-```bash
-brew install flyctl
-```
-*(Falls brew nicht installiert: https://brew.sh)*
-
-**Windows (PowerShell als Administrator):**
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://fly.io/install.ps1 | iex"
-```
-
-**Verifizieren:**
-```bash
-fly version
-```
-→ Sollte eine Versionsnummer zeigen.
+1. Gehe auf **glitch.com**
+2. Klicke „Sign up"
+3. Wähle „Sign up with GitHub" → bestätigen
+4. Fertig – kein Kreditkarte nötig!
 
 ---
 
-### Schritt 2: fly.io Account erstellen & anmelden
+### Schritt 2: Neues Projekt aus GitHub importieren
 
-```bash
-fly auth signup
-```
-→ Öffnet Browser → Mit GitHub anmelden → Kreditkarte hinterlegen (wird **nicht** belastet, nur zur Verifikation)
+1. Klicke oben rechts auf **„New Project"**
+2. Wähle **„Import from GitHub"**
+3. Gib deine GitHub-URL ein:
+   `https://github.com/DEIN-USERNAME/lerntheke-kreise`
+4. Klicke „OK"
 
-Oder falls Account schon vorhanden:
-```bash
-fly auth login
-```
+→ Glitch importiert alle Dateien und startet automatisch
 
 ---
 
-### Schritt 3: Code auf deinen Computer laden
+### Schritt 3: SESSION_SECRET setzen
 
-```bash
-# GitHub Repo klonen (deine URL einsetzen)
-git clone https://github.com/DEIN-USERNAME/lerntheke-kreise.git
-cd lerntheke-kreise
+1. Im Glitch-Editor links auf **„.env"** klicken
+2. Folgendes eintragen:
 ```
+SESSION_SECRET=einLangerZufaelligerStringDenNurDuKennst2024!
+```
+3. Datei wird automatisch gespeichert
+
+> **Tipp:** Einfach ein paar zufällige Wörter+Zahlen zusammenwürfeln, z.B.:
+> `SESSION_SECRET=Lerntheke2024KreiseZylinder!MeinGeheimnis`
 
 ---
 
-### Schritt 4: App bei fly.io anlegen
+### Schritt 4: App öffnen
 
-```bash
-fly launch --no-deploy
-```
-
-Fragen beantworten:
-- **App name:** `lerntheke-kreise` (oder eigenen Namen wählen)
-- **Region:** `fra` (Frankfurt) ← für DSGVO wichtig
-- **Would you like to set up a PostgreSQL database?** → `No`
-- **Would you like to set up an Upstash Redis database?** → `No`
-
----
-
-### Schritt 5: Persistenten Speicher anlegen
-
-```bash
-fly volumes create lerntheke_data --region fra --size 1
-```
-→ Erstellt 1 GB Speicher für die Datenbank (dauerhaft, übersteht alle Updates)
-
----
-
-### Schritt 6: SESSION_SECRET setzen
-
-```bash
-fly secrets set SESSION_SECRET=$(openssl rand -hex 32)
-```
-
-*Windows (PowerShell):*
-```powershell
-fly secrets set SESSION_SECRET=$(New-Guid)$(New-Guid)
-```
-
----
-
-### Schritt 7: Deployen!
-
-```bash
-fly deploy
-```
-
-→ Baut den Container und startet ihn (~3 Minuten)
-→ Am Ende erscheint deine URL: `https://lerntheke-kreise.fly.dev`
-
----
-
-### Schritt 8: App öffnen
-
-```bash
-fly open
-```
-
-Oder direkt im Browser: `https://lerntheke-kreise.fly.dev`
+1. Klicke oben links auf **„Share"**
+2. Unter „Live site" findest du deine URL:
+   `https://lerntheke-kreise.glitch.me`
+3. Klicke darauf → deine Lerntheke ist online!
 
 ---
 
@@ -146,71 +80,62 @@ Format: `benutzername,passwort` – eine Zeile pro Person.
 
 ---
 
-## Updates einspielen (neue Lerntheke oder Bugfix)
+## Updates einspielen
 
+### Neue Lerntheke hinzufügen
+1. In Glitch: links im Dateibaum auf **„public/lerntheken"** klicken
+2. **„Upload a file"** → neue HTML-Datei hochladen
+3. Erscheint sofort im Dropdown – fertig!
+
+### Lerntheke aktualisieren
+1. In Glitch: `public/lerntheken/kreise-und-zylinder.html` anklicken
+2. Oben rechts **„•••"** → **„Replace file"** → neue Datei hochladen
+3. Sofort online!
+
+### Code aus GitHub aktualisieren
+1. In Glitch: unten links **„Tools"** → **„Terminal"**
+2. Eingeben:
 ```bash
-# Im Projektordner:
-git pull                    # neuesten Stand holen
-fly deploy                  # deployen
+git pull https://github.com/DEIN-USERNAME/lerntheke-kreise main
+refresh
 ```
-
-Oder direkt über GitHub: Dateien in GitHub aktualisieren, dann:
-```bash
-fly deploy
-```
-
-**Neue Lerntheke hinzufügen:**
-1. HTML-Datei in `public/lerntheken/` legen
-2. In GitHub hochladen (commit + push)
-3. `fly deploy` ausführen
-4. Erscheint automatisch im Dropdown
 
 ---
 
-## Nützliche Befehle
+## Hinweis: Schlafmodus
 
-```bash
-fly logs              # Live-Logs anzeigen (Fehlersuche)
-fly status            # Status der App
-fly open              # App im Browser öffnen
-fly ssh console       # Direkt auf den Server (Fortgeschrittene)
-```
+Glitch schläft nach **5 Minuten Inaktivität** ein.
+Beim nächsten Aufruf wacht es in ca. **20–30 Sekunden** auf.
+
+**Lösung für den Unterricht:**
+- Seite einfach vor dem Unterricht kurz aufrufen
+- Oder: Einen kostenlosen „Uptime"-Dienst nutzen (z.B. UptimeRobot.com), der die Seite alle 5 Minuten anpingt → schläft nie ein
 
 ---
 
 ## Datenschutz / DSGVO
 
-- Server läuft in **Frankfurt (EU)**
-- Gespeichert werden nur: Benutzername, Passwort-Hash, Klasse, Lernfortschritt
-- Keine Weitergabe an Dritte
-- Datenbank kann jederzeit exportiert werden:
-  ```bash
-  fly ssh console -C "sqlite3 /data/lerntheke.db .dump" > backup.sql
-  ```
+- Daten liegen auf Glitch-Servern (USA) ⚠️
+- Gespeichert: Benutzername, Passwort-Hash, Klasse, Lernfortschritt
+- **Empfehlung:** Keine echten Klarnamen als Benutzernamen verwenden
+  → z.B. `schueler01`, `schueler02` oder Kürzel wie `am2024`
+- Datenbank-Export jederzeit möglich (Glitch Terminal → `sqlite3 .data/lerntheke.db .dump`)
 
 ---
 
 ## Kosten
 
-**Dauerhaft kostenlos** im Rahmen des Free Allowance:
-- 3 shared VMs mit je 256MB RAM
-- 3 GB persistenter Speicher
-- Ausreichend für ~200 gleichzeitige Nutzer
-
-Erst ab sehr hohem Traffic entstehen Kosten (für Schulbetrieb nicht relevant).
+**Dauerhaft kostenlos** – keine versteckten Kosten, kein Kreditkarte.
 
 ---
 
-## Umzug auf eigenen Server
+## Umzug auf eigenen Server später
 
 ```bash
-# Datenbank sichern
-fly ssh console -C "cat /data/lerntheke.db" > lerntheke.db
+# Im Glitch Terminal: Datenbank exportieren
+sqlite3 .data/lerntheke.db .dump > backup.sql
 
-# Auf eigenem Linux-Server
-npm install
-DB_PATH=/var/data/lerntheke.db \
-SESSION_SECRET=dein-secret \
-node server.js
+# Auf eigenem Server wiederherstellen
+sqlite3 lerntheke.db < backup.sql
 ```
 

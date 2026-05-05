@@ -7,8 +7,8 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'lerntheke.db');
-const SESSION_DB = process.env.SESSION_DB || path.join(__dirname, 'data', 'sessions.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '.data', 'lerntheke.db');
+const SESSION_DB = process.env.SESSION_DB || path.join(__dirname, '.data', 'sessions.db');
 
 // Ensure data directory exists
 const fs = require('fs');
