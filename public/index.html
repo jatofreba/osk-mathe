@@ -495,16 +495,20 @@ async function showApp() {
 }
 
 async function syncProgressToFrame() {
-  // Load server progress and inject into iframe's localStorage
   try {
     const r = await fetch('/api/progress');
+    if (!r.ok) return;
     const data = await r.json();
     const frame = document.getElementById('lerntheke-frame');
     if (!frame.contentWindow) return;
+    // Clear old lerntheke keys first to avoid stale cache
+    const lsKeys = Object.keys(frame.contentWindow.localStorage)
+      .filter(k => k.startsWith('lerntheke_'));
+    lsKeys.forEach(k => frame.contentWindow.localStorage.removeItem(k));
+    // Inject server data
     Object.entries(data).forEach(([k, v]) => {
       frame.contentWindow.localStorage.setItem(k, v);
     });
-    // Tell iframe to reload its state
     frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
   } catch(e) { console.warn('Progress sync failed:', e); }
 }
@@ -533,10 +537,17 @@ function showView(v) {
     const tab = document.getElementById('tab-' + id);
     if (tab) tab.classList.toggle('active', v===id);
   });
-  if (v === 'admin') loadStudents();
+  if (v === 'admin') {
+    loadStudents();
+    clearInterval(adminRefreshTimer);
+    adminRefreshTimer = setInterval(loadStudents, 30000);
+  } else {
+    clearInterval(adminRefreshTimer);
+  }
 }
 
 // ══ Admin: load students ══════════════════════════════════════════════════════
+let adminRefreshTimer = null;
 async function loadStudents() {
   const r = await fetch('/api/admin/students');
   if (!r.ok) return;

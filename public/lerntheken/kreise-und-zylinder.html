@@ -364,7 +364,11 @@ const HILFEN=[{"num": "1", "title": "Einheiten umrechnen", "html": "\n<div class
 const KEY='lerntheke_kreise_v10';
 let done=new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
 let cur=null;
-function save(){localStorage.setItem(KEY,JSON.stringify([...done]));}
+function save(){
+  const val=JSON.stringify([...done]);
+  localStorage.setItem(KEY,val);
+  window.parent.postMessage({type:'SAVE_PROGRESS',key:KEY,value:val},'*');
+}
 
 function groupStats(){
   const stats={};
@@ -1031,22 +1035,41 @@ const checkLondon=makeCheckGeneric('check-result-london','sol-lock-london');
 const resetLondon=makeResetGeneric('check-result-london');
 
 const ABGABE_KEY='lerntheke_abgabe_v1';
-let korrekturState={{}};
-async function loadKorrektur(){{
-  try{{const r=await fetch('/api/korrektur');if(r.ok)korrekturState=await r.json();}}catch(e){{}}
+let korrekturState={};
+async function loadKorrektur(){
+  try{const r=await fetch('/api/korrektur');if(r.ok)korrekturState=await r.json();}catch(e){}
   buildOverview();
-}}
+}
 if(window.self!==window.top)loadKorrektur();
 let abgabeState=JSON.parse(localStorage.getItem(ABGABE_KEY)||'{}');
 function abgabeChecked(g){return !!abgabeState[g];}
 function toggleAbgabe(g,val){
   abgabeState[g]=val;
-  localStorage.setItem(ABGABE_KEY,JSON.stringify(abgabeState));
+  const encoded=JSON.stringify(abgabeState);
+  localStorage.setItem(ABGABE_KEY,encoded);
+  // Sync to server via parent shell
+  window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY,value:encoded},'*');
   buildOverview();
 }
 
 function showOv(){buildOverview();showView('view-ov');}
 buildOverview();
+</script>
+
+<script>
+// ── Server sync: post progress saves to parent shell ─────────────────────────
+(function() {
+  // Override save() to also send to parent - already handled in build_final.py
+  // Listen for reload signal from parent after initial sync
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'RELOAD_PROGRESS') {
+      try {
+        if (typeof buildOverview === 'function') buildOverview();
+        if (typeof loadKorrektur === 'function') loadKorrektur();
+      } catch(err) {}
+    }
+  });
+})();
 </script>
 </body>
 </html>
