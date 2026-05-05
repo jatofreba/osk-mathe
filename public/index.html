@@ -514,15 +514,15 @@ async function syncProgressToFrame() {
     const data = await r.json();
     const frame = document.getElementById('lerntheke-frame');
     if (!frame.contentWindow) return;
-    // Clear old lerntheke keys first to avoid stale cache
-    const lsKeys = Object.keys(frame.contentWindow.localStorage)
-      .filter(k => k.startsWith('lerntheke_'));
-    lsKeys.forEach(k => frame.contentWindow.localStorage.removeItem(k));
-    // Inject server data
-    Object.entries(data).forEach(([k, v]) => {
-      frame.contentWindow.localStorage.setItem(k, v);
-    });
-    frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
+    // Only inject if server actually has progress data
+    if (Object.keys(data).length > 0) {
+      Object.entries(data).forEach(([k, v]) => {
+        frame.contentWindow.localStorage.setItem(k, v);
+      });
+      frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
+    }
+    // Always load korrektur
+    frame.contentWindow.postMessage({ type: 'LOAD_KORREKTUR' }, '*');
   } catch(e) { console.warn('Progress sync failed:', e); }
 }
 
@@ -540,15 +540,21 @@ window.addEventListener('message', async (e) => {
 function showView(v) {
   ['lerntheke','admin','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
+    if (!el) return;
+    const isActive = (v === id);
     if (id === 'lerntheke') {
-      el.style.display = (v===id) ? 'flex' : 'none';
-      // Set flex:1 for lerntheke
-      el.style.flex = (v===id) ? '1' : '';
+      el.style.display = isActive ? 'flex' : 'none';
+      el.style.flex = isActive ? '1' : '';
+      el.style.overflow = isActive ? 'hidden' : '';
+    } else if (id === 'admin') {
+      el.style.display = isActive ? 'block' : 'none';
+      el.style.flex = isActive ? '1' : '';
     } else {
-      el.style.display = (v===id) ? (id==='admin'?'block':'flex') : 'none';
+      el.style.display = isActive ? 'flex' : 'none';
+      el.style.flex = isActive ? '1' : '';
     }
     const tab = document.getElementById('tab-' + id);
-    if (tab) tab.classList.toggle('active', v===id);
+    if (tab) tab.classList.toggle('active', isActive);
   });
   if (v === 'admin') {
     loadStudents();
@@ -562,8 +568,9 @@ function showView(v) {
 // ══ Admin: load students ══════════════════════════════════════════════════════
 let adminRefreshTimer = null;
 async function loadStudents() {
+  try {
   const r = await fetch('/api/admin/students');
-  if (!r.ok) return;
+  if (!r.ok) { console.error('loadStudents failed:', r.status); return; }
   allStudents = await r.json();
 
   const sr = await fetch('/api/admin/stats');
@@ -580,6 +587,7 @@ async function loadStudents() {
     `;
   }
   renderTable(allStudents);
+  } catch(e) { console.error('loadStudents error:', e); }
 }
 
 function renderTable(students) {
