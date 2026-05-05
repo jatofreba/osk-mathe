@@ -1,53 +1,65 @@
 # Lerntheke Kreise & Zylinder – Server
 
 Multi-User-Server mit Login, Fortschrittsspeicherung und Admin-Dashboard.
-Hosting: **Glitch.com** (dauerhaft kostenlos, kein Kreditkarte nötig)
+Hosting: **Render.com** (dauerhaft kostenlos, kein Kreditkarte nötig)
 
 ---
 
-## Einrichten (einmalig, ~10 Minuten, alles im Browser)
+## Einrichten (einmalig, ~15 Minuten, alles im Browser)
 
-### Schritt 1: Glitch-Account erstellen
+### Schritt 1: Render-Account erstellen
 
-1. Gehe auf **glitch.com**
-2. Klicke „Sign up"
-3. Wähle „Sign up with GitHub" → bestätigen
+1. Gehe auf **render.com**
+2. Klicke „Get Started for Free"
+3. Wähle „Continue with GitHub" → bestätigen
 4. Fertig – kein Kreditkarte nötig!
 
 ---
 
-### Schritt 2: Neues Projekt aus GitHub importieren
+### Schritt 2: PostgreSQL-Datenbank anlegen
 
-1. Klicke oben rechts auf **„New Project"**
-2. Wähle **„Import from GitHub"**
-3. Gib deine GitHub-URL ein:
-   `https://github.com/DEIN-USERNAME/lerntheke-kreise`
-4. Klicke „OK"
-
-→ Glitch importiert alle Dateien und startet automatisch
+1. Im Render-Dashboard: Klicke **„New +"** → **„PostgreSQL"**
+2. Einstellungen:
+   - **Name:** `lerntheke-db`
+   - **Region:** `Frankfurt (EU Central)`
+   - **Plan:** `Free`
+3. Klicke **„Create Database"**
+4. Warte bis Status **„Available"** zeigt (~1 Minute)
+5. Kopiere die **„Internal Database URL"** – brauchst du gleich!
 
 ---
 
-### Schritt 3: SESSION_SECRET setzen
+### Schritt 3: Web Service anlegen
 
-1. Im Glitch-Editor links auf **„.env"** klicken
-2. Folgendes eintragen:
-```
-SESSION_SECRET=einLangerZufaelligerStringDenNurDuKennst2024!
-```
-3. Datei wird automatisch gespeichert
+1. Klicke **„New +"** → **„Web Service"**
+2. Wähle **„Build and deploy from a Git repository"**
+3. Verbinde dein GitHub-Repository `lerntheke-kreise`
+4. Einstellungen:
+   - **Name:** `lerntheke-kreise`
+   - **Region:** `Frankfurt (EU Central)`
+   - **Branch:** `main`
+   - **Runtime:** `Node`
+   - **Build Command:** `npm install`
+   - **Start Command:** `node server.js`
+   - **Instance Type:** `Free`
+5. Klappe **„Advanced"** auf
+6. Klicke **„Add Environment Variable"** – zweimal:
 
-> **Tipp:** Einfach ein paar zufällige Wörter+Zahlen zusammenwürfeln, z.B.:
-> `SESSION_SECRET=Lerntheke2024KreiseZylinder!MeinGeheimnis`
+   | Key | Value |
+   |-----|-------|
+   | `DATABASE_URL` | *(die Internal Database URL aus Schritt 2)* |
+   | `SESSION_SECRET` | *(irgendein langer Text, z.B.:* `MeineSchuleLerntheke2024GeheimesPasswort!`)* |
+
+7. Klicke **„Create Web Service"**
+
+→ Render baut und startet den Server (~3 Minuten)
+→ Du bekommst eine URL wie: `https://lerntheke-kreise.onrender.com`
 
 ---
 
 ### Schritt 4: App öffnen
 
-1. Klicke oben links auf **„Share"**
-2. Unter „Live site" findest du deine URL:
-   `https://lerntheke-kreise.glitch.me`
-3. Klicke darauf → deine Lerntheke ist online!
+Klicke auf deine URL → Lerntheke ist online!
 
 ---
 
@@ -82,60 +94,46 @@ Format: `benutzername,passwort` – eine Zeile pro Person.
 
 ## Updates einspielen
 
-### Neue Lerntheke hinzufügen
-1. In Glitch: links im Dateibaum auf **„public/lerntheken"** klicken
-2. **„Upload a file"** → neue HTML-Datei hochladen
-3. Erscheint sofort im Dropdown – fertig!
+**Lerntheke aktualisieren:**
+1. Neue `kreise-und-zylinder.html` in GitHub hochladen
+   (in `public/lerntheken/` ersetzen)
+2. Render deployed automatisch innerhalb weniger Minuten
 
-### Lerntheke aktualisieren
-1. In Glitch: `public/lerntheken/kreise-und-zylinder.html` anklicken
-2. Oben rechts **„•••"** → **„Replace file"** → neue Datei hochladen
-3. Sofort online!
-
-### Code aus GitHub aktualisieren
-1. In Glitch: unten links **„Tools"** → **„Terminal"**
-2. Eingeben:
-```bash
-git pull https://github.com/DEIN-USERNAME/lerntheke-kreise main
-refresh
-```
+**Neue Lerntheke hinzufügen:**
+1. HTML-Datei in `public/lerntheken/` auf GitHub hochladen
+2. Render deployed automatisch
+3. Erscheint sofort im Dropdown
 
 ---
 
 ## Hinweis: Schlafmodus
 
-Glitch schläft nach **5 Minuten Inaktivität** ein.
-Beim nächsten Aufruf wacht es in ca. **20–30 Sekunden** auf.
+Render Free Tier schläft nach **15 Minuten Inaktivität** ein.
+Beim nächsten Aufruf wacht es in ca. **30–50 Sekunden** auf.
 
-**Lösung für den Unterricht:**
-- Seite einfach vor dem Unterricht kurz aufrufen
-- Oder: Einen kostenlosen „Uptime"-Dienst nutzen (z.B. UptimeRobot.com), der die Seite alle 5 Minuten anpingt → schläft nie ein
+**Lösung:** Seite vor dem Unterricht kurz aufrufen.
+Oder: Kostenlosen Dienst **UptimeRobot.com** nutzen:
+- Account anlegen (kostenlos)
+- „Add New Monitor" → HTTP → deine Render-URL
+- Interval: 14 Minuten
+→ Schläft nie ein!
 
 ---
 
 ## Datenschutz / DSGVO
 
-- Daten liegen auf Glitch-Servern (USA) ⚠️
+- Server und Datenbank laufen in **Frankfurt (EU)** ✓
 - Gespeichert: Benutzername, Passwort-Hash, Klasse, Lernfortschritt
-- **Empfehlung:** Keine echten Klarnamen als Benutzernamen verwenden
-  → z.B. `schueler01`, `schueler02` oder Kürzel wie `am2024`
-- Datenbank-Export jederzeit möglich (Glitch Terminal → `sqlite3 .data/lerntheke.db .dump`)
+- Keine Weitergabe an Dritte
+- **Empfehlung:** Keine Klarnamen als Benutzernamen → z.B. Kürzel
 
 ---
 
 ## Kosten
 
-**Dauerhaft kostenlos** – keine versteckten Kosten, kein Kreditkarte.
+**Dauerhaft kostenlos:**
+- Render Web Service Free Tier: kostenlos
+- Render PostgreSQL Free Tier: kostenlos
 
----
-
-## Umzug auf eigenen Server später
-
-```bash
-# Im Glitch Terminal: Datenbank exportieren
-sqlite3 .data/lerntheke.db .dump > backup.sql
-
-# Auf eigenem Server wiederherstellen
-sqlite3 lerntheke.db < backup.sql
-```
+Keine versteckten Kosten, kein Kreditkarte.
 

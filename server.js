@@ -1,65 +1,72 @@
 const express = require('express');
-const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
-const SqliteStore = require('connect-sqlite3')(session);
+const pgSession = require('connect-pg-simple')(session);
+const { Pool } = require('pg');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '.data', 'lerntheke.db');
-const SESSION_DB = process.env.SESSION_DB || path.join(__dirname, '.data', 'sessions.db');
 
-// Ensure data directory exists
-const fs = require('fs');
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+// ── PostgreSQL Pool ───────────────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
 // ── Schema ────────────────────────────────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    username     TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    klasse       TEXT NOT NULL,
-    role         TEXT NOT NULL DEFAULT 'student',
-    created_at   TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS progress (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    key        TEXT NOT NULL,
-    value      TEXT NOT NULL,
-    updated_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(user_id, key),
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-  CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
-`);
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id           SERIAL PRIMARY KEY,
+      username     TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      klasse       TEXT NOT NULL,
+      role         TEXT NOT NULL DEFAULT 'student',
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS progress (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      key        TEXT NOT NULL,
+      value      TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, key)
+    );
+    CREATE TABLE IF NOT EXISTS session (
+      sid    TEXT PRIMARY KEY,
+      sess   JSON NOT NULL,
+      expire TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
+    CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
+  `);
 
-// ── Seed admin accounts ───────────────────────────────────────────────────────
-// Default password: admin123  →  CHANGE ON FIRST LOGIN
-// Admin accounts – username / display-klasse
-const ADMINS = [
-  { username: 'admin_m1m2', klasse: 'M1M2' },
-  { username: 'admin_m3m4', klasse: 'M3M4' },
-  { username: 'admin_m5m6', klasse: 'M5M6' },
-  { username: 'admin_m7m8', klasse: 'M7M8' },
-];
-const seedAdmin = db.prepare(`
-  INSERT OR IGNORE INTO users (username, password_hash, klasse, role)
-  VALUES (?, ?, ?, 'admin')
-`);
-ADMINS.forEach(a => seedAdmin.run(a.username, bcrypt.hashSync('admin123', 10), a.klasse));
+  // Seed admin accounts (only if they don't exist)
+  const admins = [
+    { username: 'admin_m1m2', klasse: 'M1M2' },
+    { username: 'admin_m3m4', klasse: 'M3M4' },
+    { username: 'admin_m5m6', klasse: 'M5M6' },
+    { username: 'admin_m7m8', klasse: 'M7M8' },
+  ];
+  for (const a of admins) {
+    const hash = await bcrypt.hash('admin123', 10);
+    await pool.query(`
+      INSERT INTO users (username, password_hash, klasse, role)
+      VALUES ($1, $2, $3, 'admin')
+      ON CONFLICT (username) DO NOTHING
+    `, [a.username, hash, a.klasse]);
+  }
+  console.log('✓ Datenbank bereit');
+}
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 app.use(session({
-  store: new SqliteStore({ db: SESSION_DB, concurrentDB: true }),
+  store: new pgSession({ pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET || 'bitte-aendern-' + Math.random(),
   resave: false,
   saveUninitialized: false,
@@ -73,18 +80,20 @@ const requireLogin = (req, res, next) =>
 const requireAdmin = (req, res, next) =>
   req.session.role === 'admin' ? next() : res.status(403).json({ error: 'Kein Zugriff' });
 
-// ── Auth routes ───────────────────────────────────────────────────────────────
-app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE username = ?')
-                 .get((username || '').trim().toLowerCase());
-  if (!user || !bcrypt.compareSync(password || '', user.password_hash))
-    return res.status(401).json({ error: 'Benutzername oder Passwort falsch' });
-  Object.assign(req.session, {
-    userId: user.id, username: user.username,
-    klasse: user.klasse, role: user.role
-  });
-  res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role });
+// ── Auth ──────────────────────────────────────────────────────────────────────
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const r = await pool.query('SELECT * FROM users WHERE username=$1', [(username||'').trim().toLowerCase()]);
+    const user = r.rows[0];
+    if (!user || !await bcrypt.compare(password||'', user.password_hash))
+      return res.status(401).json({ error: 'Benutzername oder Passwort falsch' });
+    Object.assign(req.session, {
+      userId: user.id, username: user.username,
+      klasse: user.klasse, role: user.role
+    });
+    res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
 app.post('/api/logout', (req, res) => {
@@ -99,132 +108,46 @@ app.get('/api/me', (req, res) => {
   });
 });
 
-app.post('/api/change-password', requireLogin, (req, res) => {
-  const { oldPassword, newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6)
-    return res.status(400).json({ error: 'Passwort mind. 6 Zeichen' });
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
-  if (!bcrypt.compareSync(oldPassword || '', user.password_hash))
-    return res.status(401).json({ error: 'Altes Passwort falsch' });
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
-    .run(bcrypt.hashSync(newPassword, 10), req.session.userId);
-  res.json({ ok: true });
-});
-
-// ── Progress routes ───────────────────────────────────────────────────────────
-app.get('/api/progress', requireLogin, (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM progress WHERE user_id = ?')
-                 .all(req.session.userId);
-  const out = {};
-  rows.forEach(r => { out[r.key] = r.value; });
-  res.json(out);
-});
-
-app.post('/api/progress', requireLogin, (req, res) => {
-  const { key, value } = req.body;
-  if (!key) return res.status(400).json({ error: 'key fehlt' });
-  db.prepare(`
-    INSERT INTO progress (user_id, key, value, updated_at)
-    VALUES (?, ?, ?, datetime('now'))
-    ON CONFLICT(user_id, key) DO UPDATE
-    SET value = excluded.value, updated_at = excluded.updated_at
-  `).run(req.session.userId, key, String(value));
-  res.json({ ok: true });
-});
-
-// ── Admin: read students ──────────────────────────────────────────────────────
-app.get('/api/admin/students', requireAdmin, (req, res) => {
-  const rows = db.prepare(`
-    SELECT
-      u.id, u.username, u.klasse, u.created_at,
-      (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_kreise_v10') AS prog,
-      (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_abgabe_v1')  AS abgabe,
-      (SELECT updated_at FROM progress WHERE user_id=u.id
-       ORDER BY updated_at DESC LIMIT 1) AS last_active
-    FROM users u
-    WHERE u.role = 'student' AND u.klasse = ?
-    ORDER BY u.username
-  `).all(req.session.klasse);
-
-  res.json(rows.map(r => ({
-    ...r,
-    progress: r.prog   ? safeJSON(r.prog)   : {},
-    abgabe:   r.abgabe ? safeJSON(r.abgabe) : {}
-  })));
-});
-
-app.get('/api/admin/stats', requireAdmin, (req, res) => {
-  const k = req.session.klasse;
-  const total  = db.prepare('SELECT COUNT(*) n FROM users WHERE role=? AND klasse=?').get('student', k).n;
-  const active = db.prepare(`
-    SELECT COUNT(DISTINCT u.id) n FROM users u
-    JOIN progress p ON p.user_id = u.id
-    WHERE u.role='student' AND u.klasse=?
-      AND p.updated_at > datetime('now','-7 days')
-  `).get(k).n;
-  res.json({ klasse: k, total, active });
-});
-
-// ── Admin: manage students ────────────────────────────────────────────────────
-app.post('/api/admin/create-student', requireAdmin, (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ error: 'Benutzername und Passwort erforderlich' });
-  if (password.length < 4)
-    return res.status(400).json({ error: 'Passwort mind. 4 Zeichen' });
+app.post('/api/change-password', requireLogin, async (req, res) => {
   try {
-    db.prepare('INSERT INTO users (username,password_hash,klasse,role) VALUES (?,?,?,?)')
-      .run(username.trim().toLowerCase(), bcrypt.hashSync(password, 10), req.session.klasse, 'student');
+    const { oldPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6)
+      return res.status(400).json({ error: 'Passwort mind. 6 Zeichen' });
+    const r = await pool.query('SELECT * FROM users WHERE id=$1', [req.session.userId]);
+    const user = r.rows[0];
+    if (!await bcrypt.compare(oldPassword||'', user.password_hash))
+      return res.status(401).json({ error: 'Altes Passwort falsch' });
+    await pool.query('UPDATE users SET password_hash=$1 WHERE id=$2',
+      [await bcrypt.hash(newPassword, 10), req.session.userId]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(409).json({ error: 'Benutzername bereits vergeben' });
-  }
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-app.post('/api/admin/bulk-create', requireAdmin, (req, res) => {
-  const { students } = req.body;
-  if (!Array.isArray(students) || students.length === 0)
-    return res.status(400).json({ error: 'Leere Liste' });
-
-  const ins = db.prepare(
-    'INSERT OR IGNORE INTO users (username,password_hash,klasse,role) VALUES (?,?,?,?)'
-  );
-  let created = 0, skipped = 0;
-  db.transaction(() => {
-    students.forEach(s => {
-      if (!s.username || !s.password) { skipped++; return; }
-      const r = ins.run(s.username.trim().toLowerCase(), bcrypt.hashSync(s.password, 10), req.session.klasse, 'student');
-      r.changes ? created++ : skipped++;
-    });
-  })();
-  res.json({ ok: true, created, skipped });
+// ── Progress ──────────────────────────────────────────────────────────────────
+app.get('/api/progress', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT key, value FROM progress WHERE user_id=$1', [req.session.userId]);
+    const out = {};
+    r.rows.forEach(row => { out[row.key] = row.value; });
+    res.json(out);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-app.post('/api/admin/reset-password', requireAdmin, (req, res) => {
-  const { userId, newPassword } = req.body;
-  if (!newPassword || newPassword.length < 4)
-    return res.status(400).json({ error: 'Passwort mind. 4 Zeichen' });
-  const r = db.prepare(
-    'UPDATE users SET password_hash=? WHERE id=? AND klasse=? AND role=?'
-  ).run(bcrypt.hashSync(newPassword, 10), userId, req.session.klasse, 'student');
-  if (!r.changes) return res.status(404).json({ error: 'Schüler:in nicht gefunden' });
-  res.json({ ok: true });
+app.post('/api/progress', requireLogin, async (req, res) => {
+  try {
+    const { key, value } = req.body;
+    if (!key) return res.status(400).json({ error: 'key fehlt' });
+    await pool.query(`
+      INSERT INTO progress (user_id, key, value, updated_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (user_id, key) DO UPDATE
+      SET value=$3, updated_at=NOW()
+    `, [req.session.userId, key, String(value)]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-app.delete('/api/admin/student/:id', requireAdmin, (req, res) => {
-  const r = db.prepare('DELETE FROM users WHERE id=? AND klasse=? AND role=?')
-              .run(req.params.id, req.session.klasse, 'student');
-  if (!r.changes) return res.status(404).json({ error: 'Nicht gefunden' });
-  res.json({ ok: true });
-});
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function safeJSON(str) {
-  try { return JSON.parse(str); } catch { return {}; }
-}
-
-
-// ── Lerntheke list (dynamic) ──────────────────────────────────────────────────
+// ── Lerntheken list ───────────────────────────────────────────────────────────
 app.get('/api/lerntheken', requireLogin, (req, res) => {
   const dir = path.join(__dirname, 'public', 'lerntheken');
   try {
@@ -236,14 +159,119 @@ app.get('/api/lerntheken', requireLogin, (req, res) => {
         url: '/lerntheken/' + f
       }));
     res.json(files);
-  } catch {
-    res.json([]);
+  } catch { res.json([]); }
+});
+
+// ── Admin: students ───────────────────────────────────────────────────────────
+app.get('/api/admin/students', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        u.id, u.username, u.klasse, u.created_at,
+        (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_kreise_v10') AS prog,
+        (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_abgabe_v1')  AS abgabe,
+        (SELECT updated_at FROM progress WHERE user_id=u.id
+         ORDER BY updated_at DESC LIMIT 1) AS last_active
+      FROM users u
+      WHERE u.role='student' AND u.klasse=$1
+      ORDER BY u.username
+    `, [req.session.klasse]);
+    res.json(r.rows.map(row => ({
+      ...row,
+      progress: safeJSON(row.prog),
+      abgabe:   safeJSON(row.abgabe)
+    })));
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  try {
+    const k = req.session.klasse;
+    const total  = (await pool.query('SELECT COUNT(*) n FROM users WHERE role=$1 AND klasse=$2', ['student', k])).rows[0].n;
+    const active = (await pool.query(`
+      SELECT COUNT(DISTINCT u.id) n FROM users u
+      JOIN progress p ON p.user_id=u.id
+      WHERE u.role='student' AND u.klasse=$1
+        AND p.updated_at > NOW() - INTERVAL '7 days'
+    `, [k])).rows[0].n;
+    res.json({ klasse: k, total: parseInt(total), active: parseInt(active) });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/create-student', requireAdmin, async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (password.length < 4) return res.status(400).json({ error: 'Passwort mind. 4 Zeichen' });
+    await pool.query(
+      'INSERT INTO users (username,password_hash,klasse,role) VALUES ($1,$2,$3,$4)',
+      [username.trim().toLowerCase(), await bcrypt.hash(password, 10), req.session.klasse, 'student']
+    );
+    res.json({ ok: true });
+  } catch(e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+    res.status(500).json({ error: 'Serverfehler' });
   }
 });
 
-// ── Catch-all → SPA ───────────────────────────────────────────────────────────
+app.post('/api/admin/bulk-create', requireAdmin, async (req, res) => {
+  try {
+    const { students } = req.body;
+    if (!Array.isArray(students)) return res.status(400).json({ error: 'Array erforderlich' });
+    let created = 0, skipped = 0;
+    for (const s of students) {
+      if (!s.username || !s.password) { skipped++; continue; }
+      try {
+        await pool.query(
+          'INSERT INTO users (username,password_hash,klasse,role) VALUES ($1,$2,$3,$4)',
+          [s.username.trim().toLowerCase(), await bcrypt.hash(s.password, 10), req.session.klasse, 'student']
+        );
+        created++;
+      } catch { skipped++; }
+    }
+    res.json({ ok: true, created, skipped });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/reset-password', requireAdmin, async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4)
+      return res.status(400).json({ error: 'Passwort mind. 4 Zeichen' });
+    const r = await pool.query(
+      'UPDATE users SET password_hash=$1 WHERE id=$2 AND klasse=$3 AND role=$4',
+      [await bcrypt.hash(newPassword, 10), userId, req.session.klasse, 'student']
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.delete('/api/admin/student/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'DELETE FROM users WHERE id=$1 AND klasse=$2 AND role=$3',
+      [req.params.id, req.session.klasse, 'student']
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function safeJSON(s) {
+  try { return s ? JSON.parse(s) : {}; } catch { return {}; }
+}
+
+// ── Catch-all ─────────────────────────────────────────────────────────────────
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
 
-app.listen(PORT, () => console.log(`✓ Lerntheke auf Port ${PORT}`));
+// ── Start ─────────────────────────────────────────────────────────────────────
+initDB().then(() => {
+  app.listen(PORT, () => console.log(`✓ Lerntheke auf Port ${PORT}`));
+}).catch(err => {
+  console.error('DB Init fehlgeschlagen:', err);
+  process.exit(1);
+});
