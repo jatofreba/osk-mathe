@@ -501,11 +501,10 @@ async function showApp() {
   }
 
   if (me.role === 'admin') {
-    // Admins see admin view, no iframe needed
-    const ltFrame = document.getElementById('lerntheke-frame');
+    // Admin: load lerntheke for preview but skip progress sync
     const ltPlaceholder = document.getElementById('lt-admin-placeholder');
-    if (ltFrame) ltFrame.style.display = 'none';
-    if (ltPlaceholder) ltPlaceholder.style.display = 'flex';
+    if (ltPlaceholder) ltPlaceholder.style.display = 'none';
+    await loadLerntheken();
     showView('admin');
   } else {
     showView('lerntheke');
@@ -633,8 +632,9 @@ function renderTable(students) {
       const k = kor[gr] || {};
       const st = k.status || 'ausstehend';
       const hasAbgabe = g[gr] && g[gr].abgabe;
-      // Only show korrektur buttons if student submitted this group
-      if (!hasAbgabe) return '';
+      const hasKorrektur = k && k.status && k.status !== 'ausstehend';
+      // Show if abgabe submitted OR already has a korrektur set
+      if (!hasAbgabe && !hasKorrektur) return '';
       return `<div class="kor-cell" style="margin-bottom:2px;">
         <span style="font-size:10px;color:var(--ink2);font-weight:600;">${gr}${hasAbgabe?' 📋':''}</span>
         <div style="display:flex;gap:4px;">
