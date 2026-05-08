@@ -11,8 +11,11 @@ const PORT = process.env.PORT || 3000;
 
 // ── PostgreSQL Pool ───────────────────────────────────────────────────────────
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'test123',
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'lerntheke'
 });
 
 // ── Schema ────────────────────────────────────────────────────────────────────
