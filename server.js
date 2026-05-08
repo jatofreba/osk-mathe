@@ -173,16 +173,77 @@ app.get('/api/lerntheken', requireLogin, (req, res) => {
   } catch { res.json([]); }
 });
 
+// ── Lerntheken metadata (KEY, GROUPS, station→group map, totals) ──────────────
+function extractJSValue(html, varName) {
+  const marker = `const ${varName}=`;
+  const idx = html.indexOf(marker);
+  if (idx === -1) return null;
+  const start = idx + marker.length;
+  const opener = html[start];
+  if (opener !== '[' && opener !== '{') {
+    // string literal
+    const quote = html[start];
+    const end = html.indexOf(quote, start + 1);
+    return html.slice(start + 1, end);
+  }
+  const closer = opener === '[' ? ']' : '}';
+  let depth = 0, inStr = false, strChar = '', escaped = false, end = start;
+  for (let i = start; i < html.length; i++) {
+    const c = html[i];
+    if (escaped) { escaped = false; continue; }
+    if (inStr) {
+      if (c === '\\') { escaped = true; continue; }
+      if (c === strChar) inStr = false;
+    } else {
+      if (c === '"' || c === "'") { inStr = true; strChar = c; }
+      else if (c === opener) depth++;
+      else if (c === closer) { depth--; if (depth === 0) { end = i; break; } }
+    }
+  }
+  try { return JSON.parse(html.slice(start, end + 1)); } catch { return null; }
+}
+
+const ltMetaCache = {};
+
+function getLerntheckenMeta() {
+  const dir = path.join(__dirname, 'public', 'lerntheken');
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.html'));
+  return files.map(f => {
+    const id = f.replace('.html', '');
+    if (ltMetaCache[id]) return ltMetaCache[id];
+    try {
+      const html = fs.readFileSync(path.join(dir, f), 'utf8');
+      const key       = extractJSValue(html, 'KEY');
+      const abgabeKey = extractJSValue(html, 'ABGABE_KEY');
+      const total     = extractJSValue(html, 'TOTAL');
+      const groups    = extractJSValue(html, 'GROUPS');
+      const meta      = extractJSValue(html, 'META');
+      // strip task/sol HTML from meta to keep response small
+      const stations  = (meta || []).map(s => ({ id: s.id, group: s.group, title: s.title }));
+      const title     = (html.match(/<title>([^<]+)<\/title>/) || [])[1] || id;
+      const result = { id, title, url: `/lerntheken/${f}`, key, abgabeKey, total, groups, stations };
+      ltMetaCache[id] = result;
+      return result;
+    } catch { return null; }
+  }).filter(Boolean);
+}
+
+app.get('/api/lerntheken-meta', requireLogin, (req, res) => {
+  try { res.json(getLerntheckenMeta()); }
+  catch(e) { res.status(500).json({ error: 'Fehler beim Lesen der Metadaten' }); }
+});
+
 // ── Admin: students ───────────────────────────────────────────────────────────
 app.get('/api/admin/students', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT
         u.id, u.username, u.klasse, u.created_at,
-        (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_kreise_v11') AS prog,
-        (SELECT value FROM progress WHERE user_id=u.id AND key='lerntheke_abgabe_v1')  AS abgabe,
-        (SELECT updated_at FROM progress WHERE user_id=u.id
-         ORDER BY updated_at DESC LIMIT 1) AS last_active,
+        (SELECT json_object_agg(key, value)
+         FROM progress WHERE user_id=u.id) AS all_progress,
+        (SELECT json_build_object('key', key, 'updated_at', updated_at)
+         FROM progress WHERE user_id=u.id
+         ORDER BY updated_at DESC LIMIT 1) AS last_active_info,
         (SELECT json_object_agg(gruppe, json_build_object('status',status,'notiz',notiz))
          FROM korrektur WHERE user_id=u.id) AS korrektur
       FROM users u
@@ -191,8 +252,7 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
     `, [req.session.klasse]);
     res.json(r.rows.map(row => ({
       ...row,
-      progress: safeJSON(row.prog),
-      abgabe:   safeJSON(row.abgabe)
+      all_progress: safeJSON(row.all_progress)
     })));
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });

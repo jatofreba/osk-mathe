@@ -167,6 +167,20 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
 .msg.ok{background:var(--green-lt);color:var(--green);}
 .msg.err{background:#fef2f2;color:#dc2626;}
 
+/* ══ LERNTHEKE PICKER ════════════════════════════════════════════════════════ */
+#view-picker{flex:1;overflow-y:auto;padding:32px 20px;background:var(--bg);}
+.picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px;max-width:960px;margin:0 auto;}
+.lt-card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:22px;cursor:pointer;
+  transition:border-color .18s,transform .18s,box-shadow .18s;box-shadow:0 2px 8px rgba(0,0,0,.06);
+  display:flex;flex-direction:column;gap:12px;}
+.lt-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.1);}
+.lt-card-title{font-size:17px;font-weight:800;color:var(--ink);}
+.lt-card-groups{display:flex;flex-wrap:wrap;gap:5px;}
+.lt-progress-row{display:flex;justify-content:space-between;font-size:12px;color:var(--ink2);margin-bottom:4px;}
+.lt-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;}
+.lt-bar-fill{height:100%;border-radius:4px;background:var(--blue);transition:width .4s;}
+.btn-picker-back{display:none;}
+
 /* ══ CHANGE PW ═══════════════════════════════════════════════════════════════ */
 #view-changepw{
   display:none;flex:1;align-items:center;justify-content:center;padding:24px;
@@ -219,6 +233,7 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
     <span class="topbar-user" id="bar-user"></span>
     <span class="pill pill-blue" id="bar-klasse"></span>
     <span class="pill pill-purple" id="bar-role" style="display:none">Admin</span>
+    <button class="btn-sm btn-picker-back" id="btn-picker-back" onclick="showPicker()">← Auswahl</button>
     <button class="btn-sm" onclick="showView('changepw')" title="Passwort ändern">🔑</button>
     <button class="btn-sm" onclick="doLogout()">Abmelden</button>
   </div>
@@ -239,6 +254,14 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
       <div style="font-size:14px;text-align:center;max-width:300px;">Wechsle zur Klassen-Übersicht.</div>
     </div>
     <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;"></iframe>
+  </div>
+
+  <div id="view-picker" style="display:none;">
+    <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+      <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Lerntheken</h2>
+      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Lerntheke du arbeiten möchtest.</p>
+      <div class="picker-grid" id="picker-cards"></div>
+    </div>
   </div>
 
   <div id="view-admin">
@@ -355,63 +378,37 @@ let me = null;
 let allStudents = [];
 let resetId = null;
 
-// Station → Gruppe mapping (19 Stationen, Index = Station-ID)
-const ST_GROUP = [
-  'Pflicht', // 0  Einheiten: Längen
-  'Pflicht', // 1  Einheiten: Flächen
-  'Pflicht', // 2  Einheiten: Volumen
-  'Basis',   // 3  Fehlende Angaben
-  'Basis',   // 4  Pizzaessen
-  'Basis',   // 5  Kreisringe
-  'Basis',   // 6  Reifen
-  'Basis',   // 7  Sportplatz
-  'Basis',   // 8  Kreisausschnitt
-  'Aufbau',  // 9  Flugzeug-Montage
-  'Aufbau',  // 10 Sonnensystem
-  'Aufbau',  // 11 Geräteschuppen
-  'Aufbau',  // 12 Minipizzen oder nicht?
-  'Basis',   // 13 Frisbeeringe
-  'Pflicht', // 14 Repetitorium
-  'Aufbau',  // 15 Tunnelbohrer
-  'Aufbau',  // 16 London Eye
-  'Abflug',  // 17 Ein Seil um die Erde
-  'Abflug',  // 18 Hippokrates
-  'Basis',   // 19 Eigene Aufgabe (Basis)
-  'Aufbau',  // 20 Eigene Aufgabe (Aufbau)
-  'Abflug',  // 21 Eigene Aufgabe (Abflug)
-];
-const G_REQ   = { Pflicht:3, Basis:4, Aufbau:4, Abflug:1 };
-const G_TOTAL = { Pflicht:4, Basis:8, Aufbau:7, Abflug:3 };
+// Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
+let ltMeta = [];
 
-function parseGroups(progStr, abgabeStr, korrekturObj) {
-  const prog = safeJSON(progStr);
-  const abg  = safeJSON(abgabeStr);
+function parseGroupsForLt(lt, progVal, abgabeVal, korrekturObj) {
+  const prog = safeJSON(progVal);
+  const abg  = safeJSON(abgabeVal);
   const kor  = korrekturObj || {};
   const done = new Set();
-  if (Array.isArray(prog)) {
-    // Lerntheke stores as array: [0, 3, 5, ...]
-    prog.forEach(id => done.add(Number(id)));
-  } else if (typeof prog === 'object' && prog !== null) {
-    // Fallback: object format {0:true, 3:true}
+  if (Array.isArray(prog)) prog.forEach(id => done.add(Number(id)));
+  else if (typeof prog === 'object' && prog !== null)
     Object.keys(prog).forEach(k => { if (prog[k]) done.add(Number(k)); });
-  }
   const result = {};
-  Object.keys(G_REQ).forEach(g => {
-    const ids = ST_GROUP.map((gr,i) => gr===g ? i : -1).filter(i=>i>=0);
-    const cnt = ids.filter(i=>done.has(i)).length;
+  Object.keys(lt.groups).forEach(g => {
+    const grp = lt.groups[g];
+    const cnt = lt.stations.filter(s => s.group === g && done.has(s.id)).length;
     const abgabe = !!(abg && abg[g]);
     const korStatus = (kor[g] && kor[g].status) || 'ausstehend';
     const korOk = korStatus === 'bestanden';
     result[g] = {
-      done: cnt, req: G_REQ[g], total: G_TOTAL[g],
-      stationsOk: cnt >= G_REQ[g],
-      abgabe,
-      korStatus,
-      korOk,
-      complete: cnt >= G_REQ[g] && (g==='Pflicht' || (abgabe && korOk))
+      done: cnt, req: grp.required, total: grp.total,
+      stationsOk: cnt >= grp.required, abgabe, korStatus, korOk,
+      complete: cnt >= grp.required && (g === 'Pflicht' || (abgabe && korOk))
     };
   });
   return result;
+}
+
+// backward-compat wrapper (uses first lerntheke)
+function parseGroups(progStr, abgabeStr, korrekturObj) {
+  if (!ltMeta.length) return {};
+  return parseGroupsForLt(ltMeta[0], progStr, abgabeStr, korrekturObj);
 }
 
 function safeJSON(s) {
@@ -473,6 +470,48 @@ function switchLerntheke(url) {
   localStorage.setItem('lastLerntheke', url);
 }
 
+async function showPicker() {
+  if (!ltMeta.length) {
+    try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
+  }
+  let allProg = {};
+  try { const pr = await fetch('/api/progress'); if (pr.ok) allProg = await pr.json(); } catch {}
+
+  const container = document.getElementById('picker-cards');
+  container.innerHTML = ltMeta.map(lt => {
+    let doneArr = [];
+    try { doneArr = JSON.parse(allProg[lt.key] || '[]'); } catch {}
+    const doneCount = Array.isArray(doneArr) ? doneArr.length : 0;
+    const pct = lt.total ? Math.round(doneCount / lt.total * 100) : 0;
+    const groups = parseGroupsForLt(lt, allProg[lt.key], allProg[lt.abgabeKey], {});
+    const badges = Object.entries(groups).map(([g, st]) => {
+      const cls = st.complete ? 'gpill-ok' : st.stationsOk ? 'gpill-partial' : 'gpill-none';
+      return `<span class="gpill ${cls}">${g}: ${st.complete ? '✓' : st.done+'/'+st.req}</span>`;
+    }).join('');
+    const btnLabel = doneCount > 0 ? '→ Weiter' : '→ Starten';
+    return `<div class="lt-card" onclick="startLerntheke('${lt.url}')">
+      <div class="lt-card-title">${lt.title}</div>
+      <div class="lt-card-groups">${badges}</div>
+      <div>
+        <div class="lt-progress-row"><span>${doneCount} / ${lt.total} Stationen</span><span>${pct} %</span></div>
+        <div class="lt-bar"><div class="lt-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <button class="btn-primary" onclick="event.stopPropagation();startLerntheke('${lt.url}')">${btnLabel}</button>
+    </div>`;
+  }).join('');
+
+  showView('picker');
+}
+
+async function startLerntheke(url) {
+  if (!url) { await loadLerntheken(); return; }
+  showView('lerntheke');
+  const frame = document.getElementById('lerntheke-frame');
+  frame.onload = syncProgressToFrame;
+  frame.src = url + '?v=' + Date.now();
+  localStorage.setItem('lastLerntheke', url);
+}
+
 async function doLogin() {
   const btn = document.getElementById('btn-login');
   const err = document.getElementById('login-error');
@@ -528,12 +567,15 @@ async function showApp() {
     await loadLerntheken();
     showView('admin');
   } else {
-    showView('lerntheke');
-    // Register load listener BEFORE setting src
-    const frame = document.getElementById('lerntheke-frame');
-    frame.addEventListener('load', syncProgressToFrame);
-    // Now load lerntheken list (which sets frame.src)
-    await loadLerntheken();
+    // Load metadata first so picker/switcher knows what's available
+    if (!ltMeta.length) {
+      try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
+    }
+    if (ltMeta.length > 1) {
+      await showPicker();
+    } else {
+      await startLerntheke(ltMeta[0] ? ltMeta[0].url : null);
+    }
   }
 }
 
@@ -570,7 +612,7 @@ window.addEventListener('message', async (e) => {
 
 // ══ View switching ═══════════════════════════════════════════════════════════
 function showView(v) {
-  ['lerntheke','admin','changepw'].forEach(id => {
+  ['lerntheke','picker','admin','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
@@ -578,7 +620,7 @@ function showView(v) {
       el.style.display = isActive ? 'flex' : 'none';
       el.style.flex = isActive ? '1' : '';
       el.style.overflow = isActive ? 'hidden' : '';
-    } else if (id === 'admin') {
+    } else if (id === 'picker' || id === 'admin') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -588,6 +630,9 @@ function showView(v) {
     const tab = document.getElementById('tab-' + id);
     if (tab) tab.classList.toggle('active', isActive);
   });
+  // Show back-to-picker button only when in lerntheke view with multiple options
+  const backBtn = document.getElementById('btn-picker-back');
+  if (backBtn) backBtn.style.display = (v === 'lerntheke' && ltMeta.length > 1 && me && me.role !== 'admin') ? '' : 'none';
   if (v === 'admin') {
     loadStudents();
     clearInterval(adminRefreshTimer);
@@ -601,38 +646,75 @@ function showView(v) {
 let adminRefreshTimer = null;
 async function loadStudents() {
   try {
-  const r = await fetch('/api/admin/students');
-  if (!r.ok) { console.error('loadStudents failed:', r.status); return; }
-  allStudents = await r.json();
+    // Load lerntheke metadata once
+    if (!ltMeta.length) {
+      const mr = await fetch('/api/lerntheken-meta');
+      if (mr.ok) ltMeta = await mr.json();
+    }
 
-  const sr = await fetch('/api/admin/stats');
-  if (sr.ok) {
-    const stats = await sr.json();
-    document.getElementById('admin-title').textContent =
-      `Klasse ${stats.klasse} – Fortschritt`;
-    document.getElementById('stats-row').innerHTML = `
-      <div class="stat-card"><div class="stat-val">${stats.total}</div><div class="stat-lbl">Schüler:innen</div></div>
-      <div class="stat-card"><div class="stat-val">${stats.active}</div><div class="stat-lbl">Aktiv (7 Tage)</div></div>
-      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe,s.korrektur);return g.Pflicht.complete;}).length}</div><div class="stat-lbl">Pflicht ✓</div></div>
-      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe,s.korrektur);return g.Basis.complete;}).length}</div><div class="stat-lbl">Basis LZK bereit</div></div>
-      <div class="stat-card"><div class="stat-val">${allStudents.filter(s=>{const g=parseGroups(s.prog,s.abgabe,s.korrektur);return g.Aufbau.complete;}).length}</div><div class="stat-lbl">Aufbau LZK bereit</div></div>
-    `;
-  }
-  renderTable(allStudents);
+    const r = await fetch('/api/admin/students');
+    if (!r.ok) { console.error('loadStudents failed:', r.status); return; }
+    allStudents = await r.json();
+
+    const sr = await fetch('/api/admin/stats');
+    if (sr.ok) {
+      const stats = await sr.json();
+      document.getElementById('admin-title').textContent = `Klasse ${stats.klasse} – Fortschritt`;
+      const lt = ltMeta[0];
+      const statCards = lt ? Object.entries(lt.groups).map(([g, grp]) => {
+        const n = allStudents.filter(s => {
+          const ap = s.all_progress || {};
+          const gd = parseGroupsForLt(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur);
+          return gd[g] && gd[g].complete;
+        }).length;
+        const label = g === 'Pflicht' ? `${g} ✓` : `${g} LZK bereit`;
+        return `<div class="stat-card"><div class="stat-val">${n}</div><div class="stat-lbl">${label}</div></div>`;
+      }).join('') : '';
+      document.getElementById('stats-row').innerHTML = `
+        <div class="stat-card"><div class="stat-val">${stats.total}</div><div class="stat-lbl">Schüler:innen</div></div>
+        <div class="stat-card"><div class="stat-val">${stats.active}</div><div class="stat-lbl">Aktiv (7 Tage)</div></div>
+        ${statCards}
+      `;
+    }
+    renderTable(allStudents);
   } catch(e) { console.error('loadStudents error:', e); }
 }
 
 function renderTable(students) {
   const tbody = document.getElementById('stbl');
+  const lt = ltMeta[0];
+  const multiLt = ltMeta.length > 1;
+  const colCount = lt ? Object.keys(lt.groups).length + 4 + (multiLt ? 1 : 0) : 8;
+
   if (!students.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${colCount}" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
     return;
   }
+
+  // Update table header dynamically
+  const thead = tbody.closest('table').querySelector('thead tr');
+  if (thead && lt) {
+    const groupHeaders = Object.entries(lt.groups)
+      .map(([g, info]) => `<th>${info.emoji} ${g}</th>`).join('');
+    const ltHeader = multiLt ? '<th>Lerntheke</th>' : '';
+    thead.innerHTML = `<th>Name</th>${groupHeaders}<th>Abgaben</th><th>Korrektur</th>${ltHeader}<th>Zuletzt aktiv</th><th></th>`;
+  }
+
   tbody.innerHTML = students.map(s => {
-    const g = parseGroups(s.prog, typeof s.abgabe === "string" ? s.abgabe : JSON.stringify(s.abgabe||{}), s.korrektur);
-    const groupCells = ['Pflicht','Basis','Aufbau','Abflug'].map(grp => {
-      const st = g[grp];
-      const pct = Math.min(100, Math.round(st.done/st.total*100));
+    const ap  = s.all_progress || {};
+    const kor = s.korrektur || {};
+
+    // Per-lerntheke group stats
+    const ltRows = ltMeta.map(lti => {
+      const g = parseGroupsForLt(lti, ap[lti.key], ap[lti.abgabeKey], kor);
+      return { lti, g };
+    });
+    const { lti: primaryLt, g } = ltRows[0] || { lti: lt, g: {} };
+    const groupOrder = primaryLt ? Object.keys(primaryLt.groups) : [];
+
+    const groupCells = groupOrder.map(grp => {
+      const st = g[grp] || { done:0, req:1, total:1, complete:false, stationsOk:false };
+      const pct = Math.min(100, Math.round(st.done / st.total * 100));
       const cls = st.complete ? 'gpill-ok' : st.stationsOk ? 'gpill-partial' : 'gpill-none';
       const lbl = st.complete ? '✓' : `${st.done}/${st.req}`;
       return `<td>
@@ -643,19 +725,18 @@ function renderTable(students) {
       </td>`;
     }).join('');
 
-    const abgaben = ['Basis','Aufbau','Abflug']
-      .filter(gr => g[gr].abgabe)
+    const nonPflicht = groupOrder.filter(g => g !== 'Pflicht');
+    const abgaben = nonPflicht
+      .filter(gr => g[gr] && g[gr].abgabe)
       .map(gr => `<span class="gpill gpill-ok">${gr}</span>`)
       .join('') || '<span style="color:var(--ink2);font-size:12px;">–</span>';
 
-    const kor = s.korrektur || {};
-    const korCell = ['Basis','Aufbau','Abflug'].map(gr => {
+    const korCell = nonPflicht.map(gr => {
       const k = kor[gr] || {};
       const st = k.status || 'ausstehend';
       const hasAbgabe = g[gr] && g[gr].abgabe;
-      const hasKorrektur = k && k.status && k.status !== 'ausstehend';
-      // Show if abgabe submitted OR already has a korrektur set
-      if (!hasAbgabe && !hasKorrektur) return '';
+      const hasKor = k.status && k.status !== 'ausstehend';
+      if (!hasAbgabe && !hasKor) return '';
       return `<div class="kor-cell" style="margin-bottom:2px;">
         <span style="font-size:10px;color:var(--ink2);font-weight:600;">${gr}${hasAbgabe?' 📋':''}</span>
         <div style="display:flex;gap:4px;">
@@ -667,16 +748,23 @@ function renderTable(students) {
       </div>`;
     }).join('');
 
-    const lastActive = s.last_active
-      ? new Date(s.last_active).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+    // Last active: date + lerntheke name (if multiple)
+    const lai = s.last_active_info;
+    const lastDate = lai && lai.updated_at
+      ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
       : '–';
+    const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
+    const ltCell = multiLt
+      ? `<td>${lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
+      : '';
 
     return `<tr data-name="${s.username}">
       <td style="font-weight:600;">${s.username}</td>
       ${groupCells}
       <td>${abgaben}</td>
       <td>${korCell||'<span style="color:var(--ink2);font-size:12px;">–</span>'}</td>
-      <td style="color:var(--ink2);">${lastActive}</td>
+      ${ltCell}
+      <td style="color:var(--ink2);">${lastDate}</td>
       <td>
         <div class="action-btns">
           <button class="btn-icon" onclick="viewStudent(${s.id},'${s.username}')">👁</button>
@@ -863,18 +951,21 @@ async function exitStudentView() {
 }
 
 function exportCSV() {
-  const header = 'Name,Pflicht,Basis,Aufbau,Abflug,Basis-Abgabe,Aufbau-Abgabe,Zuletzt aktiv\n';
+  const lt = ltMeta[0];
+  if (!lt) return;
+  const groups = Object.keys(lt.groups);
+  const nonPflicht = groups.filter(g => g !== 'Pflicht');
+  const header = ['Name', ...groups, ...nonPflicht.map(g => g+'-Abgabe'), 'Zuletzt aktiv'].join(',') + '\n';
   const rows = allStudents.map(s => {
-    const g = parseGroups(s.prog, s.abgabe, s.korrektur);
+    const ap = s.all_progress || {};
+    const g = parseGroupsForLt(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur);
+    const lai = s.last_active_info;
+    const lastDate = lai && lai.updated_at ? new Date(lai.updated_at).toLocaleDateString('de-DE') : '–';
     return [
       s.username,
-      g.Pflicht.done+'/'+g.Pflicht.req,
-      g.Basis.done+'/'+g.Basis.req,
-      g.Aufbau.done+'/'+g.Aufbau.req,
-      g.Abflug.done+'/'+g.Abflug.req,
-      g.Basis.abgabe?'ja':'nein',
-      g.Aufbau.abgabe?'ja':'nein',
-      s.last_active||'–'
+      ...groups.map(gr => g[gr] ? g[gr].done+'/'+g[gr].req : '0/0'),
+      ...nonPflicht.map(gr => g[gr] && g[gr].abgabe ? 'ja' : 'nein'),
+      lastDate
     ].join(',');
   }).join('\n');
   const blob = new Blob(['\uFEFF'+header+rows], { type:'text/csv;charset=utf-8;' });
