@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Baustein Lineare Funktionen · Jahrgangsstufe 9</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f2ed;--card:#fff;--ink:#1c1a16;--ink2:#706b62;
+  --border:#e0dbd3;--accent:#2563eb;--hilfe:#6d28d9;
+  --green:#16a34a;--yellow:#b45309;--r:14px;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 2px 10px rgba(0,0,0,.05);
+  --shadow-md:0 4px 20px rgba(0,0,0,.09),0 1px 4px rgba(0,0,0,.05);
+  --safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);--bar-h:60px;--px:28px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+.bar{position:sticky;top:0;z-index:200;background:rgba(244,242,237,.94);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border);height:var(--bar-h);display:flex;align-items:center;justify-content:space-between;padding:0 calc(var(--px)+var(--safe-r)) 0 calc(var(--px)+var(--safe-l));}
+.bar-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;display:flex;align-items:center;gap:8px;}
+.bar-logo .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.bar-sub{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink2);margin-left:4px;}
+.bar-right{display:flex;align-items:center;gap:10px;}
+.prog-lbl{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink2);}
+.prog-track{width:110px;height:5px;background:var(--border);border-radius:99px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),#e9b430);border-radius:99px;transition:width .5s ease;}
+.view{display:none;}.view.active{display:block;animation:rise .22s ease both;}
+@keyframes rise{from{opacity:0;transform:translateY(9px);}to{opacity:1;transform:translateY(0);}}
+.inner{max-width:1140px;margin:0 auto;padding:32px calc(var(--px)+var(--safe-r)) calc(60px+var(--safe-b)) calc(var(--px)+var(--safe-l));}
+.ov-hero{margin-bottom:24px;}
+.ov-hero h2{font-family:'Syne',sans-serif;font-size:clamp(26px,4vw,44px);font-weight:800;line-height:1.1;letter-spacing:-.5px;margin-bottom:8px;}
+.ov-hero h2 em{font-style:normal;color:var(--accent);}
+.ov-hero p{color:var(--ink2);font-size:14px;max-width:460px;}
+.req-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:28px;}
+.req-card{border-radius:var(--r);padding:18px 20px;position:relative;overflow:hidden;border:1.5px solid;}
+.req-done-badge{display:none;position:absolute;top:12px;right:12px;background:rgba(255,255,255,.9);border-radius:99px;padding:3px 10px;font-size:11px;font-weight:800;color:#16a34a;align-items:center;gap:4px;}
+.req-card.complete .req-done-badge{display:flex;}
+.req-card.stations-ok .req-done-badge{display:flex;background:rgba(255,255,255,.7);color:#d97706;}
+.req-card.stations-ok .req-done-badge::before{content:'📋 ';}
+.req-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.req-card-name{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;}
+.req-badge{font-family:'DM Mono',monospace;font-size:11px;font-weight:700;}
+.req-card-desc{font-size:12px;color:var(--ink2);margin-bottom:12px;line-height:1.5;}
+.req-progress-wrap{margin-bottom:10px;}
+.req-track{height:6px;background:rgba(0,0,0,.08);border-radius:99px;overflow:hidden;}
+.req-fill{height:100%;border-radius:99px;transition:width .5s ease;}
+.req-frac{font-family:'DM Mono',monospace;font-size:12px;font-weight:700;display:block;margin-top:6px;}
+.abgabe-row{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid;font-size:13px;}
+.abgabe-cb{width:20px;height:20px;border-radius:5px;border:2px solid;cursor:pointer;flex-shrink:0;accent-color:currentColor;}
+.abgabe-label{font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;}
+.korrektur-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:8px;margin-top:6px;}
+.korrektur-badge.bestanden{background:#f0fdf4;color:#16a34a;border:1.5px solid #bbf7d0;}
+.korrektur-badge.nicht_bestanden{background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;}
+.korrektur-badge.ausstehend{background:#fffbeb;color:#d97706;border:1.5px solid #fde68a;}
+.lzk-status{margin:0 0 24px 0;border-radius:var(--r);padding:14px 22px;font-family:'Syne',sans-serif;font-weight:800;font-size:15px;display:flex;align-items:center;gap:12px;}
+.lzk-status.basis{background:#eff6ff;border:2px solid #bfdbfe;color:#1d4ed8;}
+.lzk-status.aufbau{background:#f0fdf4;border:2px solid #bbf7d0;color:#15803d;}
+.lzk-status.neutral{background:#f8fafc;border:2px solid #e2e8f0;color:#475569;}
+.lzk-status-icon{font-size:22px;flex-shrink:0;}
+.lzk-status-text{font-size:14px;line-height:1.4;}
+.lzk-status-text strong{font-size:16px;display:block;}
+.group-section{margin-bottom:36px;}
+.group-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+.group-name{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;}
+.group-prog-text{font-family:'DM Mono',monospace;font-size:12px;color:var(--ink2);}
+.stations-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+.empty-group{font-size:13px;color:var(--ink2);font-style:italic;padding:16px;background:var(--card);border-radius:var(--r);border:1.5px dashed var(--border);}
+.btn-done{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:99px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;border:1.5px solid var(--border);background:var(--card);color:var(--ink2);transition:all .18s;box-shadow:var(--shadow);white-space:nowrap;min-height:44px;}
+.btn-done.active{background:var(--green);border-color:var(--green);color:#fff;}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="bar-logo">
+    <div class="dot"></div>
+    Baustein Lineare Funktionen
+    <span class="bar-sub">Jahrgangsstufe 9</span>
+  </div>
+  <div class="bar-right">
+    <span class="prog-lbl" id="prog-lbl">0 / 0</span>
+    <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<div class="view active" id="view-ov">
+  <div class="inner">
+    <div class="ov-hero">
+      <h2>Baustein <em>Lineare Funktionen</em></h2>
+      <p>Jahrgangsstufe 9 · Wähle deine Stationen.</p>
+    </div>
+    <div class="panel" style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:18px 22px;margin-bottom:24px;font-size:14px;line-height:1.75;">
+      <p><strong>Pflicht</strong> – Grundlage für alle: Pflichtaufgaben.</p>
+      <p><strong>Basis</strong> – für G- und E-Kurs: Wähle mindestens 4 Basis-Stationen.</p>
+      <p><strong>Aufbau</strong> – nur für den E-Kurs: Wähle mindestens 4 Aufgaben.</p>
+      <p><strong>Abflug</strong> – für alle Interessierten: Wähle mindestens 1 Knobelaufgabe.</p>
+      <p style="margin-top:10px;color:var(--ink2);">Reiche für Basis, Aufbau und Abflug je eine selbst gewählte Aufgabe zur Korrektur bei der Lehrkraft ein.</p>
+    </div>
+    <div class="req-grid" id="req-grid"></div>
+    <div class="lzk-status" id="lzk-status"></div>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<script>
+const KEY='lerntheke_lf_v1';
+const ABGABE_KEY='lerntheke_lf_abgabe_v1';
+const TOTAL=0;
+const GROUPS={"Pflicht":{"color":"#d95f2b","bg":"#fff7f4","border":"#fcd9c8","required":3,"total":0,"emoji":"🔴","desc":"Pflichtaufgaben – Grundlage für alles"},"Basis":{"color":"#2563eb","bg":"#eff6ff","border":"#bfdbfe","required":4,"total":0,"emoji":"🔵","desc":"Grundlegende Aufgaben – 4 von ? wählen"},"Aufbau":{"color":"#16a34a","bg":"#f0fdf4","border":"#bbf7d0","required":4,"total":0,"emoji":"🟢","desc":"Vertiefung & Anwendung – 4 von ? wählen"},"Abflug":{"color":"#7c3aed","bg":"#f5f3ff","border":"#ddd6fe","required":1,"total":0,"emoji":"🟣","desc":"Knobeln & Entdecken – 1 von ? wählen"}};
+const GROUP_ORDER=["Pflicht","Basis","Aufbau","Abflug"];
+const META=[];
+const CONTENT=[];
+
+const _inIframe=window.self!==window.top;
+let serverSyncDone=!_inIframe;
+let done=_inIframe?new Set():new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
+let korrekturState={};
+const ABGABE_KEY_LOCAL=ABGABE_KEY;
+let abgabeState=_inIframe?{}:JSON.parse(localStorage.getItem(ABGABE_KEY_LOCAL)||'{}');
+
+function save(){
+  const val=JSON.stringify([...done]);
+  localStorage.setItem(KEY,val);
+  if(serverSyncDone){window.parent.postMessage({type:'SAVE_PROGRESS',key:KEY,value:val},'*');}
+}
+
+window.addEventListener('message',e=>{
+  if(!e.data)return;
+  if(e.data.type==='RELOAD_KORREKTUR'){korrekturState=e.data.data||{};buildOverview();return;}
+  if(e.data.type!=='RELOAD_PROGRESS')return;
+  const stored=localStorage.getItem(KEY);
+  if(stored){try{done=new Set(JSON.parse(stored));}catch{}}
+  const storedAbgabe=localStorage.getItem(ABGABE_KEY_LOCAL);
+  if(storedAbgabe){try{abgabeState=JSON.parse(storedAbgabe);}catch{}}
+  serverSyncDone=true;
+  if(done.size>0)save();
+  updProg();buildOverview();
+});
+
+function abgabeChecked(g){return !!abgabeState[g];}
+function toggleAbgabe(g,val){
+  abgabeState[g]=val;
+  const encoded=JSON.stringify(abgabeState);
+  localStorage.setItem(ABGABE_KEY_LOCAL,encoded);
+  window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY_LOCAL,value:encoded},'*');
+  buildOverview();
+}
+
+function groupStats(){
+  const stats={};
+  GROUP_ORDER.forEach(g=>{
+    const all=META.filter(s=>s.group===g);
+    const doneCount=all.filter(s=>done.has(s.id)).length;
+    const req=GROUPS[g].required;
+    const stationsOk=doneCount>=req;
+    const needsAbgabe=g!=='Pflicht';
+    const abgabeOk=needsAbgabe?abgabeChecked(g):true;
+    const korOk=needsAbgabe?((korrekturState[g]&&korrekturState[g].status)==='bestanden'):true;
+    stats[g]={done:doneCount,total:all.length,req,complete:stationsOk&&abgabeOk&&korOk,stationsOk,abgabeOk,korOk};
+  });
+  return stats;
+}
+
+function updProg(){
+  const n=done.size;
+  document.getElementById('prog-lbl').textContent=n+' / '+TOTAL;
+  document.getElementById('prog-fill').style.width=(TOTAL?n/TOTAL*100:0)+'%';
+}
+
+function buildReqCards(stats){
+  const grid=document.getElementById('req-grid');
+  grid.innerHTML='';
+  GROUP_ORDER.forEach(g=>{
+    const info=GROUPS[g];const st=stats[g];
+    const pct=st.total?Math.min(100,Math.round(st.done/st.req*100)):0;
+    const card=document.createElement('div');
+    card.className='req-card'+(st.complete?' complete':st.stationsOk&&!st.abgabeOk?' stations-ok':'');
+    card.style.cssText=`background:${info.bg};border-color:${info.border};color:${info.color};`;
+    card.innerHTML=`
+      <div class="req-done-badge">${st.complete?'✓ Abgeschlossen':st.stationsOk?'Aufgabe abgeben!':''}</div>
+      <div class="req-card-top">
+        <span class="req-card-name">${info.emoji} ${g}</span>
+        <span class="req-badge" style="color:${info.color}">${st.req} von ${st.total||'?'}</span>
+      </div>
+      <div class="req-card-desc">${info.desc}</div>
+      <div class="req-progress-wrap">
+        <div class="req-track"><div class="req-fill" style="width:${pct}%;background:${info.color};"></div></div>
+        <span class="req-frac" style="color:${info.color}">${st.done}/${st.req}</span>
+      </div>
+      ${g!=='Pflicht'?`<div class="abgabe-row" style="border-color:${info.border};color:${info.color};">
+        <input type="checkbox" class="abgabe-cb" id="abgabe-${g}" ${abgabeChecked(g)?'checked':''} onchange="toggleAbgabe('${g}',this.checked)" style="accent-color:${info.color};">
+        <label class="abgabe-label" for="abgabe-${g}" style="color:${info.color};cursor:pointer;">Aufgabe zur Korrektur abgegeben</label>
+        ${(()=>{const k=korrekturState[g];if(k&&k.status==='bestanden')return '<div class="korrektur-badge bestanden">✓ Bestanden</div>';if(k&&k.status==='nicht_bestanden')return '<div class="korrektur-badge nicht_bestanden">✗ Nicht bestanden</div>';return abgabeChecked(g)?'<div class="korrektur-badge ausstehend">⏳ Wartet auf Korrektur</div>':'';})()}
+      </div>`:''}
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function buildOverview(){
+  const stats=groupStats();
+  buildReqCards(stats);
+  const lzkEl=document.getElementById('lzk-status');
+  if(lzkEl){
+    const pflichtOk=stats['Pflicht']&&stats['Pflicht'].stationsOk;
+    const basisOk=stats['Basis']&&stats['Basis'].stationsOk;
+    const aufbauOk=stats['Aufbau']&&stats['Aufbau'].stationsOk;
+    const bDone=stats['Basis']?stats['Basis'].done:0;
+    const bReq=stats['Basis']?stats['Basis'].req:4;
+    const aDone=stats['Aufbau']?stats['Aufbau'].done:0;
+    const aReq=stats['Aufbau']?stats['Aufbau'].req:4;
+    if(aufbauOk&&pflichtOk){
+      lzkEl.className='lzk-status aufbau';
+      const basisHint=basisOk?'':' · Basis: '+bDone+'/'+bReq;
+      lzkEl.innerHTML='<span class="lzk-status-icon">🚀</span><div class="lzk-status-text"><strong>Bereit für die Aufbau-LZK!</strong>Pflicht ✓ · Aufbau-Stationen erledigt'+basisHint+'.</div>';
+    }else if(basisOk&&pflichtOk){
+      lzkEl.className='lzk-status basis';
+      lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Weiter mit Aufbau ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
+    }else{
+      lzkEl.className='lzk-status neutral';
+      lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+'.</div>';
+    }
+  }
+  const gridEl=document.getElementById('grid');
+  if(gridEl){
+    gridEl.innerHTML=GROUP_ORDER.map(g=>{
+      const all=META.filter(s=>s.group===g);
+      return`<div class="group-section">
+        <div class="group-header">
+          <span class="group-name" style="color:${GROUPS[g].color}">${GROUPS[g].emoji} ${g}</span>
+        </div>
+        ${all.length?'<div class="stations-grid">'+all.map(s=>`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:14px;font-size:13px;font-family:'Syne',sans-serif;font-weight:700;">${s.title}</div>`).join('')+'</div>':'<div class="empty-group">Noch keine Stationen – kommt bald.</div>'}
+      </div>`;
+    }).join('');
+  }
+  updProg();
+}
+
+async function loadKorrektur(){
+  try{const r=await fetch('/api/korrektur');if(r.ok)korrekturState=await r.json();}catch(e){}
+  buildOverview();
+}
+
+if(_inIframe)loadKorrektur();
+buildOverview();
+</script>
+</body>
+</html>
