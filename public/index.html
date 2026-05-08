@@ -355,14 +355,30 @@ let me = null;
 let allStudents = [];
 let resetId = null;
 
-// Station → Gruppe mapping (17 Stationen, Index = Station-ID)
+// Station → Gruppe mapping (19 Stationen, Index = Station-ID)
 const ST_GROUP = [
-  'Pflicht','Basis','Basis','Basis','Basis','Basis','Basis',
-  'Aufbau','Aufbau','Aufbau','Aufbau','Basis','Pflicht','Aufbau','Aufbau',
-  'Abflug','Abflug'
+  'Pflicht', // 0  Einheiten: Längen
+  'Pflicht', // 1  Einheiten: Flächen
+  'Pflicht', // 2  Einheiten: Volumen
+  'Basis',   // 3  Fehlende Angaben
+  'Basis',   // 4  Pizzaessen
+  'Basis',   // 5  Kreisringe
+  'Basis',   // 6  Reifen
+  'Basis',   // 7  Sportplatz
+  'Basis',   // 8  Kreisausschnitt
+  'Aufbau',  // 9  Flugzeug-Montage
+  'Aufbau',  // 10 Sonnensystem
+  'Aufbau',  // 11 Geräteschuppen
+  'Aufbau',  // 12 Minipizzen oder nicht?
+  'Basis',   // 13 Frisbeeringe
+  'Pflicht', // 14 Repetitorium
+  'Aufbau',  // 15 Tunnelbohrer
+  'Aufbau',  // 16 London Eye
+  'Abflug',  // 17 Ein Seil um die Erde
+  'Abflug',  // 18 Hippokrates
 ];
-const G_REQ   = { Pflicht:2, Basis:4, Aufbau:4, Abflug:1 };
-const G_TOTAL = { Pflicht:2, Basis:7, Aufbau:6, Abflug:2 };
+const G_REQ   = { Pflicht:3, Basis:4, Aufbau:4, Abflug:1 };
+const G_TOTAL = { Pflicht:4, Basis:7, Aufbau:6, Abflug:2 };
 
 function parseGroups(progStr, abgabeStr, korrekturObj) {
   const prog = safeJSON(progStr);
