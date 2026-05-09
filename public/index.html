@@ -413,25 +413,33 @@ function toggleAdminView() {
   renderTable(allStudents);
 }
 
-// Compute per-lerntheke stats for one student
-function studentLtStats(s, lt) {
-  let ap = s.all_progress || {};
+function buildAp(s, lt) {
+  const ap = Object.assign({}, s.all_progress || {});
   if (!s.all_progress && lt) {
     if (s.prog   != null) ap[lt.key]       = typeof s.prog   === 'string' ? s.prog   : JSON.stringify(s.prog);
     if (s.abgabe != null) ap[lt.abgabeKey] = typeof s.abgabe === 'string' ? s.abgabe : JSON.stringify(s.abgabe);
   }
-  const kor = s.korrektur || {};
-  const groups = parseGroupsForLt(lt, ap[lt.key], ap[lt.abgabeKey], kor);
+  return ap;
+}
+
+function computeLtStats(lt, progVal, abgabeVal, kor) {
+  const groups = parseGroupsForLt(lt, progVal, abgabeVal, kor || {});
   let steps = 0, total = 0;
   Object.entries(lt.groups).forEach(([g, grp]) => {
     const st = groups[g] || {};
-    steps += Math.min(st.done||0, grp.required); total += grp.required;
+    steps += Math.min(st.done || 0, grp.required); total += grp.required;
     if (g !== 'Pflicht') {
       if (st.abgabe) steps++; total++;
       if (st.korOk && st.abgabe) steps++; total++;
     }
   });
-  return { groups, pct: total ? Math.round(steps/total*100) : 0, steps, total };
+  return { groups, pct: total ? Math.round(steps / total * 100) : 0, steps, total };
+}
+
+// Compute per-lerntheke stats for one student
+function studentLtStats(s, lt) {
+  const ap = buildAp(s, lt);
+  return computeLtStats(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur);
 }
 
 function parseGroupsForLt(lt, progVal, abgabeVal, korrekturObj) {
@@ -538,18 +546,7 @@ async function showPicker() {
   container.innerHTML = ltMeta.map(lt => {
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
-    const groups = parseGroupsForLt(lt, progVal, abgabeVal, korData);
-    // Requirement-based progress (same definition as the lerntheke bar)
-    let steps = 0, totalSteps = 0;
-    Object.entries(lt.groups).forEach(([g, grp]) => {
-      const st = groups[g] || { done: 0, req: grp.required, abgabeOk: false, korOk: false };
-      steps += Math.min(st.done, st.req); totalSteps += st.req;
-      if (g !== 'Pflicht') {
-        if (st.abgabe)              steps++; totalSteps++;
-        if (st.korOk && st.abgabe) steps++; totalSteps++;
-      }
-    });
-    const pct = totalSteps ? Math.round(steps / totalSteps * 100) : 0;
+    const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData);
     const hasAny = Object.values(groups).some(st => st.done > 0);
     const badges = Object.entries(groups).map(([g, st]) => {
       const cls = st.complete ? 'gpill-ok' : st.stationsOk ? 'gpill-partial' : 'gpill-none';
@@ -765,11 +762,7 @@ async function loadStudents() {
       const lt = ltMeta[0];
       const statCards = lt ? Object.entries(lt.groups).map(([g, grp]) => {
         const n = allStudents.filter(s => {
-          let ap = s.all_progress || {};
-          if (!s.all_progress) {
-            if (s.prog   != null) ap[lt.key]       = typeof s.prog   === 'string' ? s.prog   : JSON.stringify(s.prog);
-            if (s.abgabe != null) ap[lt.abgabeKey] = typeof s.abgabe === 'string' ? s.abgabe : JSON.stringify(s.abgabe);
-          }
+          const ap = buildAp(s, lt);
           const gd = parseGroupsForLt(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur);
           return gd[g] && gd[g].complete;
         }).length;
@@ -851,11 +844,7 @@ function renderTable(students) {
 
   tbody.innerHTML = students.map(s => {
     // Support both new format (all_progress) and old server format (prog/abgabe)
-    let ap = s.all_progress || {};
-    if (!s.all_progress && lt) {
-      if (s.prog   != null) ap[lt.key]       = typeof s.prog   === 'string' ? s.prog   : JSON.stringify(s.prog);
-      if (s.abgabe != null) ap[lt.abgabeKey] = typeof s.abgabe === 'string' ? s.abgabe : JSON.stringify(s.abgabe);
-    }
+    const ap = buildAp(s, lt);
     const kor = s.korrektur || {};
 
     // Per-lerntheke group stats
