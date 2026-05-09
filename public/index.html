@@ -167,6 +167,18 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
 .msg.ok{background:var(--green-lt);color:var(--green);}
 .msg.err{background:#fef2f2;color:#dc2626;}
 
+/* ══ MATRIX / SUMMARY ═══════════════════════════════════════════════════════ */
+.lt-pct-cell{display:flex;flex-direction:column;gap:3px;min-width:90px;}
+.lt-pct-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap;}
+.lt-pct-groups{display:flex;flex-wrap:wrap;gap:2px;margin-top:2px;}
+.lt-pct-g{font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;}
+.summary-lt{background:var(--bg);border-radius:10px;padding:16px;margin-bottom:12px;border:1.5px solid var(--border);}
+.summary-lt-title{font-weight:800;font-size:15px;margin-bottom:8px;}
+.summary-groups{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.summary-bar-wrap{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:6px;}
+.summary-bar-fill{height:100%;border-radius:4px;transition:width .4s;}
+.summary-pct{font-size:12px;font-weight:700;color:var(--ink2);}
+
 /* ══ LERNTHEKE PICKER ════════════════════════════════════════════════════════ */
 #view-picker{flex:1;overflow-y:auto;padding:32px 20px;background:var(--bg);}
 .picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px;max-width:960px;margin:0 auto;}
@@ -273,6 +285,7 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
       <input class="search" id="search-inp" placeholder="🔍 Suche nach Name…" oninput="filterTable()">
       <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
       <button class="btn-act btn-outline" onclick="openSingle()">+ Einzeln anlegen</button>
+      <button class="btn-act btn-outline" id="btn-view-toggle" onclick="toggleAdminView()">📊 Baustein-Übersicht</button>
       <button class="btn-act btn-outline" onclick="exportCSV()">↓ CSV</button>
       <button class="btn-act btn-outline" onclick="loadStudents()">↺ Laden</button>
     </div>
@@ -318,6 +331,17 @@ textarea.form-input{resize:vertical;min-height:130px;font-family:monospace;font-
     </div>
   </div>
 
+</div>
+
+<!-- ══ MODAL: Schüler-Zusammenfassung ════════════════════════════════════════ -->
+<div class="overlay" id="modal-summary">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-title" id="summary-name">Arbeitsstand</div>
+    <div id="summary-content"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-summary')">Schließen</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ MODAL: Bulk anlegen ════════════════════════════════════════════════════ -->
@@ -380,6 +404,35 @@ let resetId = null;
 
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
+let adminViewMode = 'groups'; // 'groups' | 'matrix'
+
+function toggleAdminView() {
+  adminViewMode = adminViewMode === 'groups' ? 'matrix' : 'groups';
+  const btn = document.getElementById('btn-view-toggle');
+  if (btn) btn.textContent = adminViewMode === 'groups' ? '📊 Baustein-Übersicht' : '📋 Gruppen-Detail';
+  renderTable(allStudents);
+}
+
+// Compute per-lerntheke stats for one student
+function studentLtStats(s, lt) {
+  let ap = s.all_progress || {};
+  if (!s.all_progress && lt) {
+    if (s.prog   != null) ap[lt.key]       = typeof s.prog   === 'string' ? s.prog   : JSON.stringify(s.prog);
+    if (s.abgabe != null) ap[lt.abgabeKey] = typeof s.abgabe === 'string' ? s.abgabe : JSON.stringify(s.abgabe);
+  }
+  const kor = s.korrektur || {};
+  const groups = parseGroupsForLt(lt, ap[lt.key], ap[lt.abgabeKey], kor);
+  let steps = 0, total = 0;
+  Object.entries(lt.groups).forEach(([g, grp]) => {
+    const st = groups[g] || {};
+    steps += Math.min(st.done||0, grp.required); total += grp.required;
+    if (g !== 'Pflicht') {
+      if (st.abgabe) steps++; total++;
+      if (st.korOk && st.abgabe) steps++; total++;
+    }
+  });
+  return { groups, pct: total ? Math.round(steps/total*100) : 0, steps, total };
+}
 
 function parseGroupsForLt(lt, progVal, abgabeVal, korrekturObj) {
   const prog = safeJSON(progVal);
@@ -736,16 +789,59 @@ async function loadStudents() {
 function renderTable(students) {
   const tbody = document.getElementById('stbl');
   const lt = ltMeta[0];
-  const multiLt = ltMeta.length > 1;
-  const colCount = lt ? Object.keys(lt.groups).length + 4 + (multiLt ? 1 : 0) : 8;
+  const thead = tbody.closest('table').querySelector('thead tr');
 
   if (!students.length) {
-    tbody.innerHTML = `<tr><td colspan="${colCount}" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
+    if (thead) thead.innerHTML = '<th>Name</th><th>–</th>';
+    tbody.innerHTML = `<tr><td colspan="2" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
     return;
   }
 
+  // ── MATRIX MODE ────────────────────────────────────────────────────────────
+  if (adminViewMode === 'matrix') {
+    if (thead) {
+      thead.innerHTML = '<th>Name</th>' +
+        ltMeta.map(l => `<th>${l.title}</th>`).join('') +
+        '<th>Zuletzt aktiv</th><th></th>';
+    }
+    tbody.innerHTML = students.map(s => {
+      const ltCells = ltMeta.map(lti => {
+        const { groups, pct } = studentLtStats(s, lti);
+        const color = pct===100?'#16a34a':pct>0?'#d97706':'#94a3b8';
+        const bg    = pct===100?'#f0fdf4':pct>0?'#fffbeb':'#f8fafc';
+        const groupOrder = Object.keys(lti.groups);
+        const gBadges = groupOrder.map(g => {
+          const st = groups[g]||{};
+          const c = st.complete?'#16a34a':st.stationsOk?'#d97706':'#94a3b8';
+          const bb= st.complete?'#f0fdf4':st.stationsOk?'#fffbeb':'#f8fafc';
+          return `<span class="lt-pct-g" style="background:${bb};color:${c};">${g[0]}:${st.complete?'✓':(st.done||0)+'/'+st.req}</span>`;
+        }).join('');
+        return `<td><div class="lt-pct-cell">
+          <span class="lt-pct-pill" style="background:${bg};color:${color};">${pct===100?'✓ ':''} ${pct}%</span>
+          <div class="lt-pct-groups">${gBadges}</div>
+        </div></td>`;
+      }).join('');
+      const lai = s.last_active_info;
+      const lastDate = lai&&lai.updated_at ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '–';
+      return `<tr data-name="${s.username}">
+        <td style="font-weight:600;cursor:pointer;" onclick="openStudentSummary(${s.id},'${s.username}')">${s.username} <span style="color:var(--blue);font-size:11px;">↗</span></td>
+        ${ltCells}
+        <td style="color:var(--ink2);">${lastDate}</td>
+        <td><div class="action-btns">
+          <button class="btn-icon" onclick="viewStudent(${s.id},'${s.username}')">👁</button>
+          <button class="btn-icon" onclick="openReset(${s.id},'${s.username}')">🔑</button>
+          <button class="btn-icon red" onclick="deleteStudent(${s.id},'${s.username}')">🗑</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+    return;
+  }
+
+  // ── GROUPS MODE (default) ──────────────────────────────────────────────────
+  const multiLt = ltMeta.length > 1;
+  const colCount = lt ? Object.keys(lt.groups).length + 4 + (multiLt ? 1 : 0) : 8;
+
   // Update table header dynamically
-  const thead = tbody.closest('table').querySelector('thead tr');
   if (thead && lt) {
     const groupHeaders = Object.entries(lt.groups)
       .map(([g, info]) => `<th>${info.emoji} ${g}</th>`).join('');
@@ -817,7 +913,7 @@ function renderTable(students) {
       : '';
 
     return `<tr data-name="${s.username}">
-      <td style="font-weight:600;">${s.username}</td>
+      <td style="font-weight:600;cursor:pointer;" onclick="openStudentSummary(${s.id},'${s.username}')">${s.username} <span style="color:var(--blue);font-size:11px;">↗</span></td>
       ${groupCells}
       <td>${abgaben}</td>
       <td>${korCell||'<span style="color:var(--ink2);font-size:12px;">–</span>'}</td>
@@ -832,6 +928,41 @@ function renderTable(students) {
       </td>
     </tr>`;
   }).join('');
+}
+
+function openStudentSummary(userId, username) {
+  const s = allStudents.find(st => st.id === userId);
+  if (!s) return;
+  document.getElementById('summary-name').textContent = `Arbeitsstand: ${username}`;
+  const content = ltMeta.map(lt => {
+    const { groups, pct } = studentLtStats(s, lt);
+    const color = pct===100?'#16a34a':pct>0?'#d97706':'#94a3b8';
+    const groupOrder = Object.keys(lt.groups);
+    const groupBadges = groupOrder.map(g => {
+      const st = groups[g]||{};
+      const grp = lt.groups[g];
+      const c  = st.complete?'#16a34a':st.stationsOk?'#d97706':'#94a3b8';
+      const bb = st.complete?'#f0fdf4':st.stationsOk?'#fffbeb':'#f8fafc';
+      let txt = st.complete ? `${grp.emoji} ${g} ✓` : `${grp.emoji} ${g}: ${st.done||0}/${st.req}`;
+      if (g!=='Pflicht') {
+        if (st.abgabe) txt += ' 📋';
+        if (st.korOk) txt += ' ✓ Bestanden';
+        else if (st.abgabe) txt += ' ⏳';
+      }
+      return `<span class="gpill" style="background:${bb};color:${c};">${txt}</span>`;
+    }).join('');
+    return `<div class="summary-lt">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="summary-lt-title">${lt.title}</div>
+        <button class="btn-sm" onclick="closeModal('modal-summary');viewStudent(${userId},'${username}')">👁 Ansehen</button>
+      </div>
+      <div class="summary-groups">${groupBadges}</div>
+      <div class="summary-bar-wrap"><div class="summary-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+      <div class="summary-pct">${pct}% der Anforderungen</div>
+    </div>`;
+  }).join('');
+  document.getElementById('summary-content').innerHTML = content || '<p style="color:var(--ink2);">Keine Lerntheken gefunden.</p>';
+  openModal('modal-summary');
 }
 
 function filterTable() {
