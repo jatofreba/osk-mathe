@@ -1,6 +1,58 @@
 // Shared JS engine for all lerntheken
 // Constants (KEY, META, CONTENT, etc.) are defined inline in each HTML file
 
+// ── Generic station check/reset (used by stations with cell-inputs) ──────────
+function checkStation(stId) {
+  saveInputs();
+  const inputs = document.querySelectorAll('#st-body .cell-input');
+  let correct=0, total=0, empty=0;
+  inputs.forEach(inp => {
+    total++;
+    const ans = parseFloat(inp.dataset.ans);
+    const val = parseVal(inp.value);
+    inp.classList.remove('input-ok','input-err','input-empty');
+    if (!inp.value.trim()) { inp.classList.add('input-empty'); empty++; }
+    else if (approxEq(val, ans)) { inp.classList.add('input-ok'); correct++; }
+    else { inp.classList.add('input-err'); }
+  });
+  const pct = Math.round(correct/total*100);
+  const passed = pct >= 75 && empty === 0;
+  const res = document.getElementById('check-result-'+stId);
+  if (res) {
+    if (empty > 0) { res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.'; res.className='check-result warn'; }
+    else if (pct===100) { res.innerHTML='🎉 <strong>100% richtig!</strong> Perfekt!'; res.className='check-result success'; }
+    else if (passed) { res.innerHTML='✓ <strong>'+pct+'%</strong> richtig – Lösung freigeschaltet!'; res.className='check-result success'; }
+    else { res.innerHTML='<strong>'+pct+'%</strong> ('+correct+'/'+total+') – mind. 75% zum Freischalten.'; res.className='check-result error'; }
+  }
+  const solWrap = document.querySelector('.sol-wrap');
+  const solLock = document.getElementById('sol-lock-'+stId);
+  if (passed) {
+    if (solWrap) solWrap.style.display = '';
+    if (solLock) solLock.style.display = 'none';
+    if (!done.has(cur)) { done.add(cur); save(); updProg(); buildOverview(); }
+  } else {
+    if (solWrap) solWrap.style.display = 'none';
+    if (solLock) solLock.style.display = 'flex';
+  }
+}
+function resetStation(stId) {
+  document.querySelectorAll('#st-body .cell-input').forEach(inp => {
+    inp.value = ''; inp.classList.remove('input-ok','input-err','input-empty');
+  });
+  const res = document.getElementById('check-result-'+stId);
+  if (res) { res.textContent = ''; res.className = 'check-result'; }
+}
+function abgebenStation(stId, taId) {
+  const ta = document.getElementById(taId);
+  const res = document.getElementById('check-result-'+stId);
+  if (!ta || !ta.value.trim()) {
+    if (res) { res.innerHTML='⚠️ Bitte etwas eintragen.'; res.className='check-result warn'; }
+    return;
+  }
+  if (res) { res.innerHTML='✓ <strong>Abgegeben!</strong>'; res.className='check-result success'; }
+  if (!done.has(cur)) { done.add(cur); save(); updProg(); buildOverview(); }
+}
+
 function save(){
   const val=JSON.stringify([...done]);
   localStorage.setItem(KEY,val);
@@ -24,14 +76,14 @@ window.addEventListener('message', e => {
   if (storedAbgabe) { try { abgabeState = JSON.parse(storedAbgabe); } catch {} }
   serverSyncDone = true;
   if (done.size > 0) save();
-  // Sync merged abgabe back to server
-  if (abgabeState && Object.keys(abgabeState).length > 0) {
+  // Sync abgabe back to server (ensures server always has the latest)
+  if (abgabeState && Object.keys(abgabeState).some(k => abgabeState[k])) {
     const enc = JSON.stringify(abgabeState);
     localStorage.setItem(ABGABE_KEY, enc);
     window.parent.postMessage({type:'SAVE_PROGRESS', key:ABGABE_KEY, value:enc}, '*');
   }
-  updProg();
-  buildOverview();
+  // Load korrektur then build overview (ensures both abgabe + korrektur are ready)
+  loadKorrektur().then(() => { updProg(); buildOverview(); });
 });
 
 function groupStats(){
@@ -812,7 +864,6 @@ const resetLondon=makeResetGeneric('check-result-london');
 let korrekturState={};
 async function loadKorrektur(){
   try{const r=await fetch('/api/korrektur');if(r.ok)korrekturState=await r.json();}catch(e){}
-  buildOverview();
 }
 if(window.self!==window.top)loadKorrektur();
 let abgabeState = _inIframe ? {} : JSON.parse(localStorage.getItem(ABGABE_KEY)||'{}');
@@ -831,21 +882,23 @@ const resetEinheitenFlaeche = makeResetGeneric('check-result-einheiten-flaeche')
 const checkEinheitenVolumen = makeCheckGeneric('check-result-einheiten-volumen','sol-lock-einheiten-v');
 const resetEinheitenVolumen = makeResetGeneric('check-result-einheiten-volumen');
 
+function _inputKey(id){ return KEY+'_i'+id; }
 function saveInputs(){
   if(cur===null) return;
   const inputs = document.querySelectorAll('#st-body .cell-input');
   if(!inputs.length) return;
   const vals = {};
   inputs.forEach((inp,i) => { vals[i] = inp.value; });
-  const key = 'lerntheke_inputs_' + cur;
+  const key = _inputKey(cur);
   const encoded = JSON.stringify(vals);
   localStorage.setItem(key, encoded);
   window.parent.postMessage({type:'SAVE_PROGRESS', key, value: encoded}, '*');
 }
 
 function loadInputs(id){
-  const key = 'lerntheke_inputs_' + id;
-  const raw = localStorage.getItem(key);
+  const key = _inputKey(id);
+  // also try legacy key for backward compat
+  const raw = localStorage.getItem(key) || localStorage.getItem('lerntheke_inputs_' + id);
   if(!raw) return;
   try {
     const vals = JSON.parse(raw);
@@ -857,4 +910,8 @@ function loadInputs(id){
 }
 
 function showOv(){saveInputs();buildOverview();showView('view-ov');}
-if(_inIframe) loadKorrektur(); else buildOverview();
+if(_inIframe){
+  // RELOAD_PROGRESS will call loadKorrektur().then(buildOverview) after sync
+} else {
+  loadKorrektur().then(() => { buildOverview(); });
+}
