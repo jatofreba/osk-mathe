@@ -1029,14 +1029,21 @@ async function syncProgressToFrame() {
 
 // Listen for progress saves from the iframe
 window.addEventListener('message', async (e) => {
-  if (!e.data || e.data.type !== 'SAVE_PROGRESS') return;
-  const { key, value } = e.data;
-  console.log('[Save] Saving to server:', key, '=', value.substring(0,50));
-  const r = await fetch('/api/progress', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ key, value })
-  });
-  if (!r.ok) console.error('[Save] Failed:', r.status);
+  if (!e.data) return;
+  if (e.data.type === 'SAVE_PROGRESS') {
+    const { key, value } = e.data;
+    const r = await fetch('/api/progress', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ key, value })
+    });
+    if (!r.ok) console.error('[Save] Failed:', r.status);
+  } else if (e.data.type === 'RESET_KORREKTUR') {
+    const { gruppe } = e.data;
+    await fetch('/api/korrektur/reset', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ gruppe })
+    });
+  }
 });
 
 // ══ View switching ═══════════════════════════════════════════════════════════

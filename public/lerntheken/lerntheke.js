@@ -974,16 +974,11 @@ function toggleAbgabe(g,val){
   const encoded=JSON.stringify(abgabeState);
   localStorage.setItem(ABGABE_KEY,encoded);
   window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY,value:encoded},'*');
-  // Bei erneuter Abgabe nach "nicht_bestanden": Korrekturstatus auf ausstehend setzen
   if(val && korrekturState[g] && korrekturState[g].status==='nicht_bestanden'){
-    fetch('/api/korrektur/reset', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({gruppe:g})
-    }).then(()=>{ delete korrekturState[g]; buildOverview(); });
-  } else {
-    buildOverview();
+    window.parent.postMessage({type:'RESET_KORREKTUR', gruppe:g}, '*');
+    delete korrekturState[g];
   }
+  buildOverview();
 }
 
 const checkEinheitenFlaeche = makeCheckGeneric('check-result-einheiten-flaeche','sol-lock-einheiten-f');
