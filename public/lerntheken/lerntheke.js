@@ -374,7 +374,10 @@ function showSt(id){
     loadInputs(id);
     enhanceInputs();
     document.querySelectorAll('#st-body textarea, #st-body .cell-input').forEach(el => {
-      el.addEventListener('input', saveInputs);
+      el.addEventListener('input', () => {
+        el.classList.remove('input-err', 'input-ok', 'input-empty');
+        saveInputs();
+      });
     });
     window.scrollTo({top:0,behavior:'instant'});
   },50);
