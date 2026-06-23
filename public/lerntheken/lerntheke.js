@@ -241,7 +241,6 @@ function buildGrid(stats){
           <span class="korrektur-badge nicht_bestanden">✗ Nicht bestanden</span>
           <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">
             <input type="checkbox" class="abgabe-cb" id="grp-abgabe-${g}"
-              ${abgabeChecked(g)?'checked':''}
               onchange="toggleAbgabe('${g}',this.checked)">
             <span class="abgabe-label">Erneut zur Korrektur abgeben</span>
           </label>`;
@@ -969,9 +968,12 @@ let abgabeState = _inIframe ? {} : JSON.parse(localStorage.getItem(ABGABE_KEY)||
 function abgabeChecked(g){return !!abgabeState[g];}
 function toggleAbgabe(g,val){
   abgabeState[g]=val;
+  // Bei erneuter Abgabe nach "nicht_bestanden": Korrekturstatus zurücksetzen
+  if(val && korrekturState[g] && korrekturState[g].status==='nicht_bestanden'){
+    delete korrekturState[g];
+  }
   const encoded=JSON.stringify(abgabeState);
   localStorage.setItem(ABGABE_KEY,encoded);
-  // Sync to server via parent shell
   window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY,value:encoded},'*');
   buildOverview();
 }
