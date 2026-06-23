@@ -5,10 +5,14 @@ LOG="/var/log/matheherz-deploy.log"
 
 cd "$APP_DIR" || exit 1
 
-git fetch origin --quiet
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Cron läuft..." >> "$LOG"
+
+git fetch origin >> "$LOG" 2>&1
 
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/master)
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] LOCAL=$LOCAL REMOTE=$REMOTE" >> "$LOG"
 
 if [ "$LOCAL" != "$REMOTE" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Neuer Commit erkannt – deploye..." >> "$LOG"
