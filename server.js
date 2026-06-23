@@ -143,23 +143,23 @@ app.use(express.urlencoded({ extended: true }));
 const { execSync } = require('child_process');
 const GIT_HASH = (() => { try { return execSync('git rev-parse --short HEAD').toString().trim(); } catch { return Date.now(); } })();
 
+// Inject git hash as cache-buster into lerntheke HTML files (must be before static middleware)
+app.get('/lerntheken/:file.html', (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'lerntheken', req.params.file + '.html');
+  if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+  let html = fs.readFileSync(filePath, 'utf8');
+  html = html.replace(/lerntheke\.js\?v=[^"']*/g, `lerntheke.js?v=${GIT_HASH}`);
+  html = html.replace(/lerntheke\.css\?v=[^"']*/g, `lerntheke.css?v=${GIT_HASH}`);
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(html);
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
   }
 }));
-
-// Inject git hash as cache-buster into lerntheke HTML files
-app.get('/lerntheken/:file.html', (req, res) => {
-  const filePath = path.join(__dirname, 'public', 'lerntheken', req.params.file + '.html');
-  if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
-  let html = fs.readFileSync(filePath, 'utf8');
-  html = html.replace(/lerntheke\.js\?v=\d+/g, `lerntheke.js?v=${GIT_HASH}`);
-  html = html.replace(/lerntheke\.css\?v=\d+/g, `lerntheke.css?v=${GIT_HASH}`);
-  res.setHeader('Cache-Control', 'no-cache');
-  res.send(html);
-});
 app.use(session({
   store: new pgSession({ pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET || 'bitte-aendern-' + Math.random(),
