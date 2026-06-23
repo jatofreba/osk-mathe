@@ -402,7 +402,7 @@ function parseVal(str) {
 function approxEq(a, b) {
   if (isNaN(a) || isNaN(b)) return false;
   if (a === 0 && b === 0) return true;
-  const rel = Math.abs(a - b) / Math.max(Math.abs(b), 1e-15); return rel < 0.01;
+  const rel = Math.abs(a - b) / Math.max(Math.abs(b), 1e-15); return rel < 0.03;
 }
 function checkEinheiten() {
   const inputs = document.querySelectorAll('.cell-input');
