@@ -236,7 +236,10 @@ function buildGrid(stats){
     const abgabeRow=needsAbgabe?`<div class="group-abgabe">
       ${(()=>{
         const k=korrekturState[g];
-        if(k&&k.status==='bestanden') return '<span class="korrektur-badge bestanden">✓ Bestanden</span>';
+        if(k&&k.status==='bestanden') return `
+          <input type="checkbox" class="abgabe-cb" checked disabled>
+          <label class="abgabe-label">Aufgabe zur Korrektur abgegeben</label>
+          <span class="korrektur-badge bestanden">✓ Bestanden</span>`;
         if(k&&k.status==='nicht_bestanden') return `
           <span class="korrektur-badge nicht_bestanden">✗ Nicht bestanden</span>
           <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">

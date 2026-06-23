@@ -11,7 +11,7 @@ REMOTE=$(git rev-parse origin/master)
 
 if [ "$LOCAL" != "$REMOTE" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Neuer Commit erkannt – deploye..." >> "$LOG"
-  git pull origin master >> "$LOG" 2>&1
+  git reset --hard origin/master >> "$LOG" 2>&1
   npm install --quiet >> "$LOG" 2>&1
   pm2 restart matheherz >> "$LOG" 2>&1
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deploy abgeschlossen." >> "$LOG"
