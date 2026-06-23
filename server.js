@@ -140,7 +140,26 @@ async function syncAllStations() {
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+const { execSync } = require('child_process');
+const GIT_HASH = (() => { try { return execSync('git rev-parse --short HEAD').toString().trim(); } catch { return Date.now(); } })();
+
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  }
+}));
+
+// Inject git hash as cache-buster into lerntheke HTML files
+app.get('/lerntheken/:file.html', (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'lerntheken', req.params.file + '.html');
+  if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+  let html = fs.readFileSync(filePath, 'utf8');
+  html = html.replace(/lerntheke\.js\?v=\d+/g, `lerntheke.js?v=${GIT_HASH}`);
+  html = html.replace(/lerntheke\.css\?v=\d+/g, `lerntheke.css?v=${GIT_HASH}`);
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(html);
+});
 app.use(session({
   store: new pgSession({ pool, tableName: 'session' }),
   secret: process.env.SESSION_SECRET || 'bitte-aendern-' + Math.random(),
@@ -607,6 +626,21 @@ app.get('/api/korrektur', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+
+// Student: erneut abgeben (setzt Korrekturstatus auf ausstehend)
+app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
+  try {
+    const { gruppe } = req.body;
+    if (!gruppe) return res.status(400).json({ error: 'Fehlende Gruppe' });
+    await pool.query(`
+      INSERT INTO korrektur (user_id, gruppe, status, notiz, updated_at)
+      VALUES ($1, $2, 'ausstehend', '', NOW())
+      ON CONFLICT (user_id, gruppe) DO UPDATE
+      SET status='ausstehend', notiz='', updated_at=NOW()
+    `, [req.session.userId, gruppe]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
 
 // Admin: get full progress (including inputs) of a specific student
 app.get('/api/admin/student-progress/:userId', requireAdmin, async (req, res) => {
