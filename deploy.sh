@@ -3,9 +3,9 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 APP_DIR="/opt/matheherz"
 LOG="/var/log/matheherz-deploy.log"
 
-cd "$APP_DIR" || exit 1
-
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Cron läuft..." >> "$LOG"
+
+cd "$APP_DIR" || { echo "[$(date '+%Y-%m-%d %H:%M:%S')] FEHLER: cd $APP_DIR fehlgeschlagen" >> "$LOG"; exit 1; }
 
 git fetch origin >> "$LOG" 2>&1
 
