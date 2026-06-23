@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 APP_DIR="/opt/matheherz"
 LOG="/var/log/matheherz-deploy.log"
 
