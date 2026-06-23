@@ -718,11 +718,30 @@ function studentLtStats(s, lt) {
   return computeLtStats(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur);
 }
 
-function parseGroupsForLt(lt, progVal, abgabeVal, korrekturObj) {
+function korForLt(korrekturRaw, ltKey) {
+  if (!korrekturRaw) return {};
+  // korrekturRaw may be an array [{gruppe,status,notiz,lerntheke}] or a plain object {gruppe:{status,notiz}}
+  if (Array.isArray(korrekturRaw)) {
+    const out = {};
+    korrekturRaw.forEach(row => {
+      if (row.lerntheke === ltKey || row.lerntheke === '') out[row.gruppe] = { status: row.status, notiz: row.notiz };
+    });
+    return out;
+  }
+  // Legacy plain object: filter by lerntheke field on each value if present
+  const out = {};
+  Object.entries(korrekturRaw).forEach(([g, v]) => {
+    if (!v) return;
+    if (!v.lerntheke || v.lerntheke === ltKey || v.lerntheke === '') out[g] = v;
+  });
+  return out;
+}
+
+function parseGroupsForLt(lt, progVal, abgabeVal, korrekturRaw) {
   if (!lt || !lt.groups) return {};
   const prog = safeJSON(progVal);
   const abg  = safeJSON(abgabeVal);
-  const kor  = korrekturObj || {};
+  const kor  = korForLt(korrekturRaw, lt.key);
   const done = new Set();
   if (Array.isArray(prog)) prog.forEach(id => done.add(Number(id)));
   else if (typeof prog === 'object' && prog !== null)
@@ -1038,10 +1057,10 @@ window.addEventListener('message', async (e) => {
     });
     if (!r.ok) console.error('[Save] Failed:', r.status);
   } else if (e.data.type === 'RESET_KORREKTUR') {
-    const { gruppe } = e.data;
+    const { gruppe, lerntheke } = e.data;
     await fetch('/api/korrektur/reset', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ gruppe })
+      body: JSON.stringify({ gruppe, lerntheke: lerntheke || '' })
     });
   }
 });
@@ -1221,9 +1240,9 @@ function renderTable(students) {
         <span style="font-size:10px;color:var(--ink2);font-weight:600;">${gr}${hasAbgabe?' 📋':''}</span>
         <div style="display:flex;gap:4px;">
           <button class="kor-btn bestanden ${st==='bestanden'?'active':''}"
-            onclick="setKorrektur(${s.id},'${gr}','bestanden',event)">✓</button>
+            onclick="setKorrektur(${s.id},'${gr}','bestanden','${primaryLt ? primaryLt.key : ''}',event)">✓</button>
           <button class="kor-btn nicht_bestanden ${st==='nicht_bestanden'?'active':''}"
-            onclick="setKorrektur(${s.id},'${gr}','nicht_bestanden',event)">✗</button>
+            onclick="setKorrektur(${s.id},'${gr}','nicht_bestanden','${primaryLt ? primaryLt.key : ''}',event)">✗</button>
         </div>
       </div>`;
     }).join('');
@@ -1392,12 +1411,12 @@ async function doChangePw() {
 
 // ══ CSV Export ════════════════════════════════════════════════════════════════
 
-async function setKorrektur(userId, gruppe, status, event) {
+async function setKorrektur(userId, gruppe, status, lerntheke, event) {
   event.stopPropagation();
   await fetch('/api/admin/korrektur', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ userId, gruppe, status })
+    body: JSON.stringify({ userId, gruppe, status, lerntheke: lerntheke || '' })
   });
   loadStudents();
 }
@@ -1433,7 +1452,10 @@ async function viewStudent(userId, username) {
 
       // Inject student's korrektur so the lerntheke preview shows correct badges
       try {
-        const kr = await fetch('/api/admin/korrektur/' + userId);
+        const frameSrc = frame.src || '';
+        const activeLt = ltMeta.find(l => frameSrc.includes(l.url.replace(/\?.*$/, '')));
+        const ltParam = activeLt ? '?lerntheke=' + encodeURIComponent(activeLt.key) : '';
+        const kr = await fetch('/api/admin/korrektur/' + userId + ltParam);
         if (kr.ok) {
           const korrData = await kr.json();
           frame.contentWindow.postMessage({ type: 'RELOAD_KORREKTUR', data: korrData }, '*');

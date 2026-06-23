@@ -964,7 +964,7 @@ const resetLondon=makeResetGeneric('check-result-london');
 
 let korrekturState={};
 async function loadKorrektur(){
-  try{const r=await fetch('/api/korrektur');if(r.ok)korrekturState=await r.json();}catch(e){}
+  try{const r=await fetch('/api/korrektur?lerntheke='+encodeURIComponent(KEY));if(r.ok)korrekturState=await r.json();}catch(e){}
 }
 if(window.self!==window.top)loadKorrektur();
 let abgabeState = _inIframe ? {} : JSON.parse(localStorage.getItem(ABGABE_KEY)||'{}');
@@ -975,7 +975,7 @@ function toggleAbgabe(g,val){
   localStorage.setItem(ABGABE_KEY,encoded);
   window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY,value:encoded},'*');
   if(val && korrekturState[g] && korrekturState[g].status==='nicht_bestanden'){
-    window.parent.postMessage({type:'RESET_KORREKTUR', gruppe:g}, '*');
+    window.parent.postMessage({type:'RESET_KORREKTUR', gruppe:g, lerntheke:KEY}, '*');
     delete korrekturState[g];
   }
   buildOverview();

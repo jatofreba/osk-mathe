@@ -51,11 +51,24 @@ async function initDB() {
       notiz      TEXT DEFAULT '',
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       admin_id   INTEGER REFERENCES users(id),
+      lerntheke  TEXT NOT NULL DEFAULT '',
       UNIQUE(user_id, gruppe)
     );
     CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
     CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
     CREATE INDEX IF NOT EXISTS idx_korrektur_user ON korrektur(user_id);
+    -- Migrate: add lerntheke column if missing, then fix unique constraint
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='korrektur' AND column_name='lerntheke') THEN
+        ALTER TABLE korrektur ADD COLUMN lerntheke TEXT NOT NULL DEFAULT '';
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname='korrektur_user_id_gruppe_key') THEN
+        ALTER TABLE korrektur DROP CONSTRAINT korrektur_user_id_gruppe_key;
+        ALTER TABLE korrektur ADD CONSTRAINT korrektur_user_id_lerntheke_gruppe_key UNIQUE(user_id, lerntheke, gruppe);
+      END IF;
+    END $$;
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -486,7 +499,7 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
            AND key NOT LIKE 'lerntheke_inputs_%'
            AND key NOT LIKE '%_abgabe_%'
          ORDER BY updated_at DESC LIMIT 1) AS last_active_info,
-        (SELECT json_object_agg(gruppe, json_build_object('status',status,'notiz',notiz))
+        (SELECT json_agg(json_build_object('gruppe',gruppe,'status',status,'notiz',notiz,'lerntheke',lerntheke))
          FROM korrektur WHERE user_id=u.id) AS korrektur
       FROM users u
       WHERE u.role='student' AND u.klasse=$1
@@ -583,13 +596,17 @@ function safeJSON(s) {
 
 // ── Korrektur (Admin bewertet Abgaben) ───────────────────────────────────────
 
-// Admin: get all korrektur status for a student
+// Admin: get all korrektur status for a student (optionally scoped by lerntheke)
 app.get('/api/admin/korrektur/:userId', requireAdmin, async (req, res) => {
   try {
-    const r = await pool.query(
-      'SELECT gruppe, status, notiz, updated_at FROM korrektur WHERE user_id=$1',
-      [req.params.userId]
-    );
+    const lerntheke = req.query.lerntheke || '';
+    const r = lerntheke
+      ? await pool.query(
+          'SELECT gruppe, status, notiz, updated_at FROM korrektur WHERE user_id=$1 AND lerntheke=$2',
+          [req.params.userId, lerntheke])
+      : await pool.query(
+          'SELECT gruppe, status, notiz, updated_at FROM korrektur WHERE user_id=$1',
+          [req.params.userId]);
     const out = {};
     r.rows.forEach(row => { out[row.gruppe] = { status: row.status, notiz: row.notiz, updated_at: row.updated_at }; });
     res.json(out);
@@ -599,45 +616,50 @@ app.get('/api/admin/korrektur/:userId', requireAdmin, async (req, res) => {
 // Admin: set korrektur status
 app.post('/api/admin/korrektur', requireAdmin, async (req, res) => {
   try {
-    const { userId, gruppe, status, notiz } = req.body;
+    const { userId, gruppe, status, notiz, lerntheke } = req.body;
     if (!userId || !gruppe || !status) return res.status(400).json({ error: 'Fehlende Angaben' });
     if (!['ausstehend','bestanden','nicht_bestanden'].includes(status))
       return res.status(400).json({ error: 'Ungültiger Status' });
+    const lt = lerntheke || '';
     await pool.query(`
-      INSERT INTO korrektur (user_id, gruppe, status, notiz, admin_id, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (user_id, gruppe) DO UPDATE
-      SET status=$3, notiz=$4, admin_id=$5, updated_at=NOW()
-    `, [userId, gruppe, status, notiz||'', req.session.userId]);
+      INSERT INTO korrektur (user_id, gruppe, lerntheke, status, notiz, admin_id, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (user_id, lerntheke, gruppe) DO UPDATE
+      SET status=$4, notiz=$5, admin_id=$6, updated_at=NOW()
+    `, [userId, gruppe, lt, status, notiz||'', req.session.userId]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Student: get own korrektur status
+// Student: get own korrektur status (optionally scoped by lerntheke)
 app.get('/api/korrektur', requireLogin, async (req, res) => {
   try {
-    const r = await pool.query(
-      'SELECT gruppe, status, notiz FROM korrektur WHERE user_id=$1',
-      [req.session.userId]
-    );
+    const lerntheke = req.query.lerntheke || '';
+    const r = lerntheke
+      ? await pool.query(
+          'SELECT gruppe, status, notiz, lerntheke FROM korrektur WHERE user_id=$1 AND lerntheke=$2',
+          [req.session.userId, lerntheke])
+      : await pool.query(
+          'SELECT gruppe, status, notiz, lerntheke FROM korrektur WHERE user_id=$1',
+          [req.session.userId]);
     const out = {};
-    r.rows.forEach(row => { out[row.gruppe] = { status: row.status, notiz: row.notiz }; });
+    r.rows.forEach(row => { out[row.gruppe] = { status: row.status, notiz: row.notiz, lerntheke: row.lerntheke }; });
     res.json(out);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-
 // Student: erneut abgeben (setzt Korrekturstatus auf ausstehend)
 app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
   try {
-    const { gruppe } = req.body;
+    const { gruppe, lerntheke } = req.body;
     if (!gruppe) return res.status(400).json({ error: 'Fehlende Gruppe' });
+    const lt = lerntheke || '';
     await pool.query(`
-      INSERT INTO korrektur (user_id, gruppe, status, notiz, updated_at)
-      VALUES ($1, $2, 'ausstehend', '', NOW())
-      ON CONFLICT (user_id, gruppe) DO UPDATE
+      INSERT INTO korrektur (user_id, gruppe, lerntheke, status, notiz, updated_at)
+      VALUES ($1, $2, $3, 'ausstehend', '', NOW())
+      ON CONFLICT (user_id, lerntheke, gruppe) DO UPDATE
       SET status='ausstehend', notiz='', updated_at=NOW()
-    `, [req.session.userId, gruppe]);
+    `, [req.session.userId, gruppe, lt]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
