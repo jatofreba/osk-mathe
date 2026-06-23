@@ -229,11 +229,24 @@ function buildGrid(stats){
     // Abgabe row
     const needsAbgabe=g!=='Pflicht';
     const abgabeRow=needsAbgabe?`<div class="group-abgabe">
-      <input type="checkbox" class="abgabe-cb" id="grp-abgabe-${g}"
-        ${abgabeChecked(g)?'checked':''}
-        onchange="toggleAbgabe('${g}',this.checked)">
-      <label for="grp-abgabe-${g}" class="abgabe-label">Aufgabe zur Korrektur abgegeben</label>
-      ${(()=>{const k=korrekturState[g];if(k&&k.status==='bestanden')return'<span class="korrektur-badge bestanden">✓ Bestanden</span>';if(k&&k.status==='nicht_bestanden')return'<span class="korrektur-badge nicht_bestanden">✗ Nicht bestanden</span>';return abgabeChecked(g)?'<span class="korrektur-badge ausstehend">⏳ Wartet auf Korrektur</span>':'';})()}
+      ${(()=>{
+        const k=korrekturState[g];
+        if(k&&k.status==='bestanden') return '<span class="korrektur-badge bestanden">✓ Bestanden</span>';
+        if(k&&k.status==='nicht_bestanden') return `
+          <span class="korrektur-badge nicht_bestanden">✗ Nicht bestanden</span>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">
+            <input type="checkbox" class="abgabe-cb" id="grp-abgabe-${g}"
+              ${abgabeChecked(g)?'checked':''}
+              onchange="toggleAbgabe('${g}',this.checked)">
+            <span class="abgabe-label">Erneut zur Korrektur abgeben</span>
+          </label>`;
+        return `
+          <input type="checkbox" class="abgabe-cb" id="grp-abgabe-${g}"
+            ${abgabeChecked(g)?'checked':''}
+            onchange="toggleAbgabe('${g}',this.checked)">
+          <label for="grp-abgabe-${g}" class="abgabe-label">Aufgabe zur Korrektur abgegeben</label>
+          ${abgabeChecked(g)?'<span class="korrektur-badge ausstehend">⏳ Wartet auf Korrektur</span>':''}`;
+      })()}
     </div>`:'';
 
     return `<div class="group-section">
