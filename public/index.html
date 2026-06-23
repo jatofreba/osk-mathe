@@ -448,6 +448,33 @@ textarea.form-input{
 .lt-bar-fill{height:100%;border-radius:99px;transition:width .4s;}
 .btn-picker-back{display:none;}
 
+/* ── Back-to-Picker Bar ──────────────────────────────────────────────────── */
+#picker-back-bar{
+  display:none;
+  align-items:center;
+  gap:12px;
+  padding:10px 16px;
+  background:var(--md-surface);
+  border-bottom:1px solid var(--md-outline-variant);
+  flex-shrink:0;
+}
+#picker-back-bar .back-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;
+  border-radius:99px;
+  border:1.5px solid var(--md-outline-variant);
+  background:var(--md-surface);
+  color:var(--md-on-surface);
+  font-size:13px;font-weight:500;letter-spacing:.1px;
+  cursor:pointer;transition:background .12s,border-color .12s;
+  white-space:nowrap;
+}
+#picker-back-bar .back-btn:hover{background:var(--md-surface-container);border-color:var(--md-outline);}
+#picker-back-bar .lt-name{
+  font-size:13px;font-weight:500;color:var(--md-on-surface-variant);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
 /* ── Change Password ─────────────────────────────────────────────────────── */
 #view-changepw{display:none;flex:1;align-items:center;justify-content:center;padding:24px;}
 .changepw-card{background:var(--md-surface);border-radius:28px;padding:28px;width:100%;max-width:380px;box-shadow:var(--md-elevation-2);}
@@ -502,7 +529,6 @@ textarea.form-input{
     <span class="topbar-user" id="bar-user"></span>
     <span class="pill pill-blue" id="bar-klasse"></span>
     <span class="pill pill-purple" id="bar-role" style="display:none">Admin</span>
-    <button class="btn-sm btn-picker-back" id="btn-picker-back" onclick="showPicker()">← Auswahl</button>
     <button class="btn-sm" onclick="showView('changepw')" title="Passwort ändern">🔑</button>
     <button class="btn-sm" onclick="doLogout()">Abmelden</button>
   </div>
@@ -513,6 +539,10 @@ textarea.form-input{
   </div>
 
   <div id="view-lerntheke" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+    <div id="picker-back-bar">
+      <button class="back-btn" onclick="showPicker()">← Alle Lerntheken</button>
+      <span class="lt-name" id="picker-back-lt-name"></span>
+    </div>
     <div id="lt-picker" style="display:none;padding:8px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-shrink:0;">
     <label style="font-size:13px;font-weight:600;color:#374151;margin-right:8px;">Lerntheke:</label>
     <select id="lt-select" onchange="switchLerntheke(this.value)" style="padding:6px 10px;border-radius:7px;border:1.5px solid #e2e8f0;font-size:14px;background:white;"></select>
@@ -924,6 +954,11 @@ async function startLerntheke(url) {
   frame.src = url + '?v=' + Date.now();
   localStorage.setItem('lastLerntheke', url);
 
+  // Update back-bar lerntheke name
+  const activeLtMeta = ltMeta.find(l => l.url === url.replace(/\?.*$/, ''));
+  const ltNameEl = document.getElementById('picker-back-lt-name');
+  if (ltNameEl && activeLtMeta) ltNameEl.textContent = activeLtMeta.title;
+
   // Show/update the dropdown for students when multiple lerntheken exist
   if (ltMeta.length > 1 && me && me.role !== 'admin') {
     const picker = document.getElementById('lt-picker');
@@ -932,7 +967,7 @@ async function startLerntheke(url) {
       `<option value="${l.url}"${l.url === url ? ' selected' : ''}>${l.title}</option>`
     ).join('');
     sel.onchange = () => startLerntheke(sel.value);
-    picker.style.display = 'flex';
+    picker.style.display = 'none'; // back-bar replaces dropdown
   }
 }
 
@@ -1085,9 +1120,9 @@ function showView(v) {
     const tab = document.getElementById('tab-' + id);
     if (tab) tab.classList.toggle('active', isActive);
   });
-  // Show back-to-picker button only when in lerntheke view with multiple options
-  const backBtn = document.getElementById('btn-picker-back');
-  if (backBtn) backBtn.style.display = (v === 'lerntheke' && ltMeta.length > 1 && me && me.role !== 'admin') ? '' : 'none';
+  // Show back-to-picker bar only when in lerntheke view with multiple options
+  const backBar = document.getElementById('picker-back-bar');
+  if (backBar) backBar.style.display = (v === 'lerntheke' && ltMeta.length > 1 && me && me.role !== 'admin') ? 'flex' : 'none';
   if (v === 'admin') {
     loadStudents();
     clearInterval(adminRefreshTimer);
