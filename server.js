@@ -6,8 +6,6 @@ const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
-const { execSync } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -629,34 +627,6 @@ app.get('/api/admin/student-progress/:userId', requireAdmin, async (req, res) =>
     rows.rows.forEach(r => { progress[r.key] = r.value; });
     res.json({ username: user.rows[0].username, progress });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
-});
-
-// ── Webhook Auto-Deploy ───────────────────────────────────────────────────────
-app.post('/webhook', (req, res) => {
-  let raw = '';
-  req.setEncoding('utf8');
-  req.on('data', chunk => raw += chunk);
-  req.on('end', () => {
-    const sig = req.headers['x-hub-signature-256'];
-    const expected = 'sha256=' + crypto.createHmac('sha256', process.env.WEBHOOK_SECRET).update(raw).digest('hex');
-
-    if (!sig || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-      return res.status(401).send('Unauthorized');
-    }
-
-    const payload = JSON.parse(raw);
-    if (req.headers['x-github-event'] === 'push' && payload.ref === 'refs/heads/master') {
-      res.status(200).send('Deploying...');
-      try {
-        execSync('cd /opt/matheherz && git pull origin master && npm install && pm2 restart matheherz', { stdio: 'inherit' });
-        console.log('Auto-Deploy erfolgreich');
-      } catch (e) {
-        console.error('Auto-Deploy fehlgeschlagen:', e.message);
-      }
-    } else {
-      res.status(200).send('Ignored');
-    }
-  });
 });
 
 // ── Catch-all ─────────────────────────────────────────────────────────────────
