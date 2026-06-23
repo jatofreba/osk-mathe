@@ -353,8 +353,8 @@ function showSt(id){
   setTimeout(()=>{
     loadInputs(id);
     enhanceInputs();
-    document.querySelectorAll('#st-body textarea').forEach(ta => {
-      ta.addEventListener('input', saveInputs);
+    document.querySelectorAll('#st-body textarea, #st-body .cell-input').forEach(el => {
+      el.addEventListener('input', saveInputs);
     });
   },50);
 }
@@ -405,7 +405,8 @@ function approxEq(a, b) {
   const rel = Math.abs(a - b) / Math.max(Math.abs(b), 1e-15); return rel < 0.03;
 }
 function checkEinheiten() {
-  const inputs = document.querySelectorAll('.cell-input');
+  saveInputs();
+  const inputs = document.querySelectorAll('#st-body .cell-input');
   let correct=0, total=0, wrong=0, empty=0;
   inputs.forEach(inp => {
     total++;
