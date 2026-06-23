@@ -478,7 +478,8 @@ function resetEinheiten() {
 }
 
 function checkRep() {
-  const inputs = [...document.querySelectorAll('.rep-inputs .cell-input'), 
+  saveInputs();
+  const inputs = [...document.querySelectorAll('.rep-inputs .cell-input'),
                   ...document.querySelectorAll('.rep-inputs .cell-textarea')];
   let correct=0, total=0, open_count=0, empty=0;
   inputs.forEach(inp => {
