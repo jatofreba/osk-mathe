@@ -4,7 +4,7 @@ LOG="/var/log/matheherz-deploy.log"
 
 cd "$APP_DIR" || exit 1
 
-git fetch origin master --quiet
+git fetch origin --quiet
 
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/master)
