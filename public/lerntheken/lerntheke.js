@@ -149,8 +149,8 @@ window.addEventListener('message', e => {
     localStorage.setItem(ABGABE_KEY, enc);
     window.parent.postMessage({type:'SAVE_PROGRESS', key:ABGABE_KEY, value:enc}, '*');
   }
-  // Load korrektur then build overview (ensures both abgabe + korrektur are ready)
-  loadKorrektur().then(() => { updProg(); buildOverview(); });
+  // Load korrektur + lzk then build overview
+  Promise.all([loadKorrektur(), loadLzk()]).then(() => { updProg(); buildOverview(); });
 });
 
 function groupStats(){
@@ -163,7 +163,10 @@ function groupStats(){
     const needsAbgabe=g!=='Pflicht';
     const abgabeOk=needsAbgabe?abgabeChecked(g):true;
     const korOk=needsAbgabe?((korrekturState[g]&&korrekturState[g].status)==='bestanden'):true;
-    stats[g]={done:doneCount,total:all.length,req,complete:stationsOk&&abgabeOk&&korOk,stationsOk,abgabeOk,korOk};
+    const lzk=needsAbgabe?lzkForGruppe(g):null;
+    const lzkOk=lzk?lzk.status==='bestanden':false;
+    const complete=needsAbgabe?(stationsOk&&abgabeOk&&korOk&&lzkOk):(stationsOk);
+    stats[g]={done:doneCount,total:all.length,req,complete,stationsOk,abgabeOk,korOk,lzk,lzkOk};
   });
   return stats;
 }
@@ -177,6 +180,7 @@ function updProg(){
     if(g!=='Pflicht'){
       if(st.abgabeOk)steps++;total++;
       if(st.korOk&&st.abgabeOk)steps++;total++;
+      if(st.lzk){total++;if(st.lzkOk)steps++;}
     }
   });
   const pct=total?Math.round(steps/total*100):0;
@@ -231,8 +235,16 @@ function buildGrid(stats){
       ? (st.complete?'Abgeschlossen':'Aufgabe abgeben')
       : `${st.done} von ${st.req} erledigt`;
 
-    // Abgabe row
+    // Abgabe + LZK row
     const needsAbgabe=g!=='Pflicht';
+    const lzkInfo=st.lzk;
+    const lzkHtml=(()=>{
+      if(!lzkInfo)return'';
+      const d=lzkInfo.datum?new Date(lzkInfo.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+      if(lzkInfo.status==='bestanden') return`<div class="lzk-row"><span class="lzk-badge lzk-bestanden">🏅 LZK bestanden${d?' · '+d:''}</span></div>`;
+      if(lzkInfo.status==='nicht_bestanden') return`<div class="lzk-row"><span class="lzk-badge lzk-nicht_bestanden">✗ LZK nicht bestanden${d?' · '+d:''}</span></div>`;
+      return`<div class="lzk-row"><span class="lzk-badge lzk-geplant">📅 LZK${d?' am '+d:' geplant'}</span></div>`;
+    })();
     const abgabeRow=needsAbgabe?`<div class="group-abgabe">
       ${(()=>{
         const k=korrekturState[g];
@@ -254,6 +266,7 @@ function buildGrid(stats){
           <label for="grp-abgabe-${g}" class="abgabe-label">Aufgabe zur Korrektur abgegeben</label>
           ${abgabeChecked(g)?'<span class="korrektur-badge ausstehend">⏳ Wartet auf Korrektur</span>':''}`;
       })()}
+      ${lzkHtml}
     </div>`:'';
 
     return `<div class="group-section">
@@ -970,7 +983,18 @@ let korrekturState={};
 async function loadKorrektur(){
   try{const r=await fetch('/api/korrektur?lerntheke='+encodeURIComponent(KEY));if(r.ok)korrekturState=await r.json();}catch(e){}
 }
-if(window.self!==window.top)loadKorrektur();
+
+// lzkState: array of {typ, lerntheke, datum, status, notiz} for this class
+let lzkState=[];
+async function loadLzk(){
+  try{const r=await fetch('/api/lzk');if(r.ok)lzkState=await r.json();}catch(e){}
+}
+function lzkForGruppe(g){
+  // typ matches group name: 'Basis' → typ='Basis', 'Aufbau' → typ='Aufbau'
+  return lzkState.find(l=>l.lerntheke===KEY && l.typ===g) || null;
+}
+
+if(window.self!==window.top){ loadKorrektur(); loadLzk(); }
 let abgabeState = _inIframe ? {} : JSON.parse(localStorage.getItem(ABGABE_KEY)||'{}');
 function abgabeChecked(g){return !!abgabeState[g];}
 function toggleAbgabe(g,val){
@@ -1019,7 +1043,7 @@ function loadInputs(id){
 
 function showOv(){saveInputs();buildOverview();showView('view-ov');}
 if(_inIframe){
-  // RELOAD_PROGRESS will call loadKorrektur().then(buildOverview) after sync
+  // RELOAD_PROGRESS will call loadKorrektur()+loadLzk().then(buildOverview) after sync
 } else {
-  loadKorrektur().then(() => { buildOverview(); });
+  Promise.all([loadKorrektur(), loadLzk()]).then(() => { buildOverview(); });
 }

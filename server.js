@@ -54,9 +54,22 @@ async function initDB() {
       lerntheke  TEXT NOT NULL DEFAULT '',
       UNIQUE(user_id, gruppe)
     );
+    CREATE TABLE IF NOT EXISTS lzk (
+      id         SERIAL PRIMARY KEY,
+      klasse     TEXT NOT NULL,
+      lerntheke  TEXT NOT NULL,
+      typ        TEXT NOT NULL,
+      datum      DATE,
+      status     TEXT NOT NULL DEFAULT 'geplant',
+      notiz      TEXT DEFAULT '',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      admin_id   INTEGER REFERENCES users(id),
+      UNIQUE(klasse, lerntheke, typ)
+    );
     CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
     CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
     CREATE INDEX IF NOT EXISTS idx_korrektur_user ON korrektur(user_id);
+    CREATE INDEX IF NOT EXISTS idx_lzk_klasse ON lzk(klasse);
     -- Migrate: add lerntheke column if missing, then fix unique constraint
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='korrektur' AND column_name='lerntheke') THEN
@@ -660,6 +673,47 @@ app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
       ON CONFLICT (user_id, lerntheke, gruppe) DO UPDATE
       SET status='ausstehend', notiz='', updated_at=NOW()
     `, [req.session.userId, gruppe, lt]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── LZK ──────────────────────────────────────────────────────────────────────
+
+// Student: get LZK data for their class
+app.get('/api/lzk', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT typ, lerntheke, datum, status, notiz FROM lzk WHERE klasse=$1',
+      [req.session.klasse]
+    );
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Admin: get LZK data for their class
+app.get('/api/admin/lzk', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id, typ, lerntheke, datum, status, notiz, updated_at FROM lzk WHERE klasse=$1 ORDER BY lerntheke, typ',
+      [req.session.klasse]
+    );
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Admin: set LZK (upsert)
+app.post('/api/admin/lzk', requireAdmin, async (req, res) => {
+  try {
+    const { lerntheke, typ, datum, status, notiz } = req.body;
+    if (!lerntheke || !typ) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (!['geplant','bestanden','nicht_bestanden'].includes(status||'geplant'))
+      return res.status(400).json({ error: 'Ungültiger Status' });
+    await pool.query(`
+      INSERT INTO lzk (klasse, lerntheke, typ, datum, status, notiz, admin_id, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+      ON CONFLICT (klasse, lerntheke, typ) DO UPDATE
+      SET datum=$4, status=$5, notiz=$6, admin_id=$7, updated_at=NOW()
+    `, [req.session.klasse, lerntheke, typ, datum||null, status||'geplant', notiz||'', req.session.userId]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });

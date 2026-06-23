@@ -487,6 +487,36 @@ textarea.form-input{
   #view-admin{padding:14px;}
 }
 
+/* ── LZK Panel ───────────────────────────────────────────────────────────── */
+.lzk-panel-title{font-size:14px;font-weight:600;letter-spacing:.5px;color:var(--md-on-surface-variant);text-transform:uppercase;margin-bottom:10px;}
+.lzk-cards{display:flex;flex-wrap:wrap;gap:10px;}
+.lzk-card{
+  background:var(--md-surface);border:1px solid var(--md-outline-variant);
+  border-radius:var(--md-r);padding:14px 16px;min-width:220px;flex:1;
+}
+.lzk-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.lzk-card-title{font-size:13px;font-weight:600;color:var(--md-on-surface);}
+.lzk-status-pill{font-size:11px;font-weight:500;padding:2px 9px;border-radius:99px;white-space:nowrap;}
+.lzk-geplant-pill{background:#EEF2FF;color:#3730A3;}
+.lzk-bestanden-pill{background:#f0fdf4;color:#16a34a;}
+.lzk-nicht_bestanden-pill{background:#fef2f2;color:#b3261e;}
+.lzk-field{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.lzk-field label{font-size:12px;color:var(--md-on-surface-variant);min-width:60px;}
+.lzk-field input[type=date]{
+  padding:4px 8px;border:1px solid var(--md-outline-variant);border-radius:var(--md-r-sm);
+  font-size:13px;font-family:inherit;background:var(--md-surface);color:var(--md-on-surface);
+}
+.lzk-field input[type=date]:focus{outline:none;border-color:var(--md-primary);}
+.lzk-status-btns{display:flex;gap:4px;margin-top:8px;}
+.lzk-btn{
+  flex:1;padding:5px 8px;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
+  border:1px solid var(--md-outline-variant);background:var(--md-surface);
+  color:var(--md-on-surface-variant);cursor:pointer;transition:all .12s;
+}
+.lzk-btn:hover{background:var(--md-surface-container);}
+.lzk-btn.active-bestanden{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}
+.lzk-btn.active-nicht_bestanden{background:#fef2f2;color:#b3261e;border-color:#fecaca;}
+
 /* ── Korrektur Buttons ───────────────────────────────────────────────────── */
 .kor-btn{
   padding:3px 8px;border-radius:4px;font-size:11px;font-weight:500;
@@ -569,6 +599,7 @@ textarea.form-input{
       <div class="admin-title" id="admin-title">Klasse</div>
     </div>
     <div class="stats-row" id="stats-row"></div>
+    <div id="lzk-panel" style="margin-bottom:20px;"></div>
     <div class="toolbar">
       <input class="search" id="search-inp" placeholder="🔍 Suche nach Name…" oninput="filterTable()">
       <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
@@ -727,7 +758,7 @@ function buildAp(s, lt) {
   return ap;
 }
 
-function computeLtStats(lt, progVal, abgabeVal, kor) {
+function computeLtStats(lt, progVal, abgabeVal, kor, lzkRows) {
   if (!lt || !lt.groups) return { groups: {}, pct: 0, steps: 0, total: 0 };
   const groups = parseGroupsForLt(lt, progVal, abgabeVal, kor || {});
   let steps = 0, total = 0;
@@ -737,6 +768,8 @@ function computeLtStats(lt, progVal, abgabeVal, kor) {
     if (g !== 'Pflicht') {
       if (st.abgabe) steps++; total++;
       if (st.korOk && st.abgabe) steps++; total++;
+      const lzk = (lzkRows||[]).find(l => l.lerntheke === lt.key && l.typ === g);
+      if (lzk) { total++; if (lzk.status === 'bestanden') steps++; }
     }
   });
   return { groups, pct: total ? Math.round(steps / total * 100) : 0, steps, total };
@@ -864,9 +897,10 @@ async function showPicker() {
   if (!ltMeta.length) {
     try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
   }
-  let allProg = {}, korData = {};
+  let allProg = {}, korData = {}, lzkRows = [];
   try { const pr = await fetch('/api/progress');  if (pr.ok) allProg = await pr.json(); } catch {}
   try { const kr = await fetch('/api/korrektur'); if (kr.ok) korData = await kr.json(); } catch {}
+  try { const lr = await fetch('/api/lzk');       if (lr.ok) lzkRows = await lr.json(); } catch {}
 
   const container = document.getElementById('picker-cards');
   // Trophy helper (mirrors lerntheke.js trophyCount)
@@ -884,7 +918,7 @@ async function showPicker() {
   let totalEarned = 0, totalMax = 0;
   ltMeta.forEach(lt => {
     const pv = localStorage.getItem(lt.key) || allProg[lt.key];
-    const { groups } = computeLtStats(lt, pv, localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey], korData);
+    const { groups } = computeLtStats(lt, pv, localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey], korData, lzkRows);
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
       totalEarned += _tc((groups[g] || {done:0}).done, grp.required, grp.total);
       totalMax += 3;
@@ -912,7 +946,7 @@ async function showPicker() {
   container.innerHTML = ltMeta.map(lt => {
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
-    const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData);
+    const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows);
     const hasAny = Object.values(groups).some(st => st.done > 0);
 
     // Count trophies
@@ -1141,6 +1175,8 @@ async function loadStudents() {
       const mr = await fetch('/api/lerntheken-meta');
       if (mr.ok) ltMeta = await mr.json();
     }
+
+    loadLzkPanel();
 
     const r = await fetch('/api/admin/students');
     if (!r.ok) { console.error('loadStudents failed:', r.status); return; }
@@ -1456,6 +1492,60 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
   loadStudents();
 }
 
+// ── LZK Panel ────────────────────────────────────────────────────────────────
+let lzkData = []; // cached lzk rows for current admin class
+
+async function loadLzkPanel() {
+  try {
+    const r = await fetch('/api/admin/lzk');
+    if (r.ok) lzkData = await r.json();
+  } catch {}
+  renderLzkPanel();
+}
+
+function renderLzkPanel() {
+  const panel = document.getElementById('lzk-panel');
+  if (!panel || !ltMeta.length) return;
+  // Build one card per (lerntheke × gruppe) for Basis + Aufbau
+  const typen = ['Basis', 'Aufbau'];
+  const cards = ltMeta.flatMap(lt => typen.map(typ => {
+    const entry = lzkData.find(l => l.lerntheke === lt.key && l.typ === typ) || {};
+    const status = entry.status || 'geplant';
+    const datum  = entry.datum ? entry.datum.slice(0,10) : '';
+    const pillCls = status === 'bestanden' ? 'lzk-bestanden-pill' : status === 'nicht_bestanden' ? 'lzk-nicht_bestanden-pill' : 'lzk-geplant-pill';
+    const pillTxt = status === 'bestanden' ? '✓ Bestanden' : status === 'nicht_bestanden' ? '✗ Nicht bestanden' : '📅 Geplant';
+    return `<div class="lzk-card">
+      <div class="lzk-card-head">
+        <span class="lzk-card-title">${lt.title} · ${typ}-LZK</span>
+        <span class="lzk-status-pill ${pillCls}">${pillTxt}</span>
+      </div>
+      <div class="lzk-field">
+        <label>Datum</label>
+        <input type="date" value="${datum}" onchange="saveLzk('${lt.key}','${typ}',this.value,null)">
+      </div>
+      <div class="lzk-status-btns">
+        <button class="lzk-btn ${status==='bestanden'?'active-bestanden':''}"
+          onclick="saveLzk('${lt.key}','${typ}',null,'bestanden')">✓ Bestanden</button>
+        <button class="lzk-btn ${status==='nicht_bestanden'?'active-nicht_bestanden':''}"
+          onclick="saveLzk('${lt.key}','${typ}',null,'nicht_bestanden')">✗ Nicht bestanden</button>
+        <button class="lzk-btn ${status==='geplant'?'active':''}"
+          onclick="saveLzk('${lt.key}','${typ}',null,'geplant')" style="${status==='geplant'?'background:var(--md-surface-container);':''}">↺ Reset</button>
+      </div>
+    </div>`;
+  }));
+  panel.innerHTML = `<div class="lzk-panel-title">Lernzielkontrollen</div><div class="lzk-cards">${cards.join('')}</div>`;
+}
+
+async function saveLzk(lerntheke, typ, datum, status) {
+  const existing = lzkData.find(l => l.lerntheke === lerntheke && l.typ === typ) || {};
+  const newDatum  = datum  !== null ? datum  : (existing.datum  ? existing.datum.slice(0,10)  : null);
+  const newStatus = status !== null ? status : (existing.status || 'geplant');
+  await fetch('/api/admin/lzk', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ lerntheke, typ, datum: newDatum, status: newStatus })
+  });
+  await loadLzkPanel();
+}
 
 let viewingStudent = null;
 
