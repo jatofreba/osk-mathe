@@ -350,7 +350,13 @@ function showSt(id){
     strip.style.display='block';
   }else{strip.style.display='none';}
   showView('view-st');
-  setTimeout(()=>{ loadInputs(id); enhanceInputs(); },50);
+  setTimeout(()=>{
+    loadInputs(id);
+    enhanceInputs();
+    document.querySelectorAll('#st-body textarea').forEach(ta => {
+      ta.addEventListener('input', saveInputs);
+    });
+  },50);
 }
 
 function toggleSol(btn){
@@ -958,7 +964,7 @@ const resetEinheitenVolumen = makeResetGeneric('check-result-einheiten-volumen')
 function _inputKey(id){ return KEY+'_i'+id; }
 function saveInputs(){
   if(cur===null) return;
-  const inputs = document.querySelectorAll('#st-body .cell-input');
+  const inputs = document.querySelectorAll('#st-body .cell-input, #st-body textarea');
   if(!inputs.length) return;
   const vals = {};
   inputs.forEach((inp,i) => { vals[i] = inp.value; });
@@ -975,7 +981,7 @@ function loadInputs(id){
   if(!raw) return;
   try {
     const vals = JSON.parse(raw);
-    const inputs = document.querySelectorAll('#st-body .cell-input');
+    const inputs = document.querySelectorAll('#st-body .cell-input, #st-body textarea');
     inputs.forEach((inp,i) => {
       if(vals[i] !== undefined && vals[i] !== '') inp.value = vals[i];
     });
