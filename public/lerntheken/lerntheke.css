@@ -194,6 +194,8 @@ button,input,textarea,select{font-family:inherit;}
 }
 
 /* ── Pokal-System ─────────────────────────────────────────────────────────── */
+.trophy-legend{font-size:12px;color:var(--ink2);margin-bottom:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.trophy-legend .trophy-icon{font-size:13px;}
 .trophy-bar{display:inline-flex;align-items:center;gap:1px;margin-left:8px;}
 .trophy-icon{font-size:14px;line-height:1;transition:filter .25s,opacity .25s;}
 .trophy-icon.locked{filter:grayscale(1);opacity:.2;}

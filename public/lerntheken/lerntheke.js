@@ -199,7 +199,12 @@ function buildGrid(stats){
   const groups=GROUP_ORDER.filter(g=>GROUPS[g]&&stats[g]&&stats[g].total>0);
   if(!groups.length){gridEl.innerHTML='';return;}
 
-  gridEl.innerHTML=groups.map(g=>{
+  const trophyLegend=`<div class="trophy-legend">
+    <span class="trophy-icon bronze">🏆</span> Pflichtaufgaben erledigt &nbsp;·&nbsp;
+    <span class="trophy-icon silver">🏆</span> ca. ⅓ der Zusatzaufgaben &nbsp;·&nbsp;
+    <span class="trophy-icon gold">🏆</span> alle Aufgaben erledigt
+  </div>`;
+  gridEl.innerHTML=trophyLegend+groups.map(g=>{
     const all=META.filter(s=>s&&s.group===g);
     const st=stats[g];
     const gInfo=GROUPS[g];
