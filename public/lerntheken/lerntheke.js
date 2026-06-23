@@ -356,6 +356,7 @@ function showSt(id){
     document.querySelectorAll('#st-body textarea, #st-body .cell-input').forEach(el => {
       el.addEventListener('input', saveInputs);
     });
+    window.scrollTo({top:0,behavior:'instant'});
   },50);
 }
 
