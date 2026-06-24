@@ -1294,7 +1294,7 @@ function renderTable(students) {
   tbody.innerHTML = students.map(s => {
     // Support both new format (all_progress) and old server format (prog/abgabe)
     const ap = buildAp(s, lt);
-    const kor = s.korrektur || {};
+    const kor = korForLt(s.korrektur, (ltMeta[0]||{}).key);
 
     // Per-lerntheke group stats
     const ltRows = ltMeta.map(lti => {
