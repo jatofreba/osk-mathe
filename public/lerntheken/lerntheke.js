@@ -256,8 +256,11 @@ function buildGrid(stats){
       // Kein Termin gesetzt – Termin-Picker anzeigen wenn Voraussetzungen erfüllt
       const bereit=st.korOk&&st.abgabeOk&&st.stationsOk;
       if(!bereit){
-        const grund=!st.stationsOk?`erst ${st.req} Aufgaben erledigen`:!st.abgabeOk?'erst Aufgabe abgeben':'erst Korrektur bestehen';
-        return`<div class="lzk-row"><span class="lzk-badge lzk-locked">🔒 ${g}-LZK – ${grund}</span></div>`;
+        const gründe=[];
+        if(!st.stationsOk) gründe.push(`${st.req} Aufgaben erledigen`);
+        if(!st.abgabeOk) gründe.push('Aufgabe abgeben');
+        if(!st.korOk) gründe.push('Korrektur bestehen');
+        return`<div class="lzk-row"><span class="lzk-badge lzk-locked">🔒 ${g}-LZK – erst ${gründe.join(' und ')}</span></div>`;
       }
       return`<div class="lzk-row lzk-ready">
         <span class="lzk-badge lzk-ready-badge">✅ Bereit für ${g}-LZK!</span>
