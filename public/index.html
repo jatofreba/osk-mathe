@@ -936,7 +936,7 @@ async function showPicker() {
     return 1;
   }
 
-  // Compute total trophies across all lerntheken
+  // Compute total trophies across all lerntheken (stations + LZK pokale)
   let totalEarned = 0, totalMax = 0;
   ltMeta.forEach(lt => {
     const pv = localStorage.getItem(lt.key) || allProg[lt.key];
@@ -944,6 +944,10 @@ async function showPicker() {
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
       totalEarned += _tc((groups[g] || {done:0}).done, grp.required, grp.total);
       totalMax += 3;
+    });
+    ['Basis','Aufbau'].forEach(typ => {
+      const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
+      if (lzk) { totalEarned += lzk.pokale || 0; totalMax += 3; }
     });
   });
 
@@ -971,13 +975,27 @@ async function showPicker() {
     const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows);
     const hasAny = Object.values(groups).some(st => st.done > 0);
 
-    // Count trophies
+    // Count trophies (stations + LZK pokale)
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
       const st = groups[g] || { done: 0 };
       earnedTrophies += _tc(st.done, grp.required, grp.total);
       maxTrophies += 3;
     });
+    const lzkBadges = ['Basis','Aufbau'].map(typ => {
+      const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
+      if (!lzk) return '';
+      const pk = lzk.pokale || 0;
+      earnedTrophies += pk; maxTrophies += 3;
+      const pokalStr = [1,2,3].map(i => `<span style="opacity:${i<=pk?1:.18}">🏆</span>`).join('');
+      if (lzk.status === 'bestanden')
+        return `<span class="gpill gpill-ok" style="gap:3px;">${typ}-LZK ✓ ${pokalStr}</span>`;
+      if (lzk.status === 'nicht_bestanden')
+        return `<span class="gpill" style="background:#fef2f2;color:#b3261e;">${typ}-LZK ✗</span>`;
+      if (lzk.datum)
+        return `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">📅 ${typ}-LZK ${new Date(lzk.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`;
+      return '';
+    }).join('');
     const trophyStr = earnedTrophies > 0
       ? `<span style="font-size:12px;font-weight:500;">🏆 ${earnedTrophies} / ${maxTrophies}</span>`
       : `<span style="font-size:12px;color:#aaa;">🏆 0 / ${maxTrophies}</span>`;
@@ -989,7 +1007,7 @@ async function showPicker() {
     const btnLabel = hasAny ? '→ Weiter' : '→ Starten';
     return `<div class="lt-card" onclick="startLerntheke('${lt.url}')">
       <div class="lt-card-title">${lt.title}</div>
-      <div class="lt-card-groups">${badges}</div>
+      <div class="lt-card-groups">${badges}${lzkBadges}</div>
       <div>
         <div class="lt-progress-row"><span>${pct === 100 ? '✓ Abgeschlossen' : pct + ' % der Anforderungen'}</span><span>${pct} %</span></div>
         <div class="lt-bar"><div class="lt-bar-fill" style="width:${pct}%;background:${pct===100?'#16a34a':'var(--blue)'}"></div></div>
