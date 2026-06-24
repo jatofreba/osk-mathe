@@ -487,35 +487,26 @@ textarea.form-input{
   #view-admin{padding:14px;}
 }
 
-/* ── LZK Panel ───────────────────────────────────────────────────────────── */
-.lzk-panel-title{font-size:14px;font-weight:600;letter-spacing:.5px;color:var(--md-on-surface-variant);text-transform:uppercase;margin-bottom:10px;}
-.lzk-cards{display:flex;flex-wrap:wrap;gap:10px;}
-.lzk-card{
-  background:var(--md-surface);border:1px solid var(--md-outline-variant);
-  border-radius:var(--md-r);padding:14px 16px;min-width:220px;flex:1;
-}
-.lzk-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
-.lzk-card-title{font-size:13px;font-weight:600;color:var(--md-on-surface);}
-.lzk-status-pill{font-size:11px;font-weight:500;padding:2px 9px;border-radius:99px;white-space:nowrap;}
-.lzk-geplant-pill{background:#EEF2FF;color:#3730A3;}
-.lzk-bestanden-pill{background:#f0fdf4;color:#16a34a;}
-.lzk-nicht_bestanden-pill{background:#fef2f2;color:#b3261e;}
-.lzk-field{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
-.lzk-field label{font-size:12px;color:var(--md-on-surface-variant);min-width:60px;}
-.lzk-field input[type=date]{
-  padding:4px 8px;border:1px solid var(--md-outline-variant);border-radius:var(--md-r-sm);
-  font-size:13px;font-family:inherit;background:var(--md-surface);color:var(--md-on-surface);
-}
-.lzk-field input[type=date]:focus{outline:none;border-color:var(--md-primary);}
-.lzk-status-btns{display:flex;gap:4px;margin-top:8px;}
-.lzk-btn{
-  flex:1;padding:5px 8px;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
+/* ── LZK Admin Table ─────────────────────────────────────────────────────── */
+.lzk-admin-row{display:flex;align-items:center;gap:5px;font-size:11px;padding:2px 0;}
+.lzk-admin-typ{font-weight:600;min-width:40px;color:var(--md-on-surface-variant);}
+.lzk-admin-date{color:var(--md-on-surface-variant);}
+.lzk-admin-btn{
+  padding:2px 7px;border-radius:4px;font-size:10px;font-weight:500;
   border:1px solid var(--md-outline-variant);background:var(--md-surface);
-  color:var(--md-on-surface-variant);cursor:pointer;transition:all .12s;
+  color:var(--md-on-surface-variant);cursor:pointer;
 }
-.lzk-btn:hover{background:var(--md-surface-container);}
-.lzk-btn.active-bestanden{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}
-.lzk-btn.active-nicht_bestanden{background:#fef2f2;color:#b3261e;border-color:#fecaca;}
+.lzk-admin-btn:hover{background:var(--md-surface-container);}
+.lzk-st{padding:1px 6px;border-radius:99px;font-size:10px;font-weight:600;}
+.lzk-st-ok{background:#f0fdf4;color:#16a34a;}
+.lzk-st-err{background:#fef2f2;color:#b3261e;}
+.lzk-st-pending{background:#f3f4f6;color:#6b7280;}
+/* LZK modal pokal buttons */
+.lzk-pokal-btn{
+  padding:4px 10px;border-radius:var(--md-r-sm);font-size:13px;
+  border:1px solid var(--md-outline-variant);background:var(--md-surface);cursor:pointer;
+}
+.lzk-pokal-btn.active{background:#FEF9C3;border-color:#FDE047;}
 
 /* ── Korrektur Buttons ───────────────────────────────────────────────────── */
 .kor-btn{
@@ -599,7 +590,6 @@ textarea.form-input{
       <div class="admin-title" id="admin-title">Klasse</div>
     </div>
     <div class="stats-row" id="stats-row"></div>
-    <div id="lzk-panel" style="margin-bottom:20px;"></div>
     <div class="toolbar">
       <input class="search" id="search-inp" placeholder="🔍 Suche nach Name…" oninput="filterTable()">
       <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
@@ -711,6 +701,38 @@ textarea.form-input{
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-reset')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="doReset()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: LZK eintragen ══════════════════════════════════════════════════ -->
+<div class="overlay" id="modal-lzk">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title" id="lzk-modal-title">LZK eintragen</div>
+    <div class="form-group">
+      <label class="form-label">Datum</label>
+      <input class="form-input" id="lzk-modal-datum" type="date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-input" id="lzk-modal-status">
+        <option value="ausstehend">⏳ Ausstehend</option>
+        <option value="bestanden">✓ Bestanden</option>
+        <option value="nicht_bestanden">✗ Nicht bestanden</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pokale</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🏆</button>
+        <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🏆</button>
+        <button class="lzk-pokal-btn" data-v="2" onclick="selectLzkPokal(2)">2 🏆</button>
+        <button class="lzk-pokal-btn" data-v="3" onclick="selectLzkPokal(3)">3 🏆</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-lzk')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="saveLzkModal()">Speichern</button>
     </div>
   </div>
 </div>
@@ -1259,14 +1281,14 @@ function renderTable(students) {
 
   // ── GROUPS MODE (default) ──────────────────────────────────────────────────
   const multiLt = ltMeta.length > 1;
-  const colCount = lt ? Object.keys(lt.groups).length + 4 + (multiLt ? 1 : 0) : 8;
+  const colCount = lt ? Object.keys(lt.groups).length + 5 + (multiLt ? 1 : 0) : 9;
 
   // Update table header dynamically
   if (thead && lt) {
     const groupHeaders = Object.entries(lt.groups)
       .map(([g, info]) => `<th>${info.emoji} ${g}</th>`).join('');
     const ltHeader = multiLt ? '<th>Lerntheke</th>' : '';
-    thead.innerHTML = `<th>Name</th>${groupHeaders}<th>Abgaben</th><th>Korrektur</th>${ltHeader}<th>Zuletzt aktiv</th><th></th>`;
+    thead.innerHTML = `<th>Name</th>${groupHeaders}<th>Abgaben</th><th>Korrektur</th><th>LZK</th>${ltHeader}<th>Zuletzt aktiv</th><th></th>`;
   }
 
   tbody.innerHTML = students.map(s => {
@@ -1333,6 +1355,7 @@ function renderTable(students) {
       ${groupCells}
       <td>${abgaben}</td>
       <td>${korCell||'<span style="color:var(--ink2);font-size:12px;">–</span>'}</td>
+      <td>${lzkCellHtml(s.lzk, s)}</td>
       ${ltCell}
       <td style="color:var(--ink2);">${lastDate}</td>
       <td>
@@ -1492,59 +1515,75 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
   loadStudents();
 }
 
-// ── LZK Panel ────────────────────────────────────────────────────────────────
-let lzkData = []; // cached lzk rows for current admin class
+// ── LZK (per-user) ───────────────────────────────────────────────────────────
+async function loadLzkPanel() { /* lzk shown inline in student table rows */ }
 
-async function loadLzkPanel() {
-  try {
-    const r = await fetch('/api/admin/lzk');
-    if (r.ok) lzkData = await r.json();
-  } catch {}
-  renderLzkPanel();
-}
-
-function renderLzkPanel() {
-  const panel = document.getElementById('lzk-panel');
-  if (!panel || !ltMeta.length) return;
-  // Build one card per (lerntheke × gruppe) for Basis + Aufbau
-  const typen = ['Basis', 'Aufbau'];
-  const cards = ltMeta.flatMap(lt => typen.map(typ => {
-    const entry = lzkData.find(l => l.lerntheke === lt.key && l.typ === typ) || {};
-    const status = entry.status || 'geplant';
-    const datum  = entry.datum ? entry.datum.slice(0,10) : '';
-    const pillCls = status === 'bestanden' ? 'lzk-bestanden-pill' : status === 'nicht_bestanden' ? 'lzk-nicht_bestanden-pill' : 'lzk-geplant-pill';
-    const pillTxt = status === 'bestanden' ? '✓ Bestanden' : status === 'nicht_bestanden' ? '✗ Nicht bestanden' : '📅 Geplant';
-    return `<div class="lzk-card">
-      <div class="lzk-card-head">
-        <span class="lzk-card-title">${lt.title} · ${typ}-LZK</span>
-        <span class="lzk-status-pill ${pillCls}">${pillTxt}</span>
-      </div>
-      <div class="lzk-field">
-        <label>Datum</label>
-        <input type="date" value="${datum}" onchange="saveLzk('${lt.key}','${typ}',this.value,null)">
-      </div>
-      <div class="lzk-status-btns">
-        <button class="lzk-btn ${status==='bestanden'?'active-bestanden':''}"
-          onclick="saveLzk('${lt.key}','${typ}',null,'bestanden')">✓ Bestanden</button>
-        <button class="lzk-btn ${status==='nicht_bestanden'?'active-nicht_bestanden':''}"
-          onclick="saveLzk('${lt.key}','${typ}',null,'nicht_bestanden')">✗ Nicht bestanden</button>
-        <button class="lzk-btn ${status==='geplant'?'active':''}"
-          onclick="saveLzk('${lt.key}','${typ}',null,'geplant')" style="${status==='geplant'?'background:var(--md-surface-container);':''}">↺ Reset</button>
-      </div>
-    </div>`;
-  }));
-  panel.innerHTML = `<div class="lzk-panel-title">Lernzielkontrollen</div><div class="lzk-cards">${cards.join('')}</div>`;
-}
-
-async function saveLzk(lerntheke, typ, datum, status) {
-  const existing = lzkData.find(l => l.lerntheke === lerntheke && l.typ === typ) || {};
-  const newDatum  = datum  !== null ? datum  : (existing.datum  ? existing.datum.slice(0,10)  : null);
-  const newStatus = status !== null ? status : (existing.status || 'geplant');
-  await fetch('/api/admin/lzk', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ lerntheke, typ, datum: newDatum, status: newStatus })
+// Build LZK cell HTML for admin table
+function lzkCellHtml(studentLzk, s) {
+  const typen = ['Basis','Aufbau'];
+  const rows = [];
+  ltMeta.forEach(lt => {
+    typen.forEach(typ => {
+      const entry = (studentLzk||[]).find(l => l.lerntheke === lt.key && l.typ === typ);
+      const ltPrefix = ltMeta.length > 1 ? `<span style="font-size:9px;color:var(--ink2);">${lt.title.slice(0,4)}</span> ` : '';
+      if (!entry) {
+        rows.push(`<div class="lzk-admin-row">
+          ${ltPrefix}<span class="lzk-admin-typ">${typ}</span>
+          <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">+ Eintragen</button>
+        </div>`);
+      } else {
+        const d = entry.datum ? new Date(entry.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
+        const pk = entry.pokale || 0;
+        const pokalStr = entry.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
+        const stCls = entry.status==='bestanden'?'lzk-st-ok':entry.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
+        const stTxt = entry.status==='bestanden'?'✓':entry.status==='nicht_bestanden'?'✗':'⏳';
+        rows.push(`<div class="lzk-admin-row">
+          ${ltPrefix}<span class="lzk-admin-typ">${typ}</span>
+          <span class="lzk-admin-date">${d}</span>
+          <span class="lzk-st ${stCls}">${stTxt}</span>
+          <span style="font-size:11px;">${pokalStr}</span>
+          <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">✎</button>
+        </div>`);
+      }
+    });
   });
-  await loadLzkPanel();
+  return rows.join('') || '–';
+}
+
+let _lzkModal = {};
+function openLzkModal(userId, username, lerntheke, typ) {
+  _lzkModal = { userId, username, lerntheke, typ };
+  const s = allStudents.find(s => s.id === userId);
+  const existing = s && s.lzk ? (s.lzk.find(l => l.lerntheke===lerntheke && l.typ===typ)||{}) : {};
+  document.getElementById('lzk-modal-title').textContent = `${typ}-LZK · ${username}`;
+  document.getElementById('lzk-modal-datum').value = existing.datum ? existing.datum.slice(0,10) : '';
+  document.getElementById('lzk-modal-status').value = existing.status || 'ausstehend';
+  const pk = existing.pokale || 0;
+  document.querySelectorAll('.lzk-pokal-btn').forEach(b => {
+    const v = parseInt(b.dataset.v);
+    b.classList.toggle('active', v === pk);
+  });
+  _lzkModal.pokale = pk;
+  openModal('modal-lzk');
+}
+
+function selectLzkPokal(v) {
+  _lzkModal.pokale = v;
+  document.querySelectorAll('.lzk-pokal-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.v) === v);
+  });
+}
+
+async function saveLzkModal() {
+  const datum  = document.getElementById('lzk-modal-datum').value;
+  const status = document.getElementById('lzk-modal-status').value;
+  const pokale = _lzkModal.pokale || 0;
+  await fetch('/api/admin/lzk', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ userId:_lzkModal.userId, lerntheke:_lzkModal.lerntheke, typ:_lzkModal.typ, datum:datum||null, status, pokale })
+  });
+  closeModal('modal-lzk');
+  loadStudents();
 }
 
 let viewingStudent = null;

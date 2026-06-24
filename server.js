@@ -54,22 +54,28 @@ async function initDB() {
       lerntheke  TEXT NOT NULL DEFAULT '',
       UNIQUE(user_id, gruppe)
     );
-    CREATE TABLE IF NOT EXISTS lzk (
-      id         SERIAL PRIMARY KEY,
-      klasse     TEXT NOT NULL,
-      lerntheke  TEXT NOT NULL,
-      typ        TEXT NOT NULL,
-      datum      DATE,
-      status     TEXT NOT NULL DEFAULT 'geplant',
-      notiz      TEXT DEFAULT '',
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      admin_id   INTEGER REFERENCES users(id),
-      UNIQUE(klasse, lerntheke, typ)
-    );
     CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
     CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
     CREATE INDEX IF NOT EXISTS idx_korrektur_user ON korrektur(user_id);
-    CREATE INDEX IF NOT EXISTS idx_lzk_klasse ON lzk(klasse);
+    -- Migrate old class-based lzk table to per-user lzk table
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lzk' AND column_name='klasse') THEN
+        DROP TABLE lzk;
+      END IF;
+    END $$;
+    CREATE TABLE IF NOT EXISTS lzk (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lerntheke  TEXT NOT NULL,
+      typ        TEXT NOT NULL,
+      datum      DATE,
+      status     TEXT NOT NULL DEFAULT 'ausstehend',
+      pokale     INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      admin_id   INTEGER REFERENCES users(id),
+      UNIQUE(user_id, lerntheke, typ)
+    );
+    CREATE INDEX IF NOT EXISTS idx_lzk_user ON lzk(user_id);
     -- Migrate: add lerntheke column if missing, then fix unique constraint
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='korrektur' AND column_name='lerntheke') THEN
@@ -513,7 +519,9 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
            AND key NOT LIKE '%_abgabe_%'
          ORDER BY updated_at DESC LIMIT 1) AS last_active_info,
         (SELECT json_agg(json_build_object('gruppe',gruppe,'status',status,'notiz',notiz,'lerntheke',lerntheke))
-         FROM korrektur WHERE user_id=u.id) AS korrektur
+         FROM korrektur WHERE user_id=u.id) AS korrektur,
+        (SELECT json_agg(json_build_object('typ',typ,'lerntheke',lerntheke,'datum',datum,'status',status,'pokale',pokale))
+         FROM lzk WHERE user_id=u.id) AS lzk
       FROM users u
       WHERE u.role='student' AND u.klasse=$1
       ORDER BY u.username
@@ -679,41 +687,59 @@ app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
 
 // ── LZK ──────────────────────────────────────────────────────────────────────
 
-// Student: get LZK data for their class
+// Student: get own LZK entries
 app.get('/api/lzk', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT typ, lerntheke, datum, status, notiz FROM lzk WHERE klasse=$1',
-      [req.session.klasse]
+      'SELECT typ, lerntheke, datum, status, pokale FROM lzk WHERE user_id=$1',
+      [req.session.userId]
     );
     res.json(r.rows);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Admin: get LZK data for their class
+// Student: set LZK datum (only if prerequisites met – server trusts client check, admin can always set)
+app.post('/api/lzk/termin', requireLogin, async (req, res) => {
+  try {
+    const { lerntheke, typ, datum } = req.body;
+    if (!lerntheke || !typ || !datum) return res.status(400).json({ error: 'Fehlende Angaben' });
+    await pool.query(`
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, updated_at)
+      VALUES ($1,$2,$3,$4,'ausstehend',0,NOW())
+      ON CONFLICT (user_id, lerntheke, typ) DO UPDATE
+      SET datum=$4, updated_at=NOW()
+    `, [req.session.userId, lerntheke, typ, datum]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Admin: get all LZK entries for students in their class
 app.get('/api/admin/lzk', requireAdmin, async (req, res) => {
   try {
-    const r = await pool.query(
-      'SELECT id, typ, lerntheke, datum, status, notiz, updated_at FROM lzk WHERE klasse=$1 ORDER BY lerntheke, typ',
-      [req.session.klasse]
-    );
+    const r = await pool.query(`
+      SELECT l.id, l.user_id, l.typ, l.lerntheke, l.datum, l.status, l.pokale, l.updated_at, u.username
+      FROM lzk l JOIN users u ON u.id=l.user_id
+      WHERE u.klasse=$1 AND u.role='student'
+      ORDER BY u.username, l.lerntheke, l.typ
+    `, [req.session.klasse]);
     res.json(r.rows);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Admin: set LZK (upsert)
+// Admin: upsert LZK for a specific student (datum, status, pokale)
 app.post('/api/admin/lzk', requireAdmin, async (req, res) => {
   try {
-    const { lerntheke, typ, datum, status, notiz } = req.body;
-    if (!lerntheke || !typ) return res.status(400).json({ error: 'Fehlende Angaben' });
-    if (!['geplant','bestanden','nicht_bestanden'].includes(status||'geplant'))
+    const { userId, lerntheke, typ, datum, status, pokale } = req.body;
+    if (!userId || !lerntheke || !typ) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (!['ausstehend','bestanden','nicht_bestanden'].includes(status||'ausstehend'))
       return res.status(400).json({ error: 'Ungültiger Status' });
+    const pk = Math.min(3, Math.max(0, parseInt(pokale)||0));
     await pool.query(`
-      INSERT INTO lzk (klasse, lerntheke, typ, datum, status, notiz, admin_id, updated_at)
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, admin_id, updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
-      ON CONFLICT (klasse, lerntheke, typ) DO UPDATE
-      SET datum=$4, status=$5, notiz=$6, admin_id=$7, updated_at=NOW()
-    `, [req.session.klasse, lerntheke, typ, datum||null, status||'geplant', notiz||'', req.session.userId]);
+      ON CONFLICT (user_id, lerntheke, typ) DO UPDATE
+      SET datum=$4, status=$5, pokale=$6, admin_id=$7, updated_at=NOW()
+    `, [userId, lerntheke, typ, datum||null, status||'ausstehend', pk, req.session.userId]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });

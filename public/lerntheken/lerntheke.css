@@ -210,14 +210,32 @@ button,input,textarea,select{font-family:inherit;}
   background:var(--surface);border:1px solid var(--outline-var);
   border-radius:var(--shape-m);
 }
-.lzk-row{width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--outline-var);}
+.lzk-row{
+  width:100%;margin-top:8px;padding-top:10px;
+  border-top:1px solid var(--outline-var);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
 .lzk-badge{
   display:inline-flex;align-items:center;gap:6px;
   font-size:12px;font-weight:500;padding:4px 12px;border-radius:var(--shape-full);
+  white-space:nowrap;
 }
 .lzk-geplant{background:#EEF2FF;color:#3730A3;}
 .lzk-bestanden{background:var(--success-bg);color:var(--success);}
 .lzk-nicht_bestanden{background:#FFEBEE;color:#B71C1C;}
+.lzk-locked{background:#F3F4F6;color:#6B7280;}
+.lzk-ready-badge{background:#FEF9C3;color:#854D0E;}
+.lzk-pokale{display:inline-flex;gap:2px;margin-left:4px;}
+.lzk-pokal{font-size:14px;opacity:.18;transition:opacity .2s;}
+.lzk-pokal.earned{opacity:1;}
+.lzk-ready{background:#FFFBEB;border-radius:var(--shape-s);padding:8px 12px;margin-top:8px;}
+.lzk-termin-label{font-size:12px;font-weight:500;color:var(--on-surface-dim);display:flex;align-items:center;gap:6px;margin-left:auto;}
+.lzk-date-inp{
+  padding:3px 8px;border:1px solid var(--outline);border-radius:var(--shape-s);
+  font-size:12px;font-family:inherit;background:var(--surface);color:var(--on-surface);
+  cursor:pointer;
+}
+.lzk-date-inp:focus{outline:none;border-color:var(--on-surface);}
 .abgabe-cb{width:18px;height:18px;border-radius:3px;border:1px solid var(--outline);cursor:pointer;flex-shrink:0;accent-color:var(--on-surface);}
 .abgabe-label{font-size:14px;font-weight:400;}
 .korrektur-badge{

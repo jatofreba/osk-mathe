@@ -164,9 +164,10 @@ function groupStats(){
     const abgabeOk=needsAbgabe?abgabeChecked(g):true;
     const korOk=needsAbgabe?((korrekturState[g]&&korrekturState[g].status)==='bestanden'):true;
     const lzk=needsAbgabe?lzkForGruppe(g):null;
-    const lzkOk=lzk?lzk.status==='bestanden':false;
+    const lzkOk=lzk?(lzk.status==='bestanden'):false;
+    const lzkPokale=lzk?(lzk.pokale||0):0;
     const complete=needsAbgabe?(stationsOk&&abgabeOk&&korOk&&lzkOk):(stationsOk);
-    stats[g]={done:doneCount,total:all.length,req,complete,stationsOk,abgabeOk,korOk,lzk,lzkOk};
+    stats[g]={done:doneCount,total:all.length,req,complete,stationsOk,abgabeOk,korOk,lzk,lzkOk,lzkPokale};
   });
   return stats;
 }
@@ -239,11 +240,29 @@ function buildGrid(stats){
     const needsAbgabe=g!=='Pflicht';
     const lzkInfo=st.lzk;
     const lzkHtml=(()=>{
-      if(!lzkInfo)return'';
-      const d=lzkInfo.datum?new Date(lzkInfo.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
-      if(lzkInfo.status==='bestanden') return`<div class="lzk-row"><span class="lzk-badge lzk-bestanden">🏅 LZK bestanden${d?' · '+d:''}</span></div>`;
-      if(lzkInfo.status==='nicht_bestanden') return`<div class="lzk-row"><span class="lzk-badge lzk-nicht_bestanden">✗ LZK nicht bestanden${d?' · '+d:''}</span></div>`;
-      return`<div class="lzk-row"><span class="lzk-badge lzk-geplant">📅 LZK${d?' am '+d:' geplant'}</span></div>`;
+      if(!needsAbgabe)return'';
+      const d=lzkInfo&&lzkInfo.datum?new Date(lzkInfo.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+      const isoD=lzkInfo&&lzkInfo.datum?lzkInfo.datum.slice(0,10):'';
+      // Pokal-Anzeige für LZK
+      const pk=st.lzkPokale||0;
+      const pokalHtml=lzkInfo&&lzkInfo.status==='bestanden'?
+        `<span class="lzk-pokale">${[1,2,3].map(i=>`<span class="lzk-pokal ${i<=pk?'earned':''}">🏆</span>`).join('')}</span>`:'';
+      if(lzkInfo&&lzkInfo.status==='bestanden') return`<div class="lzk-row">
+        <span class="lzk-badge lzk-bestanden">🏅 ${g}-LZK bestanden${d?' · '+d:''}</span>${pokalHtml}</div>`;
+      if(lzkInfo&&lzkInfo.status==='nicht_bestanden') return`<div class="lzk-row">
+        <span class="lzk-badge lzk-nicht_bestanden">✗ ${g}-LZK nicht bestanden${d?' · '+d:''}</span></div>`;
+      if(lzkInfo&&lzkInfo.datum) return`<div class="lzk-row">
+        <span class="lzk-badge lzk-geplant">📅 ${g}-LZK am ${d}</span></div>`;
+      // Kein Termin gesetzt – Termin-Picker anzeigen wenn Voraussetzungen erfüllt
+      const bereit=st.korOk&&st.abgabeOk&&st.stationsOk;
+      if(!bereit) return`<div class="lzk-row"><span class="lzk-badge lzk-locked">🔒 ${g}-LZK – erst Korrektur bestehen</span></div>`;
+      return`<div class="lzk-row lzk-ready">
+        <span class="lzk-badge lzk-ready-badge">✅ Bereit für ${g}-LZK!</span>
+        <label class="lzk-termin-label">Termin eintragen:
+          <input type="date" class="lzk-date-inp" value="${isoD}"
+            onchange="setLzkTermin('${g}',this.value)">
+        </label>
+      </div>`;
     })();
     const abgabeRow=needsAbgabe?`<div class="group-abgabe">
       ${(()=>{
@@ -984,14 +1003,25 @@ async function loadKorrektur(){
   try{const r=await fetch('/api/korrektur?lerntheke='+encodeURIComponent(KEY));if(r.ok)korrekturState=await r.json();}catch(e){}
 }
 
-// lzkState: array of {typ, lerntheke, datum, status, notiz} for this class
+// lzkState: array of {typ, lerntheke, datum, status, pokale}
 let lzkState=[];
 async function loadLzk(){
   try{const r=await fetch('/api/lzk');if(r.ok)lzkState=await r.json();}catch(e){}
 }
 function lzkForGruppe(g){
-  // typ matches group name: 'Basis' → typ='Basis', 'Aufbau' → typ='Aufbau'
-  return lzkState.find(l=>l.lerntheke===KEY && l.typ===g) || null;
+  return lzkState.find(l=>l.lerntheke===KEY && l.typ===g)||null;
+}
+function lzkVoraussetzungErfuellt(g){
+  const stats=groupStats();
+  if(g==='Basis') return !!(stats['Pflicht']&&stats['Pflicht'].stationsOk&&stats['Basis']&&stats['Basis'].stationsOk&&stats['Basis'].abgabeOk&&stats['Basis'].korOk);
+  if(g==='Aufbau') return !!(stats['Aufbau']&&stats['Aufbau'].stationsOk&&stats['Aufbau'].abgabeOk&&stats['Aufbau'].korOk);
+  return false;
+}
+async function setLzkTermin(g,datum){
+  if(!datum)return;
+  await fetch('/api/lzk/termin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lerntheke:KEY,typ:g,datum})});
+  await loadLzk();
+  buildOverview();
 }
 
 if(window.self!==window.top){ loadKorrektur(); loadLzk(); }
