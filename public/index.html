@@ -999,7 +999,7 @@ async function showPicker() {
   });
 
   container.innerHTML = sortedMeta.map(lt => {
-    const gesperrt = accessData[lt.key] === true;
+    const gesperrt = accessData[lt.key] !== false;
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
     const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows);
@@ -1427,7 +1427,8 @@ function renderTable(students) {
       : '';
 
     const accessToggles = ltMeta.map(lti => {
-      const gesperrt = (s.access||[]).find(a => a.lerntheke === lti.key)?.gesperrt || false;
+      const accessEntry = (s.access||[]).find(a => a.lerntheke === lti.key);
+      const gesperrt = accessEntry ? accessEntry.gesperrt : true;
       return `<button class="access-btn ${gesperrt?'locked':'open'}"
         onclick="toggleAccess(${s.id},'${lti.key}',${!gesperrt},this)">
         ${gesperrt?'🔒':'🔓'} ${lti.title.split(' ').slice(-1)[0]}
