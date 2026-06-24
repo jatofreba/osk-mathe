@@ -1346,6 +1346,7 @@ function renderTable(students) {
       ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
       : '–';
     const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
+    const activeLt = lastLt || primaryLt;
     const ltCell = multiLt
       ? `<td>${lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
       : '';
@@ -1355,7 +1356,7 @@ function renderTable(students) {
       ${groupCells}
       <td>${abgaben}</td>
       <td>${korCell||'<span style="color:var(--ink2);font-size:12px;">–</span>'}</td>
-      <td>${lzkCellHtml(s.lzk, s)}</td>
+      <td>${lzkCellHtml(s.lzk, s, activeLt)}</td>
       ${ltCell}
       <td style="color:var(--ink2);">${lastDate}</td>
       <td>
@@ -1518,36 +1519,31 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
 // ── LZK (per-user) ───────────────────────────────────────────────────────────
 async function loadLzkPanel() { /* lzk shown inline in student table rows */ }
 
-// Build LZK cell HTML for admin table
-function lzkCellHtml(studentLzk, s) {
+// Build LZK cell HTML for admin table — only for the student's active lerntheke
+function lzkCellHtml(studentLzk, s, lt) {
+  if (!lt) return '–';
   const typen = ['Basis','Aufbau'];
-  const rows = [];
-  ltMeta.forEach(lt => {
-    typen.forEach(typ => {
-      const entry = (studentLzk||[]).find(l => l.lerntheke === lt.key && l.typ === typ);
-      const ltPrefix = ltMeta.length > 1 ? `<span style="font-size:9px;color:var(--ink2);">${lt.title.slice(0,4)}</span> ` : '';
-      if (!entry) {
-        rows.push(`<div class="lzk-admin-row">
-          ${ltPrefix}<span class="lzk-admin-typ">${typ}</span>
-          <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">+ Eintragen</button>
-        </div>`);
-      } else {
-        const d = entry.datum ? new Date(entry.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
-        const pk = entry.pokale || 0;
-        const pokalStr = entry.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
-        const stCls = entry.status==='bestanden'?'lzk-st-ok':entry.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
-        const stTxt = entry.status==='bestanden'?'✓':entry.status==='nicht_bestanden'?'✗':'⏳';
-        rows.push(`<div class="lzk-admin-row">
-          ${ltPrefix}<span class="lzk-admin-typ">${typ}</span>
-          <span class="lzk-admin-date">${d}</span>
-          <span class="lzk-st ${stCls}">${stTxt}</span>
-          <span style="font-size:11px;">${pokalStr}</span>
-          <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">✎</button>
-        </div>`);
-      }
-    });
-  });
-  return rows.join('') || '–';
+  return typen.map(typ => {
+    const entry = (studentLzk||[]).find(l => l.lerntheke === lt.key && l.typ === typ);
+    if (!entry) {
+      return `<div class="lzk-admin-row">
+        <span class="lzk-admin-typ">${typ}</span>
+        <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">+ Eintragen</button>
+      </div>`;
+    }
+    const d = entry.datum ? new Date(entry.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
+    const pk = entry.pokale || 0;
+    const pokalStr = entry.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
+    const stCls = entry.status==='bestanden'?'lzk-st-ok':entry.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
+    const stTxt = entry.status==='bestanden'?'✓':entry.status==='nicht_bestanden'?'✗':'⏳';
+    return `<div class="lzk-admin-row">
+      <span class="lzk-admin-typ">${typ}</span>
+      <span class="lzk-admin-date">${d}</span>
+      <span class="lzk-st ${stCls}">${stTxt}</span>
+      <span style="font-size:11px;">${pokalStr}</span>
+      <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">✎</button>
+    </div>`;
+  }).join('');
 }
 
 let _lzkModal = {};
