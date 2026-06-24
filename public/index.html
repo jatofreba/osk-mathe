@@ -942,6 +942,7 @@ async function showPicker() {
     const pv = localStorage.getItem(lt.key) || allProg[lt.key];
     const { groups } = computeLtStats(lt, pv, localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey], korData, lzkRows);
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
+      if (grp.total <= 0) return;
       totalEarned += _tc((groups[g] || {done:0}).done, grp.required, grp.total);
       totalMax += 3;
     });
@@ -978,6 +979,7 @@ async function showPicker() {
     // Count trophies (stations + LZK pokale)
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
+      if (grp.total <= 0) return;
       const st = groups[g] || { done: 0 };
       earnedTrophies += _tc(st.done, grp.required, grp.total);
       maxTrophies += 3;
