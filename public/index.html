@@ -519,6 +519,25 @@ textarea.form-input{
 .kor-btn.nicht_bestanden.active{background:var(--md-error);color:#fff;border-color:var(--md-error);}
 .kor-btn.ausstehend{background:var(--md-surface-container);border-color:var(--md-outline-variant);color:var(--md-on-surface-variant);}
 .kor-cell{display:flex;flex-direction:column;gap:3px;}
+/* ── Access Toggle ───────────────────────────────────────────────────────────── */
+.access-toggle{display:flex;align-items:center;gap:5px;font-size:11px;margin-top:4px;flex-wrap:wrap;}
+.access-btn{
+  padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;border:1px solid;cursor:pointer;
+  transition:all .12s;background:var(--md-surface);color:var(--md-on-surface-variant);border-color:var(--md-outline-variant);
+}
+.access-btn.locked{background:#fef2f2;color:#b3261e;border-color:#fecaca;}
+.access-btn.open{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}
+/* ── Picker: abgeschlossen + gesperrt ────────────────────────────────────────── */
+.lt-card.lt-done{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
+.lt-card.lt-locked{opacity:.55;pointer-events:none;filter:grayscale(.4);}
+.lt-done-banner{background:#16a34a;color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
+.lt-locked-banner{background:#f3f4f6;color:#6b7280;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
+/* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
+.lt-active-btn{
+  width:100%;margin-top:8px;padding:6px 0;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
+  border:1px solid var(--md-outline-variant);background:var(--md-surface);color:var(--md-on-surface-variant);cursor:pointer;
+}
+.lt-active-btn.is-active{background:#EEF2FF;color:#3730A3;border-color:#a5b4fc;}
 </style>
 </head>
 <body>
@@ -919,10 +938,12 @@ async function showPicker() {
   if (!ltMeta.length) {
     try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
   }
-  let allProg = {}, korData = {}, lzkRows = [];
-  try { const pr = await fetch('/api/progress');  if (pr.ok) allProg = await pr.json(); } catch {}
-  try { const kr = await fetch('/api/korrektur'); if (kr.ok) korData = await kr.json(); } catch {}
-  try { const lr = await fetch('/api/lzk');       if (lr.ok) lzkRows = await lr.json(); } catch {}
+  let allProg = {}, korData = {}, lzkRows = [], accessData = {}, activeLerntheke = null;
+  try { const pr = await fetch('/api/progress');          if (pr.ok) allProg = await pr.json(); } catch {}
+  try { const kr = await fetch('/api/korrektur');         if (kr.ok) korData = await kr.json(); } catch {}
+  try { const lr = await fetch('/api/lzk');               if (lr.ok) lzkRows = await lr.json(); } catch {}
+  try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {}
+  try { const vr = await fetch('/api/active-lerntheke');  if (vr.ok) { const d = await vr.json(); activeLerntheke = d.lerntheke; } } catch {}
 
   const container = document.getElementById('picker-cards');
   // Trophy helper (mirrors lerntheke.js trophyCount)
@@ -970,11 +991,20 @@ async function showPicker() {
       </div>`;
   }
 
-  container.innerHTML = ltMeta.map(lt => {
+  // Sort: active lerntheke first
+  const sortedMeta = [...ltMeta].sort((a, b) => {
+    if (a.key === activeLerntheke) return -1;
+    if (b.key === activeLerntheke) return 1;
+    return 0;
+  });
+
+  container.innerHTML = sortedMeta.map(lt => {
+    const gesperrt = accessData[lt.key] === true;
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
     const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows);
     const hasAny = Object.values(groups).some(st => st.done > 0);
+    const isActive = lt.key === activeLerntheke;
 
     // Count trophies (stations + LZK pokale)
     let earnedTrophies = 0, maxTrophies = 0;
@@ -998,6 +1028,14 @@ async function showPicker() {
         return `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">📅 ${typ}-LZK ${new Date(lzk.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`;
       return '';
     }).join('');
+
+    // Abgeschlossen: alle LZK-Typen der Lerntheke bestanden (nur vorhandene Gruppen)
+    const lzkTypen = Object.keys(lt.groups || {}).filter(g => g === 'Basis' || g === 'Aufbau');
+    const ltAbgeschlossen = lzkTypen.length > 0 && lzkTypen.every(typ => {
+      const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
+      return lzk && lzk.status === 'bestanden';
+    });
+
     const trophyStr = earnedTrophies > 0
       ? `<span style="font-size:12px;font-weight:500;">🏆 ${earnedTrophies} / ${maxTrophies}</span>`
       : `<span style="font-size:12px;color:#aaa;">🏆 0 / ${maxTrophies}</span>`;
@@ -1006,8 +1044,23 @@ async function showPicker() {
       const cls = st.complete ? 'gpill-ok' : st.stationsOk ? 'gpill-partial' : 'gpill-none';
       return `<span class="gpill ${cls}">${g}: ${st.complete ? '✓' : st.done+'/'+st.req}</span>`;
     }).join('');
-    const btnLabel = hasAny ? '→ Weiter' : '→ Starten';
-    return `<div class="lt-card" onclick="startLerntheke('${lt.url}')">
+
+    const banner = gesperrt
+      ? `<div class="lt-locked-banner">🔒 Noch nicht freigeschaltet</div>`
+      : ltAbgeschlossen
+        ? `<div class="lt-done-banner">🎓 Abgeschlossen</div>`
+        : '';
+
+    const btnLabel = gesperrt ? '🔒 Gesperrt' : hasAny ? '→ Weiter' : '→ Starten';
+    const cardClass = `lt-card${gesperrt?' lt-locked':ltAbgeschlossen?' lt-done':''}`;
+
+    const activeBtn = !gesperrt ? `<button class="lt-active-btn${isActive?' is-active':''}"
+      onclick="event.stopPropagation();setActiveLerntheke('${lt.key}',this)">
+      ${isActive ? '★ Aktiv' : '☆ Als aktiv markieren'}
+    </button>` : '';
+
+    return `<div class="${cardClass}" onclick="${gesperrt?'':` startLerntheke('${lt.url}')`}">
+      ${banner}
       <div class="lt-card-title">${lt.title}</div>
       <div class="lt-card-groups">${badges}${lzkBadges}</div>
       <div>
@@ -1015,7 +1068,8 @@ async function showPicker() {
         <div class="lt-bar"><div class="lt-bar-fill" style="width:${pct}%;background:${pct===100?'#16a34a':'var(--blue)'}"></div></div>
         <div style="margin-top:6px;">${trophyStr}</div>
       </div>
-      <button class="btn-primary" onclick="event.stopPropagation();startLerntheke('${lt.url}')">${btnLabel}</button>
+      ${activeBtn}
+      ${gesperrt ? '' : `<button class="btn-primary" onclick="event.stopPropagation();startLerntheke('${lt.url}')">${btnLabel}</button>`}
     </div>`;
   }).join('');
 
@@ -1367,9 +1421,18 @@ function renderTable(students) {
       : '–';
     const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
     const activeLt = lastLt || primaryLt;
+    const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
     const ltCell = multiLt
-      ? `<td>${lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
+      ? `<td>${studentActiveLt ? `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">★ ${studentActiveLt.title}</span>` : lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
       : '';
+
+    const accessToggles = ltMeta.map(lti => {
+      const gesperrt = (s.access||[]).find(a => a.lerntheke === lti.key)?.gesperrt || false;
+      return `<button class="access-btn ${gesperrt?'locked':'open'}"
+        onclick="toggleAccess(${s.id},'${lti.key}',${!gesperrt},this)">
+        ${gesperrt?'🔒':'🔓'} ${lti.title.split(' ').slice(-1)[0]}
+      </button>`;
+    }).join('');
 
     return `<tr data-name="${s.username}">
       <td style="font-weight:600;cursor:pointer;" onclick="openStudentSummary(${s.id},'${s.username}')">${s.username} <span style="color:var(--blue);font-size:11px;">↗</span></td>
@@ -1385,6 +1448,7 @@ function renderTable(students) {
           <button class="btn-icon" onclick="openReset(${s.id},'${s.username}')">🔑</button>
           <button class="btn-icon red" onclick="deleteStudent(${s.id},'${s.username}')">🗑</button>
         </div>
+        <div class="access-toggle">${accessToggles}</div>
       </td>
     </tr>`;
   }).join('');
@@ -1534,6 +1598,34 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
     body: JSON.stringify({ userId, gruppe, status, lerntheke: lerntheke || '' })
   });
   loadStudents();
+}
+
+// ── Active Lerntheke (Student) ────────────────────────────────────────────────
+async function setActiveLerntheke(ltKey, btn) {
+  await fetch('/api/active-lerntheke', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ lerntheke: ltKey })
+  });
+  // Update all active buttons in picker
+  document.querySelectorAll('.lt-active-btn').forEach(b => {
+    b.classList.remove('is-active');
+    b.textContent = '☆ Als aktiv markieren';
+  });
+  btn.classList.add('is-active');
+  btn.textContent = '★ Aktiv';
+  // Move this card to the front
+  showPicker();
+}
+
+// ── Access Toggle ─────────────────────────────────────────────────────────────
+async function toggleAccess(userId, lerntheke, gesperrt, btn) {
+  await fetch('/api/admin/access', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId, lerntheke, gesperrt })
+  });
+  btn.className = `access-btn ${gesperrt?'locked':'open'}`;
+  btn.innerHTML = `${gesperrt?'🔒':'🔓'} ${btn.textContent.trim().split(' ').slice(-1)[0]}`;
+  btn.onclick = () => toggleAccess(userId, lerntheke, !gesperrt, btn);
 }
 
 // ── LZK (per-user) ───────────────────────────────────────────────────────────

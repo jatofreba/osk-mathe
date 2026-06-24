@@ -76,6 +76,19 @@ async function initDB() {
       UNIQUE(user_id, lerntheke, typ)
     );
     CREATE INDEX IF NOT EXISTS idx_lzk_user ON lzk(user_id);
+    CREATE TABLE IF NOT EXISTS lerntheke_access (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lerntheke  TEXT NOT NULL,
+      gesperrt   BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, lerntheke)
+    );
+    CREATE TABLE IF NOT EXISTS active_lerntheke (
+      user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      lerntheke  TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
     -- Migrate: add lerntheke column if missing, then fix unique constraint
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='korrektur' AND column_name='lerntheke') THEN
@@ -521,7 +534,10 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
         (SELECT json_agg(json_build_object('gruppe',gruppe,'status',status,'notiz',notiz,'lerntheke',lerntheke))
          FROM korrektur WHERE user_id=u.id) AS korrektur,
         (SELECT json_agg(json_build_object('typ',typ,'lerntheke',lerntheke,'datum',datum,'status',status,'pokale',pokale))
-         FROM lzk WHERE user_id=u.id) AS lzk
+         FROM lzk WHERE user_id=u.id) AS lzk,
+        (SELECT json_agg(json_build_object('lerntheke',lerntheke,'gesperrt',gesperrt))
+         FROM lerntheke_access WHERE user_id=u.id) AS access,
+        (SELECT lerntheke FROM active_lerntheke WHERE user_id=u.id) AS active_lerntheke
       FROM users u
       WHERE u.role='student' AND u.klasse=$1
       ORDER BY u.username
@@ -762,6 +778,49 @@ app.get('/api/admin/student-progress/:userId', requireAdmin, async (req, res) =>
     const progress = {};
     rows.rows.forEach(r => { progress[r.key] = r.value; });
     res.json({ username: user.rows[0].username, progress });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Lerntheke Access (Admin) ───────────────────────────────────────────────────
+app.post('/api/admin/access', requireAdmin, async (req, res) => {
+  try {
+    const { userId, lerntheke, gesperrt } = req.body;
+    await pool.query(`
+      INSERT INTO lerntheke_access (user_id, lerntheke, gesperrt, updated_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (user_id, lerntheke) DO UPDATE SET gesperrt=$3, updated_at=NOW()
+    `, [userId, lerntheke, gesperrt]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Active Lerntheke (Student) ─────────────────────────────────────────────────
+app.get('/api/active-lerntheke', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT lerntheke FROM active_lerntheke WHERE user_id=$1', [req.session.userId]);
+    res.json({ lerntheke: r.rows[0]?.lerntheke || null });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/active-lerntheke', requireLogin, async (req, res) => {
+  try {
+    const { lerntheke } = req.body;
+    await pool.query(`
+      INSERT INTO active_lerntheke (user_id, lerntheke, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (user_id) DO UPDATE SET lerntheke=$2, updated_at=NOW()
+    `, [req.session.userId, lerntheke]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Access check für Student ───────────────────────────────────────────────────
+app.get('/api/access', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT lerntheke, gesperrt FROM lerntheke_access WHERE user_id=$1', [req.session.userId]);
+    const out = {};
+    r.rows.forEach(row => { out[row.lerntheke] = row.gesperrt; });
+    res.json(out);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
