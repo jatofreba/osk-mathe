@@ -6,7 +6,7 @@
 function trophyCount(done, req, total) {
   if (done < req || total <= 0) return 0;
   const extra = total - req;
-  if (extra === 0) return 1;
+  if (extra === 0) return 3;
   const t2 = req + Math.ceil(extra / 3);
   if (done >= total) return 3;
   if (done >= t2)    return 2;
