@@ -240,7 +240,7 @@ function buildGrid(stats){
     const needsAbgabe=g!=='Pflicht';
     const lzkInfo=st.lzk;
     const lzkHtml=(()=>{
-      if(!needsAbgabe)return'';
+      if(g!=='Basis'&&g!=='Aufbau')return'';
       const d=lzkInfo&&lzkInfo.datum?new Date(lzkInfo.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
       const isoD=lzkInfo&&lzkInfo.datum?lzkInfo.datum.slice(0,10):'';
       // Pokal-Anzeige für LZK
