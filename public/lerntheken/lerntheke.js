@@ -255,7 +255,10 @@ function buildGrid(stats){
         <span class="lzk-badge lzk-geplant">📅 ${g}-LZK am ${d}</span></div>`;
       // Kein Termin gesetzt – Termin-Picker anzeigen wenn Voraussetzungen erfüllt
       const bereit=st.korOk&&st.abgabeOk&&st.stationsOk;
-      if(!bereit) return`<div class="lzk-row"><span class="lzk-badge lzk-locked">🔒 ${g}-LZK – erst Korrektur bestehen</span></div>`;
+      if(!bereit){
+        const grund=!st.stationsOk?`erst ${st.req} Aufgaben erledigen`:!st.abgabeOk?'erst Aufgabe abgeben':'erst Korrektur bestehen';
+        return`<div class="lzk-row"><span class="lzk-badge lzk-locked">🔒 ${g}-LZK – ${grund}</span></div>`;
+      }
       return`<div class="lzk-row lzk-ready">
         <span class="lzk-badge lzk-ready-badge">✅ Bereit für ${g}-LZK!</span>
         <label class="lzk-termin-label">Termin eintragen:
