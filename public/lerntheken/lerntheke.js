@@ -43,7 +43,7 @@ function enhanceInputs() {
         wrap.appendChild(input);
         const badge = document.createElement('span');
         badge.className = 'cell-unit-badge';
-        badge.textContent = unit;
+        badge.textContent = unit.replace(/\s*\(.*\)/, '');
         wrap.appendChild(badge);
       });
     });
