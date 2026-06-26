@@ -397,6 +397,7 @@ function showSt(id){
     }
   }
   document.getElementById('st-body').innerHTML=body;
+  window.scrollTo(0,0);
   const strip=document.getElementById('hilfe-strip');
   if(m.hilfen.length){
     document.getElementById('hilfe-btns').innerHTML=m.hilfen.map(h=>{
