@@ -1262,6 +1262,23 @@ window.addEventListener('message', async (e) => {
   }
 });
 
+// Forward scroll position into iframe so it can simulate sticky elements
+(function(){
+  let _scrollRaf = null;
+  function _sendScroll() {
+    const frame = document.getElementById('lerntheke-frame');
+    if (!frame || !frame.contentWindow) return;
+    const tb = document.querySelector('.topbar');
+    const tbH = tb ? tb.getBoundingClientRect().bottom : 0;
+    frame.contentWindow.postMessage({ type: 'PARENT_SCROLL', scrollY: window.scrollY, frameTop: frame.getBoundingClientRect().top, topbarBottom: tbH, viewportH: window.innerHeight }, '*');
+  }
+  window.addEventListener('scroll', () => {
+    if (_scrollRaf) cancelAnimationFrame(_scrollRaf);
+    _scrollRaf = requestAnimationFrame(_sendScroll);
+  }, { passive: true });
+  window.addEventListener('resize', _sendScroll, { passive: true });
+})();
+
 // ══ View switching ═══════════════════════════════════════════════════════════
 function updateShellHeight() {
   const tb = document.querySelector('.topbar');
