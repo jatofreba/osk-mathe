@@ -149,6 +149,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 /* ── App Shell ───────────────────────────────────────────────────────────── */
 #app{display:none;flex-direction:column;min-height:100vh;}
 #app.view-lerntheke{display:block;min-height:unset;}
+#app.view-lerntheke .topbar,
+#app.view-lerntheke .tabs,
+#app.view-lerntheke #picker-back-bar{display:none !important;}
+#app.view-lerntheke #lerntheke-frame{height:100dvh;}
 
 .topbar{
   background:var(--md-surface);
