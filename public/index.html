@@ -1231,6 +1231,8 @@ window.addEventListener('message', async (e) => {
   } else if (e.data.type === 'IFRAME_HEIGHT') {
     const frame = document.getElementById('lerntheke-frame');
     if (frame) frame.style.height = e.data.height + 'px';
+  } else if (e.data.type === 'SCROLL_TOP') {
+    window.scrollTo(0, 0);
   }
 });
 
