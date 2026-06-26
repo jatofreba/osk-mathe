@@ -753,7 +753,7 @@ function resetFrisbee(){
 }
 
 function checkPizza() {
-  const inputs = document.querySelectorAll('.pizza-inputs .cell-input');
+  const inputs = document.querySelectorAll('#st-body .cell-input');
   let correct=0,total=0,empty=0;
   inputs.forEach(inp=>{
     total++;
@@ -777,7 +777,7 @@ function checkPizza() {
   else{if(solWrap)solWrap.style.display='none';if(solLock)solLock.style.display='flex';}
 }
 function resetPizza(){
-  document.querySelectorAll('.pizza-inputs .cell-input').forEach(inp=>{
+  document.querySelectorAll('#st-body .cell-input').forEach(inp=>{
     inp.value='';inp.classList.remove('input-ok','input-err','input-empty');
   });
   const res=document.getElementById('check-result-pizza');
