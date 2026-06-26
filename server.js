@@ -188,6 +188,8 @@ app.use(express.urlencoded({ extended: true }));
 const { execSync } = require('child_process');
 const GIT_HASH = (() => { try { return execSync('git rev-parse --short HEAD').toString().trim(); } catch { return Date.now(); } })();
 
+app.get('/api/version', (req, res) => res.json({ hash: GIT_HASH, ts: new Date().toISOString() }));
+
 // Inject git hash as cache-buster into lerntheke HTML files (must be before static middleware)
 app.get('/lerntheken/:file.html', (req, res) => {
   const filePath = path.join(__dirname, 'public', 'lerntheken', req.params.file + '.html');
@@ -202,7 +204,7 @@ app.get('/lerntheken/:file.html', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-store, must-revalidate');
   }
 }));
 app.use(session({
