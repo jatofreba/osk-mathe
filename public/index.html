@@ -1081,7 +1081,32 @@ async function startLerntheke(url) {
   if (!url) { await loadLerntheken(); return; }
   showView('lerntheke');
   const frame = document.getElementById('lerntheke-frame');
-  frame.onload = syncProgressToFrame;
+  // Fetch progress in parallel with iframe load
+  const progressPromise = fetch('/api/progress').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  frame.onload = async () => {
+    await new Promise(r => setTimeout(r, 100));
+    try {
+      const data = await progressPromise;
+      if (!frame.contentWindow) return;
+      Object.entries(data).forEach(([k, v]) => {
+        if (k.includes('_abgabe_')) {
+          const existing = frame.contentWindow.localStorage.getItem(k);
+          if (existing && existing !== '{}') {
+            try {
+              const merged = Object.assign({}, JSON.parse(v || '{}'), JSON.parse(existing));
+              frame.contentWindow.localStorage.setItem(k, JSON.stringify(merged));
+              return;
+            } catch {}
+          }
+        }
+        const isEmpty = !v || v === '[]' || v === '{}';
+        const existing = frame.contentWindow.localStorage.getItem(k);
+        const existingEmpty = !existing || existing === '[]' || existing === '{}';
+        if (!isEmpty || existingEmpty) frame.contentWindow.localStorage.setItem(k, v);
+      });
+      frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
+    } catch(e) { console.warn('[Sync] Progress sync failed:', e); }
+  };
   frame.src = url + '?v=' + Date.now();
   localStorage.setItem('lastLerntheke', url);
 

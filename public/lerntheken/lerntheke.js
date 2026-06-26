@@ -453,6 +453,8 @@ function showH(idx){
   document.getElementById('btn-back-h').onclick=()=>showSt(cur);
   document.getElementById('hilfe-card').innerHTML=h.html;
   showView('view-h');
+  window.scrollTo(0,0);
+  window.parent.postMessage({ type: 'SCROLL_TOP' }, '*');
 }
 
 
