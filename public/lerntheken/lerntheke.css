@@ -364,7 +364,8 @@ button,input,textarea,select{font-family:inherit;}
 .btn-hilfe:hover{background:var(--surface-tonal);}
 
 /* ── Station View ───────────────────────────────────────────────────────── */
-.st-top{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;background:var(--surface-tonal);padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,.06);position:sticky;top:0;z-index:20;}
+.st-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface-tonal);padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,.06);position:fixed;top:0;left:0;right:0;z-index:20;transition:transform .25s ease;}
+#view-st .inner{padding-top:72px;padding-bottom:80px;}
 .st-badge{font-size:11px;font-weight:500;letter-spacing:.5px;padding:4px 12px;border-radius:var(--shape-full);background:var(--on-surface);color:var(--surface);}
 .st-title{font-size:clamp(20px,3vw,28px);font-weight:400;letter-spacing:0;flex:1;min-width:0;}
 .st-group-chip{font-size:11px;font-weight:500;letter-spacing:.5px;padding:4px 12px;border-radius:var(--shape-full);border:1px solid var(--outline-var);}
@@ -455,7 +456,7 @@ td.row-label{font-weight:500;background:var(--surface-tonal);}
 .hint-box summary{padding:12px 16px;cursor:pointer;font-size:14px;font-weight:500;background:var(--surface-tonal);list-style:none;display:flex;align-items:center;gap:8px;}
 .hint-box summary::-webkit-details-marker{display:none;}
 .hint-content{padding:12px 16px;font-size:14px;background:var(--surface);border-top:1px solid var(--outline-var);line-height:1.6;}
-.hilfe-strip{background:var(--surface-tonal);border-radius:var(--shape-m) var(--shape-m) 0 0;padding:16px 20px;position:sticky;bottom:0;z-index:20;}
+.hilfe-strip{background:var(--surface-tonal);border-radius:var(--shape-m) var(--shape-m) 0 0;padding:16px 20px;position:fixed;bottom:0;left:0;right:0;z-index:20;transition:transform .25s ease;}
 .hilfe-strip-lbl{font-size:11px;font-weight:500;letter-spacing:.5px;margin-bottom:12px;}
 .hilfe-btns{display:flex;flex-wrap:wrap;gap:8px;}
 .hv-top{display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;}

@@ -348,6 +348,22 @@ function buildOverview(){
 
 const _ltId = location.pathname.split('/').pop().replace('.html','');
 
+// Hilfe-Strip: ausblenden beim Hochscrollen, einblenden beim Runterscrollen
+(function(){
+  let lastY = 0;
+  window.addEventListener('scroll', () => {
+    const hilfe = document.getElementById('hilfe-strip');
+    if (!hilfe || hilfe.style.display === 'none') return;
+    const y = window.scrollY;
+    if (y < lastY) {
+      hilfe.style.transform = 'translateY(100%)'; // hochscrollen → ausblenden
+    } else {
+      hilfe.style.transform = '';                 // runterscrollen → einblenden
+    }
+    lastY = y;
+  }, { passive: true });
+})();
+
 async function _loadStation(id){
   if(CONTENT[id])return;
   try{
@@ -420,6 +436,7 @@ async function showSt(id){
       return `<button class="btn-hilfe" onclick="showH(${h-1})">💡 Hilfe: ${hd.title}</button>`;
     }).join('');
     strip.style.display='block';
+    strip.style.transform='';
   }else{strip.style.display='none';}
   showView('view-st');
   setTimeout(()=>{
