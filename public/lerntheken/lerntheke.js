@@ -1089,14 +1089,3 @@ if(_inIframe){
   Promise.all([loadKorrektur(), loadLzk()]).then(() => { buildOverview(); });
 }
 
-// Fehlende check/reset-Funktionen
-function checkGeraet()          { checkStation('geraet'); }
-function resetGeraet()          { resetStation('geraet'); }
-function checkTunnel()          { checkStation('tunnel'); }
-function resetTunnel()          { resetStation('tunnel'); }
-function checkLondon()          { checkStation('london'); }
-function resetLondon()          { resetStation('london'); }
-function checkEinheitenFlaeche(){ checkEinheiten(); }
-function resetEinheitenFlaeche(){ resetEinheiten(); }
-function checkEinheitenVolumen(){ checkEinheiten(); }
-function resetEinheitenVolumen(){ resetEinheiten(); }
