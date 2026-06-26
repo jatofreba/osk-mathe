@@ -156,6 +156,8 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   display:flex;align-items:center;gap:10px;
   flex-shrink:0;z-index:50;
 }
+#app.view-lerntheke .topbar,
+#app.view-lerntheke .tabs{position:sticky;top:0;z-index:50;}
 .topbar-title{
   font-size:16px;       /* Title Medium */
   font-weight:500;
@@ -1233,6 +1235,8 @@ window.addEventListener('message', async (e) => {
 
 // ══ View switching ═══════════════════════════════════════════════════════════
 function showView(v) {
+  const appEl = document.getElementById('app');
+  if (appEl) appEl.className = `view-${v}`;
   ['lerntheke','picker','admin','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
