@@ -28,8 +28,6 @@ function enhanceInputs() {
     const headers = ths.map(th => th.textContent.trim());
     if (!headers.length) return;
 
-    // Hide the dark header row (unit info moved into inputs)
-    if (thead) thead.style.visibility = 'hidden'; // keep space to avoid layout jump
 
     table.querySelectorAll('tbody tr').forEach(row => {
       Array.from(row.querySelectorAll('td')).forEach((cell, colIdx) => {
