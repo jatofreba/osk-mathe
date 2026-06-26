@@ -155,6 +155,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   padding:6px 16px;
   display:flex;align-items:center;gap:8px;
   flex-shrink:0;z-index:50;
+  position:sticky;top:0;
 }
 .topbar-title{
   font-size:14px;
@@ -225,7 +226,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
 #view-lerntheke{width:100%;}
-#lerntheke-frame{width:100%;border:none;display:block;height:calc(100dvh - var(--shell-h,90px));}
+#lerntheke-frame{width:100%;border:none;display:block;min-height:calc(100dvh - var(--shell-h,50px));}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 #view-admin{display:none;padding:24px;}
@@ -1253,21 +1254,19 @@ window.addEventListener('message', async (e) => {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ gruppe, lerntheke: lerntheke || '' })
     });
-  } else if (e.data.type === 'SCROLL_TOP') {
+  } else if (e.data.type === 'IFRAME_HEIGHT') {
     const frame = document.getElementById('lerntheke-frame');
-    if (frame) frame.scrollIntoView({ block: 'start' });
+    if (frame) frame.style.height = e.data.height + 'px';
+  } else if (e.data.type === 'SCROLL_TOP') {
+    window.scrollTo(0, 0);
   }
 });
 
 // ══ View switching ═══════════════════════════════════════════════════════════
 function updateShellHeight() {
   const tb = document.querySelector('.topbar');
-  const tabs = document.querySelector('.tabs');
-  const bb = document.getElementById('picker-back-bar');
-  if (tb && tabs) {
-    const bbH = (bb && bb.offsetParent !== null) ? bb.offsetHeight : 0;
-    const h = tb.offsetHeight + tabs.offsetHeight + bbH;
-    document.documentElement.style.setProperty('--shell-h', h + 'px');
+  if (tb) {
+    document.documentElement.style.setProperty('--shell-h', tb.offsetHeight + 'px');
   }
 }
 
