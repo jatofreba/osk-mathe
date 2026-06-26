@@ -148,7 +148,6 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 
 /* ── App Shell ───────────────────────────────────────────────────────────── */
 #app{display:none;flex-direction:column;min-height:100vh;}
-#app.view-lerntheke{height:100vh;overflow:hidden;}
 
 .topbar{
   background:var(--md-surface);
@@ -225,8 +224,8 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .tab:hover:not(.active){color:var(--md-on-surface);background:var(--md-surface-container-low);}
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
-#view-lerntheke{flex:1;overflow:hidden;}
-#lerntheke-frame{width:100%;height:100%;border:none;display:block;}
+#view-lerntheke{overflow:hidden;}
+#lerntheke-frame{width:100%;border:none;display:block;height:calc(100dvh - var(--shell-h,104px));}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 #view-admin{display:none;padding:24px;}
@@ -1233,9 +1232,19 @@ window.addEventListener('message', async (e) => {
 });
 
 // ══ View switching ═══════════════════════════════════════════════════════════
+function updateShellHeight() {
+  const tb = document.querySelector('.topbar');
+  const tabs = document.querySelector('.tabs');
+  if (tb && tabs) {
+    const h = tb.offsetHeight + tabs.offsetHeight;
+    document.documentElement.style.setProperty('--shell-h', h + 'px');
+  }
+}
+
 function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
+  if (v === 'lerntheke') updateShellHeight();
   ['lerntheke','picker','admin','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
