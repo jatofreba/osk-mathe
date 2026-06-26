@@ -147,7 +147,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 }
 
 /* ── App Shell ───────────────────────────────────────────────────────────── */
-#app{display:none;flex-direction:column;height:100vh;overflow:hidden;}
+#app{display:none;flex-direction:column;min-height:100vh;}
 
 .topbar{
   background:var(--md-surface);
@@ -224,11 +224,11 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .tab:hover:not(.active){color:var(--md-on-surface);background:var(--md-surface-container-low);}
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
-#view-lerntheke{flex:1;overflow:hidden;}
+#view-lerntheke{flex:1;overflow:hidden;min-height:calc(100vh - 120px);}
 #lerntheke-frame{width:100%;height:100%;border:none;display:block;}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
-#view-admin{flex:1;overflow-y:auto;display:none;padding:24px;}
+#view-admin{display:none;padding:24px;}
 
 .admin-top{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:24px;}
 .admin-title{
@@ -423,7 +423,7 @@ textarea.form-input{
 .summary-pct{font-size:12px;font-weight:500;letter-spacing:.5px;color:var(--md-on-surface-variant);}
 
 /* ── Lerntheke Picker ────────────────────────────────────────────────────── */
-#view-picker{flex:1;overflow-y:auto;padding:32px 20px;background:var(--md-background);}
+#view-picker{padding:32px 20px;background:var(--md-background);}
 .picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;max-width:960px;margin:0 auto;}
 .lt-card{
   background:var(--md-surface);
@@ -592,7 +592,7 @@ textarea.form-input{
       <div style="font-size:16px;font-weight:600;color:#1e293b;">Admin-Ansicht</div>
       <div style="font-size:14px;text-align:center;max-width:300px;">Wechsle zur Klassen-Übersicht.</div>
     </div>
-    <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;"></iframe>
+    <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;height:calc(100vh - 120px);"></iframe>
   </div>
 
   <div id="view-picker" style="display:none;">
