@@ -1088,3 +1088,21 @@ if(_inIframe){
 } else {
   Promise.all([loadKorrektur(), loadLzk()]).then(() => { buildOverview(); });
 }
+
+// Aliase für Stationen die eigene check-result-IDs verwenden
+function checkRing()            { checkStation('ring'); }
+function resetRing()            { resetStation('ring'); }
+function checkKreisaus()        { checkStation('kreisaus'); }
+function resetKreisaus()        { resetStation('kreisaus'); }
+function checkGeraet()          { checkStation('geraet'); }
+function resetGeraet()          { resetStation('geraet'); }
+function checkTunnel()          { checkStation('tunnel'); }
+function resetTunnel()          { resetStation('tunnel'); }
+function checkLondon()          { checkStation('london'); }
+function resetLondon()          { resetStation('london'); }
+function checkPizza()           { checkStation('pizza'); }
+function resetPizza()           { resetStation('pizza'); }
+function checkEinheitenFlaeche(){ checkEinheiten(); }
+function resetEinheitenFlaeche(){ resetEinheiten(); }
+function checkEinheitenVolumen(){ checkEinheiten(); }
+function resetEinheitenVolumen(){ resetEinheiten(); }
