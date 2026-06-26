@@ -423,6 +423,7 @@ async function showSt(id){
     strip.style.display='block';
   }else{strip.style.display='none';}
   showView('view-st');
+  window.parent.postMessage({type:'STATION_VIEW',open:true},'*');
   setTimeout(()=>{
     loadInputs(id);
     enhanceInputs();
@@ -1094,7 +1095,7 @@ function loadInputs(id){
   } catch(e) {}
 }
 
-function showOv(){saveInputs();buildOverview();showView('view-ov');}
+function showOv(){saveInputs();buildOverview();showView('view-ov');window.parent.postMessage({type:'STATION_VIEW',open:false},'*');}
 if(_inIframe){
   function _sendHeight() {
     const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);

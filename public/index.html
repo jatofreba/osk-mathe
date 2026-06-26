@@ -149,10 +149,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 /* ── App Shell ───────────────────────────────────────────────────────────── */
 #app{display:none;flex-direction:column;min-height:100vh;}
 #app.view-lerntheke{display:block;min-height:unset;}
-#app.view-lerntheke .topbar,
-#app.view-lerntheke .tabs,
-#app.view-lerntheke #picker-back-bar{display:none !important;}
-#app.view-lerntheke #lerntheke-frame{height:100dvh;}
+#app.view-lerntheke.station-open .topbar,
+#app.view-lerntheke.station-open .tabs,
+#app.view-lerntheke.station-open #picker-back-bar{display:none !important;}
+#app.view-lerntheke.station-open #lerntheke-frame{height:100dvh !important;}
 
 .topbar{
   background:var(--md-surface);
@@ -1260,6 +1260,9 @@ window.addEventListener('message', async (e) => {
     });
   } else if (e.data.type === 'SCROLL_TOP') {
     window.scrollTo(0, 0);
+  } else if (e.data.type === 'STATION_VIEW') {
+    document.getElementById('app').classList.toggle('station-open', e.data.open);
+    if (!e.data.open) window.scrollTo(0, 0);
   }
 });
 
