@@ -224,8 +224,8 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .tab:hover:not(.active){color:var(--md-on-surface);background:var(--md-surface-container-low);}
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
-#view-lerntheke{overflow:hidden;}
-#lerntheke-frame{width:100%;border:none;display:block;height:calc(100dvh - var(--shell-h,104px));}
+#view-lerntheke{width:100%;}
+#lerntheke-frame{width:100%;border:none;display:block;min-height:calc(100dvh - 104px);}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 #view-admin{display:none;padding:24px;}
@@ -1228,6 +1228,9 @@ window.addEventListener('message', async (e) => {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ gruppe, lerntheke: lerntheke || '' })
     });
+  } else if (e.data.type === 'IFRAME_HEIGHT') {
+    const frame = document.getElementById('lerntheke-frame');
+    if (frame) frame.style.height = e.data.height + 'px';
   }
 });
 

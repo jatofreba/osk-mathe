@@ -1080,6 +1080,12 @@ function loadInputs(id){
 function showOv(){saveInputs();buildOverview();showView('view-ov');}
 if(_inIframe){
   // RELOAD_PROGRESS will call loadKorrektur()+loadLzk().then(buildOverview) after sync
+  // Notify parent of content height so iframe can resize (enables page-level scrolling)
+  function _sendHeight() {
+    window.parent.postMessage({ type: 'IFRAME_HEIGHT', height: document.body.scrollHeight }, '*');
+  }
+  new ResizeObserver(_sendHeight).observe(document.body);
+  window.addEventListener('load', _sendHeight);
 } else {
   Promise.all([loadKorrektur(), loadLzk()]).then(() => { buildOverview(); });
 }
