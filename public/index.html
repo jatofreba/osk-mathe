@@ -578,7 +578,7 @@ textarea.form-input{
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Klassen-Übersicht</div>
   </div>
 
-  <div id="view-lerntheke" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+  <div id="view-lerntheke" style="width:100%;">
     <div id="picker-back-bar">
       <button class="back-btn" onclick="showPicker()">← Alle Lerntheken</button>
       <span class="lt-name" id="picker-back-lt-name"></span>
@@ -1253,9 +1253,7 @@ function showView(v) {
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
-      el.style.display = isActive ? 'flex' : 'none';
-      el.style.flex = isActive ? '1' : '';
-      el.style.overflow = isActive ? 'hidden' : '';
+      el.style.display = isActive ? 'block' : 'none';
     } else if (id === 'picker' || id === 'admin') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
