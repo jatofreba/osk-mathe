@@ -345,23 +345,20 @@ function buildOverview(){
 }
 
 const _ltId = location.pathname.split('/').pop().replace('.html','');
-let _contentLoaded = false;
 
-async function _loadContent(){
-  if(_contentLoaded)return;
-  _contentLoaded=true;
+async function _loadStation(id){
+  if(CONTENT[id])return;
   try{
-    const r=await fetch('/api/stations/'+_ltId);
+    const r=await fetch('/api/stations/'+_ltId+'/'+id);
     if(!r.ok)throw new Error(r.status);
-    const data=await r.json();
-    data.stations.forEach(s=>{ CONTENT[s.id]=s; });
-  }catch(e){ console.warn('Content-Fetch fehlgeschlagen',e); _contentLoaded=false; }
+    CONTENT[id]=await r.json();
+  }catch(e){ console.warn('Content-Fetch fehlgeschlagen',e); }
 }
 
 async function showSt(id){
   saveInputs();
   cur=id;
-  if(!CONTENT[id]) await _loadContent();
+  if(!CONTENT[id]) await _loadStation(id);
   const m=META[id],c=CONTENT[id];
   const badge=document.getElementById('st-badge');
   badge.textContent=''; badge.style.display='none';

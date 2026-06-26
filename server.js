@@ -348,6 +348,15 @@ app.get('/api/stations/:lerntheke', requireLogin, (req, res) => {
   res.json(data);
 });
 
+// GET /api/stations/:lerntheke/:id – serve single station content
+app.get('/api/stations/:lerntheke/:id', requireLogin, (req, res) => {
+  const data = readStationsDir(req.params.lerntheke);
+  if (!data) return res.status(404).json({ error: 'Nicht gefunden' });
+  const st = data.stations.find(s => s.id === Number(req.params.id));
+  if (!st) return res.status(404).json({ error: 'Station nicht gefunden' });
+  res.json(st);
+});
+
 // POST /api/admin/sync-stations/:lerntheke – write JSON files back into HTML
 app.post('/api/admin/sync-stations/:lerntheke', requireAdmin, async (req, res) => {
   try {
