@@ -149,7 +149,7 @@ async function syncAllStations() {
       html = replaceJsConstant(html, 'TOTAL',   String(data.stations.length));
       html = replaceJsConstant(html, 'GROUPS',  JSON.stringify(groups));
       html = replaceJsConstant(html, 'META',    JSON.stringify(meta));
-      html = replaceJsConstant(html, 'CONTENT', JSON.stringify(content));
+      html = replaceJsConstant(html, 'CONTENT', '[]');
       if (data.hilfen && data.hilfen.length)
         html = replaceJsConstant(html, 'HILFEN', JSON.stringify(data.hilfen));
       fs.writeFileSync(htmlPath, html, 'utf8');
@@ -381,7 +381,7 @@ app.post('/api/admin/sync-stations/:lerntheke', requireAdmin, async (req, res) =
     html = replaceJsConstant(html, 'TOTAL',   String(metaClean.length));
     html = replaceJsConstant(html, 'GROUPS',  JSON.stringify(groups));
     html = replaceJsConstant(html, 'META',    JSON.stringify(metaClean));
-    html = replaceJsConstant(html, 'CONTENT', JSON.stringify(contentClean));
+    html = replaceJsConstant(html, 'CONTENT', '[]');
     if (data.hilfen && data.hilfen.length) {
       html = replaceJsConstant(html, 'HILFEN', JSON.stringify(data.hilfen));
     }

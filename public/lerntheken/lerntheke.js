@@ -220,7 +220,7 @@ function buildGrid(stats){
     });
 
     const cards=sorted.map(s=>{
-      if(!CONTENT[s.id])return'';
+      if(!META[s.id])return'';
       const isDone=done.has(s.id);
       const state=isDone?'state-erledigt':'state-unbearbeitet';
       return `<div class="station-card ${state}" onclick="showSt(${s.id})">
@@ -344,9 +344,24 @@ function buildOverview(){
   updProg();
 }
 
-function showSt(id){
+const _ltId = location.pathname.split('/').pop().replace('.html','');
+let _contentLoaded = false;
+
+async function _loadContent(){
+  if(_contentLoaded)return;
+  _contentLoaded=true;
+  try{
+    const r=await fetch('/api/stations/'+_ltId);
+    if(!r.ok)throw new Error(r.status);
+    const data=await r.json();
+    data.stations.forEach(s=>{ CONTENT[s.id]=s; });
+  }catch(e){ console.warn('Content-Fetch fehlgeschlagen',e); _contentLoaded=false; }
+}
+
+async function showSt(id){
   saveInputs();
   cur=id;
+  if(!CONTENT[id]) await _loadContent();
   const m=META[id],c=CONTENT[id];
   const badge=document.getElementById('st-badge');
   badge.textContent=''; badge.style.display='none';
