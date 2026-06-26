@@ -292,14 +292,24 @@ app.post('/api/progress', requireLogin, async (req, res) => {
 // ── Stations (JSON-file-based) ────────────────────────────────────────────────
 const STATIONS_DIR = path.join(__dirname, 'public', 'lerntheken', 'stations');
 
+function parseJSONFile(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^﻿/, ''));
+  } catch(e) {
+    console.warn(`⚠ JSON-Fehler in ${filePath}: ${e.message}`);
+    return null;
+  }
+}
+
 function readStationsDir(lernthekeId) {
   const dir = path.join(STATIONS_DIR, lernthekeId);
   if (!fs.existsSync(dir)) return null;
-  const config = safeJSON(fs.readFileSync(path.join(dir, '_config.json'), 'utf8'));
+  const config = parseJSONFile(path.join(dir, '_config.json'));
+  if (!config) return null;
   const stations = fs.readdirSync(dir)
     .filter(f => f.endsWith('.json') && f !== '_config.json')
-    .map(f => safeJSON(fs.readFileSync(path.join(dir, f), 'utf8')))
-    .filter(Boolean)
+    .map(f => parseJSONFile(path.join(dir, f)))
+    .filter(s => s && typeof s.id === 'number')
     .sort((a, b) => a.id - b.id);
   return { ...config, stations };
 }
