@@ -1092,14 +1092,7 @@ function loadInputs(id){
 }
 
 function showOv(){saveInputs();buildOverview();showView('view-ov');}
-if(_inIframe){
-  function _sendHeight() {
-    const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-    window.parent.postMessage({ type: 'IFRAME_HEIGHT', height: h }, '*');
-  }
-  new ResizeObserver(() => { clearTimeout(_sendHeight._t); _sendHeight._t = setTimeout(_sendHeight, 50); }).observe(document.body);
-  window.addEventListener('load', _sendHeight);
-} else {
+if(!_inIframe){
   Promise.all([loadKorrektur(), loadLzk()]).then(() => { buildOverview(); });
 }
 
