@@ -148,6 +148,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 
 /* ── App Shell ───────────────────────────────────────────────────────────── */
 #app{display:none;flex-direction:column;min-height:100vh;}
+#app.view-lerntheke{height:100vh;overflow:hidden;}
 
 .topbar{
   background:var(--md-surface);
@@ -156,8 +157,6 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   display:flex;align-items:center;gap:10px;
   flex-shrink:0;z-index:50;
 }
-#app.view-lerntheke .topbar,
-#app.view-lerntheke .tabs{position:sticky;top:0;z-index:50;}
 .topbar-title{
   font-size:16px;       /* Title Medium */
   font-weight:500;
@@ -226,7 +225,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .tab:hover:not(.active){color:var(--md-on-surface);background:var(--md-surface-container-low);}
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
-#view-lerntheke{flex:1;overflow:hidden;min-height:calc(100vh - 120px);}
+#view-lerntheke{flex:1;overflow:hidden;}
 #lerntheke-frame{width:100%;height:100%;border:none;display:block;}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
@@ -594,7 +593,7 @@ textarea.form-input{
       <div style="font-size:16px;font-weight:600;color:#1e293b;">Admin-Ansicht</div>
       <div style="font-size:14px;text-align:center;max-width:300px;">Wechsle zur Klassen-Übersicht.</div>
     </div>
-    <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;height:calc(100vh - 120px);"></iframe>
+    <iframe id="lerntheke-frame" src="" title="Lerntheke" style="flex:1;border:none;display:block;width:100%;"></iframe>
   </div>
 
   <div id="view-picker" style="display:none;">
