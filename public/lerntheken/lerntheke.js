@@ -127,63 +127,6 @@ function save(){
   }
 }
 
-function _applyParentScroll({ frameTop, topbarBottom, viewportH }) {
-  if (!_inIframe) return;
-  const stTop = document.getElementById('view-st') && document.querySelector('#view-st .st-top');
-  const hilfe = document.getElementById('hilfe-strip');
-
-  if (stTop) {
-    if (frameTop <= topbarBottom) {
-      // iframe has scrolled behind topbar — fix st-top below topbar
-      const offsetInFrame = topbarBottom - frameTop;
-      stTop.style.position = 'fixed';
-      stTop.style.top = topbarBottom + 'px';
-      stTop.style.left = '0';
-      stTop.style.right = '0';
-      stTop.style.zIndex = '100';
-      stTop.style.borderRadius = '0';
-      stTop.style.margin = '0';
-      if (!stTop._ph) {
-        stTop._ph = document.createElement('div');
-        stTop.parentNode.insertBefore(stTop._ph, stTop);
-      }
-      stTop._ph.style.height = stTop.offsetHeight + 'px';
-    } else {
-      stTop.style.position = '';
-      stTop.style.top = '';
-      stTop.style.left = '';
-      stTop.style.right = '';
-      stTop.style.borderRadius = '';
-      stTop.style.margin = '';
-      if (stTop._ph) { stTop._ph.style.height = '0'; }
-    }
-  }
-
-  if (hilfe && hilfe.style.display !== 'none') {
-    if (frameTop + document.body.scrollHeight > viewportH) {
-      hilfe.style.position = 'fixed';
-      hilfe.style.bottom = '0';
-      hilfe.style.left = '0';
-      hilfe.style.right = '0';
-      hilfe.style.zIndex = '100';
-      hilfe.style.borderRadius = '0';
-      hilfe.style.margin = '0';
-      if (!hilfe._ph) {
-        hilfe._ph = document.createElement('div');
-        hilfe.parentNode.insertBefore(hilfe._ph, hilfe.nextSibling);
-      }
-      hilfe._ph.style.height = hilfe.offsetHeight + 'px';
-    } else {
-      hilfe.style.position = '';
-      hilfe.style.bottom = '';
-      hilfe.style.left = '';
-      hilfe.style.right = '';
-      hilfe.style.borderRadius = '';
-      hilfe.style.margin = '';
-      if (hilfe._ph) hilfe._ph.style.height = '0';
-    }
-  }
-}
 
 window.addEventListener('message', e => {
   if (!e.data) return;
@@ -192,10 +135,7 @@ window.addEventListener('message', e => {
     buildOverview();
     return;
   }
-  if (e.data.type === 'PARENT_SCROLL') {
-    _applyParentScroll(e.data);
-    return;
-  }
+
   if (e.data.type !== 'RELOAD_PROGRESS') return;
   const stored = localStorage.getItem(KEY);
   if (stored) { try { done = new Set(JSON.parse(stored)); } catch {} }

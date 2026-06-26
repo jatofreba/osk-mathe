@@ -226,7 +226,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
 #view-lerntheke{width:100%;}
-#lerntheke-frame{width:100%;border:none;display:block;min-height:calc(100dvh - var(--shell-h,50px));}
+#lerntheke-frame{width:100%;border:none;display:block;height:calc(100dvh - var(--shell-h,50px));overflow-y:auto;}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 #view-admin{display:none;padding:24px;}
@@ -1254,30 +1254,11 @@ window.addEventListener('message', async (e) => {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ gruppe, lerntheke: lerntheke || '' })
     });
-  } else if (e.data.type === 'IFRAME_HEIGHT') {
-    const frame = document.getElementById('lerntheke-frame');
-    if (frame) frame.style.height = e.data.height + 'px';
   } else if (e.data.type === 'SCROLL_TOP') {
     window.scrollTo(0, 0);
   }
 });
 
-// Forward scroll position into iframe so it can simulate sticky elements
-(function(){
-  let _scrollRaf = null;
-  function _sendScroll() {
-    const frame = document.getElementById('lerntheke-frame');
-    if (!frame || !frame.contentWindow) return;
-    const tb = document.querySelector('.topbar');
-    const tbH = tb ? tb.getBoundingClientRect().bottom : 0;
-    frame.contentWindow.postMessage({ type: 'PARENT_SCROLL', scrollY: window.scrollY, frameTop: frame.getBoundingClientRect().top, topbarBottom: tbH, viewportH: window.innerHeight }, '*');
-  }
-  window.addEventListener('scroll', () => {
-    if (_scrollRaf) cancelAnimationFrame(_scrollRaf);
-    _scrollRaf = requestAnimationFrame(_sendScroll);
-  }, { passive: true });
-  window.addEventListener('resize', _sendScroll, { passive: true });
-})();
 
 // ══ View switching ═══════════════════════════════════════════════════════════
 function updateShellHeight() {
