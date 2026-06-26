@@ -629,7 +629,7 @@ app.delete('/api/admin/student/:id', requireAdmin, async (req, res) => {
 function safeJSON(s) {
   if (!s) return {};
   if (typeof s === 'object') return s; // pg already parsed JSON columns
-  try { return JSON.parse(s); } catch { return {}; }
+  try { return JSON.parse(s.replace(/^﻿/, '')); } catch { return {}; }
 }
 
 
