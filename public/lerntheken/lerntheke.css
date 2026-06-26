@@ -407,8 +407,10 @@ button,input,textarea,select{font-family:inherit;}
 /* ── Tables ─────────────────────────────────────────────────────────────── */
 .tbl-wrap{overflow-x:auto;margin:12px 0;border-radius:var(--shape-m);border:1px solid var(--outline-var);}
 table{width:100%;border-collapse:collapse;font-size:14px;}
-thead{background:var(--on-surface);}
-thead th{color:var(--surface);padding:10px 12px;text-align:left;font-weight:500;font-size:11px;letter-spacing:.5px;white-space:nowrap;}
+thead{background:var(--on-surface);overflow:hidden;}
+thead tr:first-child th:first-child{border-top-left-radius:var(--shape-m);}
+thead tr:first-child th:last-child{border-top-right-radius:var(--shape-m);}
+thead th{color:var(--surface);padding:10px 12px;text-align:left;font-weight:600;font-size:12px;letter-spacing:.3px;white-space:nowrap;}
 tbody tr:nth-child(even){background:var(--surface-tonal);}
 tbody tr:hover{background:rgba(28,27,31,.04);}
 td{padding:8px 12px;border-bottom:1px solid var(--outline-var);color:var(--on-surface);}
