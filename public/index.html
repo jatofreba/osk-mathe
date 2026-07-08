@@ -1415,14 +1415,16 @@ function renderTable(students) {
   tbody.innerHTML = students.map(s => {
     // Support both new format (all_progress) and old server format (prog/abgabe)
     const ap = buildAp(s, lt);
-    const kor = korForLt(s.korrektur, (ltMeta[0]||{}).key);
+    const activeLtKey = s.active_lerntheke || (ltMeta[0]||{}).key;
+    const kor = korForLt(s.korrektur, activeLtKey);
 
     // Per-lerntheke group stats
     const ltRows = ltMeta.map(lti => {
       const g = parseGroupsForLt(lti, ap[lti.key], ap[lti.abgabeKey], kor);
       return { lti, g };
     });
-    const { lti: primaryLt, g } = ltRows[0] || { lti: lt, g: {} };
+    const activeLtRow = ltRows.find(r => r.lti.key === activeLtKey);
+    const { lti: primaryLt, g } = activeLtRow || ltRows[0] || { lti: lt, g: {} };
     const groupOrder = primaryLt ? Object.keys(primaryLt.groups) : [];
 
     const groupCells = groupOrder.map(grp => {
