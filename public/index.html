@@ -1469,8 +1469,8 @@ function renderTable(students) {
       ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
       : '–';
     const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
-    const activeLt = lastLt || primaryLt;
     const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
+    const activeLt = studentActiveLt || lastLt || primaryLt;
     const ltCell = multiLt
       ? `<td>${studentActiveLt ? `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">★ ${studentActiveLt.title}</span>` : lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
       : '';
