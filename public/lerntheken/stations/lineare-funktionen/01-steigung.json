@@ -1,10 +1,10 @@
 {
   "id": 1,
   "title": "Steigung",
-  "group": "Pflicht",
-  "gc": "#d95f2b",
-  "gbg": "#fff7f4",
-  "gbr": "#fcd9c8",
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
   "hilfen": [
     2
   ],

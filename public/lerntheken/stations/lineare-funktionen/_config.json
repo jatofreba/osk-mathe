@@ -4,8 +4,8 @@
       "color": "#d95f2b",
       "bg": "#fff7f4",
       "border": "#fcd9c8",
-      "required": 4,
-      "total": 4,
+      "required": 5,
+      "total": 5,
       "emoji": "🔴",
       "desc": "Pflichtaufgaben – Grundlage für alles"
     },
@@ -14,7 +14,7 @@
       "bg": "#eff6ff",
       "border": "#bfdbfe",
       "required": 4,
-      "total": 6,
+      "total": 8,
       "emoji": "🔵",
       "desc": "Grundlegende Aufgaben – 4 von 6 wählen"
     },
@@ -43,7 +43,7 @@
     "Aufbau",
     "Abflug"
   ],
-  "total": 10,
+  "total": 13,
   "hilfen": [
     {
       "title": "Funktionsbegriff & Wertetabelle",
