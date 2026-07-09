@@ -221,8 +221,22 @@ function buildGrid(stats){
       return aD-bD;
     });
 
+    const groupIndex=groups.indexOf(g);
+    const prevGroup=groupIndex>0?groups[groupIndex-1]:null;
+    const prevSt=prevGroup?stats[prevGroup]:null;
+    // Pflicht (index 0): always open; Basis (index 1): needs Pflicht stationsOk;
+    // Aufbau/Abflug (index 2+): needs previous group's LZK bestanden
+    const isLocked=prevSt?(groupIndex===1?!prevSt.stationsOk:!prevSt.lzkOk):false;
+    const lockReason=isLocked?(groupIndex===1?`Erst alle ${prevGroup}-Aufgaben erledigen`:`Erst ${prevGroup}-LZK bestehen`):'';
+
     const cards=sorted.map(s=>{
       if(!META[s.id])return'';
+      if(isLocked){
+        return `<div class="station-card state-locked">
+          <span class="station-card-lock">🔒</span>
+          <div class="station-card-title">${s.title}</div>
+        </div>`;
+      }
       const isDone=done.has(s.id);
       const state=isDone?'state-erledigt':'state-unbearbeitet';
       return `<div class="station-card ${state}" onclick="showSt(${s.id})">
@@ -305,6 +319,7 @@ function buildGrid(stats){
           ${trophyHtml(trophyCount(st.done, st.req, st.total))}
         </div>
       </div>
+      ${isLocked?`<div class="group-lock-banner">🔒 ${lockReason}</div>`:''}
       <div class="stations-grid">${cards}</div>
       ${abgabeRow}
     </div>`;

@@ -278,6 +278,19 @@ button,input,textarea,select{font-family:inherit;}
 }
 .station-card.state-erledigt:hover{box-shadow:var(--elev-1);transform:translateY(-1px);}
 
+/* State: gesperrt */
+.station-card.state-locked{opacity:.38;cursor:not-allowed;box-shadow:none;}
+.station-card.state-locked:hover{box-shadow:none;transform:none;}
+.station-card-lock{position:absolute;top:10px;right:10px;font-size:14px;}
+
+.group-lock-banner{
+  font-size:13px;color:var(--ink2);
+  padding:8px 14px;margin-bottom:10px;
+  background:var(--surface);
+  border:1px dashed var(--outline-var);
+  border-radius:8px;
+}
+
 /* State badge (top-right) */
 .station-card-badge{
   position:absolute;top:12px;right:12px;
