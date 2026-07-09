@@ -1046,8 +1046,8 @@ async function showPicker() {
       : `<span style="font-size:12px;color:#aaa;">🏆 0 / ${maxTrophies}</span>`;
 
     const badges = Object.entries(groups).map(([g, st]) => {
-      const cls = st.complete ? 'gpill-ok' : st.stationsOk ? 'gpill-partial' : 'gpill-none';
-      return `<span class="gpill ${cls}">${g}: ${st.complete ? '✓' : st.done+'/'+st.req}</span>`;
+      const cls = st.stationsOk ? 'gpill-ok' : st.done > 0 ? 'gpill-partial' : 'gpill-none';
+      return `<span class="gpill ${cls}">${g}: ${st.stationsOk ? '✓' : st.done+'/'+st.req}</span>`;
     }).join('');
 
     const banner = gesperrt
@@ -1408,9 +1408,9 @@ function renderTable(students) {
         const groupOrder = Object.keys(lti.groups);
         const gBadges = groupOrder.map(g => {
           const st = groups[g]||{};
-          const c = st.complete?'#16a34a':st.stationsOk?'#d97706':'#94a3b8';
-          const bb= st.complete?'#f0fdf4':st.stationsOk?'#fffbeb':'#f8fafc';
-          return `<span class="lt-pct-g" style="background:${bb};color:${c};">${g[0]}:${st.complete?'✓':(st.done||0)+'/'+st.req}</span>`;
+          const c = st.stationsOk?'#16a34a':st.done>0?'#d97706':'#94a3b8';
+          const bb= st.stationsOk?'#f0fdf4':st.done>0?'#fffbeb':'#f8fafc';
+          return `<span class="lt-pct-g" style="background:${bb};color:${c};">${g[0]}:${st.stationsOk?'✓':(st.done||0)+'/'+st.req}</span>`;
         }).join('');
         return `<td><div class="lt-pct-cell">
           <span class="lt-pct-pill" style="background:${bg};color:${color};">${pct===100?'✓ ':''} ${pct}%</span>
@@ -1552,7 +1552,7 @@ function openStudentSummary(userId, username) {
       const grp = lt.groups[g];
       const c  = st.complete?'#16a34a':st.stationsOk?'#d97706':'#94a3b8';
       const bb = st.complete?'#f0fdf4':st.stationsOk?'#fffbeb':'#f8fafc';
-      let txt = st.complete ? `${grp.emoji} ${g} ✓` : `${grp.emoji} ${g}: ${st.done||0}/${st.req}`;
+      let txt = st.stationsOk ? `${grp.emoji} ${g} ✓` : `${grp.emoji} ${g}: ${st.done||0}/${st.req}`;
       if (g!=='Pflicht') {
         if (st.abgabe) txt += ' 📋';
         if (st.korOk) txt += ' ✓ Bestanden';

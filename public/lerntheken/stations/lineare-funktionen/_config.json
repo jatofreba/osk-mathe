@@ -13,10 +13,10 @@
       "color": "#2563eb",
       "bg": "#eff6ff",
       "border": "#bfdbfe",
-      "required": 5,
+      "required": 4,
       "total": 8,
       "emoji": "🔵",
-      "desc": "Grundlegende Aufgaben – 5 von 8 wählen"
+      "desc": "Grundlegende Aufgaben – 4 von 8 wählen"
     },
     "Aufbau": {
       "color": "#16a34a",
