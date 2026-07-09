@@ -523,8 +523,8 @@ function getLerntheckenMeta() {
       const total     = extractJSValue(html, 'TOTAL');
       const groups    = extractJSValue(html, 'GROUPS');
       const meta      = extractJSValue(html, 'META');
-      // strip task/sol HTML from meta to keep response small
-      const stations  = (meta || []).map(s => ({ id: s.id, group: s.group, title: s.title }));
+      // strip task/sol HTML from meta to keep response small (filter nulls from deleted stations)
+      const stations  = (meta || []).filter(Boolean).map(s => ({ id: s.id, group: s.group, title: s.title }));
       const rawTitle  = (html.match(/<title>([^<]+)<\/title>/) || [])[1] || id;
       const title     = rawTitle.replace(/\s*·.*$/, '').trim(); // strip " · Jahrgangsstufe X"
       const result = { id, title, url: `/lerntheken/${f}`, key, abgabeKey, total, groups, stations };
