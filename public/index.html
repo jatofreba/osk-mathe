@@ -1687,21 +1687,26 @@ function lzkCellHtml(studentLzk, s, lt) {
   const typen = ['Basis','Aufbau'];
   return typen.map(typ => {
     const entry = (studentLzk||[]).find(l => l.lerntheke === lt.key && l.typ === typ);
-    if (!entry) {
+    // Fallback: show entry stored under a different lerntheke key (e.g. from previous bug)
+    const fallback = !entry ? (studentLzk||[]).find(l => l.typ === typ) : null;
+    if (!entry && !fallback) {
       return `<div class="lzk-admin-row">
         <span class="lzk-admin-typ">${typ}</span>
         <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">+ Eintragen</button>
       </div>`;
     }
-    const d = entry.datum ? new Date(entry.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
-    const pk = entry.pokale || 0;
-    const pokalStr = entry.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
-    const stCls = entry.status==='bestanden'?'lzk-st-ok':entry.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
-    const stTxt = entry.status==='bestanden'?'✓':entry.status==='nicht_bestanden'?'✗':'⏳';
+    const e = entry || fallback;
+    const d = e.datum ? new Date(e.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
+    const pk = e.pokale || 0;
+    const pokalStr = e.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
+    const stCls = e.status==='bestanden'?'lzk-st-ok':e.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
+    const stTxt = e.status==='bestanden'?'✓':e.status==='nicht_bestanden'?'✗':'⏳';
+    const warning = fallback ? `<span title="Unter anderer Lerntheke gespeichert – beim Bearbeiten wird korrigiert" style="color:#d97706;font-size:10px;">⚠</span>` : '';
     return `<div class="lzk-admin-row">
       <span class="lzk-admin-typ">${typ}</span>
       <span class="lzk-admin-date">${d}</span>
       <span class="lzk-st ${stCls}">${stTxt}</span>
+      ${warning}
       <span style="font-size:11px;">${pokalStr}</span>
       <button class="lzk-admin-btn" onclick="openLzkModal(${s.id},'${s.username}','${lt.key}','${typ}')">✎</button>
     </div>`;
@@ -1712,7 +1717,10 @@ let _lzkModal = {};
 function openLzkModal(userId, username, lerntheke, typ) {
   _lzkModal = { userId, username, lerntheke, typ };
   const s = allStudents.find(s => s.id === userId);
-  const existing = s && s.lzk ? (s.lzk.find(l => l.lerntheke===lerntheke && l.typ===typ)||{}) : {};
+  const existing = s && s.lzk ? (
+    s.lzk.find(l => l.lerntheke===lerntheke && l.typ===typ) ||
+    s.lzk.find(l => l.typ===typ) || {}
+  ) : {};
   document.getElementById('lzk-modal-title').textContent = `${typ}-LZK · ${username}`;
   document.getElementById('lzk-modal-datum').value = existing.datum ? existing.datum.slice(0,10) : '';
   document.getElementById('lzk-modal-status').value = existing.status || 'ausstehend';
