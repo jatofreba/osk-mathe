@@ -156,7 +156,7 @@ window.addEventListener('message', e => {
 function groupStats(){
   const stats={};
   GROUP_ORDER.forEach(g=>{
-    const all=META.filter(s=>s.group===g);
+    const all=META.filter(s=>s&&s.group===g);
     const doneCount=all.filter(s=>done.has(s.id)).length;
     const req=GROUPS[g].required;
     const stationsOk=doneCount>=req;
@@ -386,7 +386,7 @@ async function showSt(id){
   // Group chip
   const gc2 = document.getElementById('st-group-chip');
   if(gc2){
-    const gName2=m.group; const gSts=META.filter(s=>s.group===gName2);
+    const gName2=m.group; const gSts=META.filter(s=>s&&s.group===gName2);
     const gD=gSts.filter(s=>done.has(s.id)).length; const gR=GROUPS[gName2].required;
     const gOk=gD>=gR;
     gc2.textContent=(gOk?'✓ ':'')+gName2+(gOk?' vollständig':': '+gD+'/'+gR);
@@ -397,7 +397,7 @@ async function showSt(id){
   const isDone=done.has(id);
   // Show group completion status in st-top
   const gName=m.group;
-  const gStations=META.filter(s=>s.group===gName);
+  const gStations=META.filter(s=>s&&s.group===gName);
   const gDone=gStations.filter(s=>done.has(s.id)).length;
   const gReq=GROUPS[gName].required;
   const gComplete=gDone>=gReq;
@@ -470,7 +470,7 @@ function toggleDone(){
   db.textContent=isDone?'✓ Erledigt':'Als erledigt markieren';
   const m2=META[cur]; const gc3=document.getElementById('st-group-chip');
   if(gc3&&m2){
-    const gSts2=META.filter(s=>s.group===m2.group);
+    const gSts2=META.filter(s=>s&&s.group===m2.group);
     const gD2=gSts2.filter(s=>done.has(s.id)).length; const gR2=GROUPS[m2.group].required;
     const gOk2=gD2>=gR2;
     gc3.textContent=(gOk2?'✓ ':'')+m2.group+(gOk2?' vollständig':': '+gD2+'/'+gR2);
