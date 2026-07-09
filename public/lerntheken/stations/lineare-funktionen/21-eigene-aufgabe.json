@@ -1,0 +1,13 @@
+{
+  "id": 21,
+  "title": "Eigene Aufgabe",
+  "sort_order": 1,
+  "group": "Abflug",
+  "gc": "#7c3aed",
+  "gbg": "#f5f3ff",
+  "gbr": "#ddd6fe",
+  "hilfen": [],
+  "hasSol": false,
+  "task_html": "<div class='task-block' style='background:#7c3aed18;border:1.5px solid #7c3aed40;'><div class='task-block-label' style='color:#7c3aed;'>Erfinde eine echte Knobelaufgabe</div><div style='display:flex;justify-content:center;margin:4px 0 14px;'><svg viewBox='0 0 240 148' xmlns='http://www.w3.org/2000/svg' style='width:min(240px,100%);max-height:148px;'><rect x='0' y='0' width='240' height='148' rx='12' fill='#f5f3ff'/><rect x='28' y='12' width='184' height='124' rx='8' fill='white' fill-opacity='0.6'/><line x1='44' y1='106' x2='204' y2='106' stroke='#c4b5fd' stroke-width='1.5'/><line x1='84' y1='20' x2='84' y2='116' stroke='#c4b5fd' stroke-width='1.5'/><line x1='44' y1='76' x2='204' y2='76' stroke='#ede9fe' stroke-width='0.8'/><line x1='44' y1='46' x2='204' y2='46' stroke='#ede9fe' stroke-width='0.8'/><line x1='124' y1='20' x2='124' y2='116' stroke='#ede9fe' stroke-width='0.8'/><line x1='164' y1='20' x2='164' y2='116' stroke='#ede9fe' stroke-width='0.8'/><line x1='48' y1='100' x2='200' y2='28' stroke='#7c3aed' stroke-width='2.5' stroke-linecap='round'/><line x1='48' y1='58' x2='200' y2='88' stroke='#16a34a' stroke-width='2' stroke-linecap='round' stroke-dasharray='6,3'/><line x1='48' y1='40' x2='200' y2='100' stroke='#2563eb' stroke-width='2' stroke-linecap='round' stroke-dasharray='6,3'/><text x='12' y='52' font-size='14' fill='#7c3aed'>&#x2605;</text><text x='222' y='80' font-size='14' fill='#7c3aed'>&#x2605;</text><text x='12' y='115' font-size='14' fill='#7c3aed'>&#x2605;</text><text x='120' y='136' text-anchor='middle' font-size='10' fill='#6d28d9' font-style='italic'>Lineare Funktionen – kreativ!</text></svg></div><p style='font-size:14px;line-height:1.8;margin:0 0 10px;'>Jetzt bist du dran &ndash; als <strong>Aufgaben-Erfinder:in</strong>. Deine Aufgabe soll echtes Nachdenken erfordern.</p><div style='background:#ede9fe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;margin-bottom:12px;'><strong>Ideen f&uuml;r eine Knobelaufgabe:</strong><br>&bull; Drei Geraden, die sich in einem Punkt treffen &ndash; stimmt das?<br>&bull; Eine Funktion r&uuml;ckw&auml;rts: Gegeben S und m &rarr; gesucht b<br>&bull; Reale Daten (z.&nbsp;B. Handyvertr&auml;ge, Taschengeld) als lineare Funktionen modellieren und vergleichen<br>&bull; Fehler in einer L&ouml;sung finden und erkl&auml;ren</div><p style='font-size:13px;line-height:1.7;margin:0;'>Schreibe Aufgabe und vollst&auml;ndige Musterl&ouml;sung auf. Pr&auml;sentiere deine Aufgabe der Klasse oder hinterlege sie f&uuml;r andere Gruppen.</p></div>",
+  "sol_html": null
+}

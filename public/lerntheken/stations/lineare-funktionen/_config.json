@@ -14,27 +14,27 @@
       "bg": "#eff6ff",
       "border": "#bfdbfe",
       "required": 5,
-      "total": 7,
+      "total": 8,
       "emoji": "🔵",
-      "desc": "Grundlegende Aufgaben – 5 von 7 wählen"
+      "desc": "Grundlegende Aufgaben – 5 von 8 wählen"
     },
     "Aufbau": {
       "color": "#16a34a",
       "bg": "#f0fdf4",
       "border": "#bbf7d0",
       "required": 4,
-      "total": 5,
+      "total": 6,
       "emoji": "🟢",
-      "desc": "Vertiefung & Anwendung – 4 von 5 wählen"
+      "desc": "Vertiefung & Anwendung – 4 von 6 wählen"
     },
     "Abflug": {
       "color": "#7c3aed",
       "bg": "#f5f3ff",
       "border": "#ddd6fe",
       "required": 1,
-      "total": 0,
+      "total": 1,
       "emoji": "🟣",
-      "desc": "Knobeln & Entdecken – 1 von ? wählen"
+      "desc": "Knobeln & Entdecken – 1 von 1 wählen"
     }
   },
   "groupOrder": [
@@ -43,7 +43,7 @@
     "Aufbau",
     "Abflug"
   ],
-  "total": 18,
+  "total": 21,
   "hilfen": [
     {
       "title": "Funktionsbegriff & Wertetabelle",
