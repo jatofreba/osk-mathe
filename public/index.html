@@ -1309,6 +1309,32 @@ function showView(v) {
   }
 }
 
+// Auto-migrate LZK entries stored under wrong lerntheke key (from old bug)
+async function autoMigrateLzk(students) {
+  let fixed = false;
+  for (const s of students) {
+    if (!s.lzk || !s.lzk.length) continue;
+    const lai = s.last_active_info;
+    const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
+    const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
+    const activeLt = studentActiveLt || lastLt || ltMeta[0];
+    if (!activeLt) continue;
+    for (const typ of ['Basis','Aufbau']) {
+      const correct = s.lzk.find(l => l.lerntheke === activeLt.key && l.typ === typ);
+      const orphan = !correct ? s.lzk.find(l => l.typ === typ) : null;
+      if (orphan) {
+        await fetch('/api/admin/lzk', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ userId:s.id, lerntheke:activeLt.key, typ,
+            datum:orphan.datum, status:orphan.status, pokale:orphan.pokale })
+        });
+        fixed = true;
+      }
+    }
+  }
+  return fixed;
+}
+
 // ══ Admin: load students ══════════════════════════════════════════════════════
 let adminRefreshTimer = null;
 async function loadStudents() {
@@ -1324,6 +1350,13 @@ async function loadStudents() {
     const r = await fetch('/api/admin/students');
     if (!r.ok) { console.error('loadStudents failed:', r.status); return; }
     allStudents = await r.json();
+
+    // Auto-fix LZK entries stored under the wrong lerntheke key
+    const hadMigrations = await autoMigrateLzk(allStudents);
+    if (hadMigrations) {
+      const r2 = await fetch('/api/admin/students');
+      if (r2.ok) allStudents = await r2.json();
+    }
 
     const sr = await fetch('/api/admin/stats');
     if (sr.ok) {
