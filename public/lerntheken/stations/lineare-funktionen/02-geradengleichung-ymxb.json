@@ -1,10 +1,11 @@
 {
   "id": 2,
   "title": "Geradengleichung y = mx + b",
-  "group": "Basis",
-  "gc": "#2563eb",
-  "gbg": "#eff6ff",
-  "gbr": "#bfdbfe",
+  "sort_order": 1,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
   "hilfen": [
     9,
     3

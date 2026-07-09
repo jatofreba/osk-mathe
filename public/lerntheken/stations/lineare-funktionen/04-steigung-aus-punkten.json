@@ -1,10 +1,11 @@
 {
   "id": 4,
   "title": "Steigung aus zwei Punkten",
-  "group": "Basis",
-  "gc": "#2563eb",
-  "gbg": "#eff6ff",
-  "gbr": "#bfdbfe",
+  "sort_order": 2,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
   "hilfen": [
     2,
     4

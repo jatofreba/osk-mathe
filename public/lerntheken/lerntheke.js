@@ -214,11 +214,14 @@ function buildGrid(stats){
     const st=stats[g];
     const gInfo=GROUPS[g];
 
-    // Sort: erledigt first, then unbearbeitet
+    // Sort: erledigt first, then by sort_order (or id as fallback)
     const sorted=[...all].sort((a,b)=>{
       const aD=done.has(a.id)?0:1;
       const bD=done.has(b.id)?0:1;
-      return aD-bD;
+      if(aD!==bD)return aD-bD;
+      const aO=a.sort_order!=null?a.sort_order:a.id;
+      const bO=b.sort_order!=null?b.sort_order:b.id;
+      return aO-bO;
     });
 
     const groupIndex=groups.indexOf(g);
