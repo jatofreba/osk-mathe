@@ -414,7 +414,7 @@ async function showSt(id){
   const db=document.getElementById('btn-done');
   db.className='btn-done'+(isDone?' active':'');
   db.textContent=isDone?'✓ Erledigt':'Als erledigt markieren';
-  const isCheckStation = (id === 0 || id === 1 || id === 2 || id === 3 || id === 4 || id === 5 || id === 8 || id === 9 || id === 10 || id === 11 || id === 12 || id === 13 || id === 14 || id === 15 || id === 16); // Stations with check-gate
+  const isCheckStation = (id === 0 || id === 1 || id === 3 || id === 4 || id === 5 || id === 8 || id === 9 || id === 10 || id === 11 || id === 12 || id === 13 || id === 14 || id === 15 || id === 16 || id === 17 || id === 18); // Stations with check-gate
   // Hide manual done-button for check stations
   document.getElementById('btn-done').style.display = isCheckStation ? 'none' : '';
   let body=`<div class="panel"><div class="panel-lbl">Aufgabe</div>${c.task_html}</div>`;

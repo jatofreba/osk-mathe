@@ -22,10 +22,10 @@
       "color": "#16a34a",
       "bg": "#f0fdf4",
       "border": "#bbf7d0",
-      "required": 2,
-      "total": 3,
+      "required": 4,
+      "total": 5,
       "emoji": "🟢",
-      "desc": "Vertiefung & Anwendung – 2 von 3 wählen"
+      "desc": "Vertiefung & Anwendung – 4 von 5 wählen"
     },
     "Abflug": {
       "color": "#7c3aed",
@@ -43,7 +43,7 @@
     "Aufbau",
     "Abflug"
   ],
-  "total": 16,
+  "total": 18,
   "hilfen": [
     {
       "title": "Funktionsbegriff & Wertetabelle",
