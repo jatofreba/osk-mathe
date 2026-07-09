@@ -1415,7 +1415,16 @@ function renderTable(students) {
   tbody.innerHTML = students.map(s => {
     // Support both new format (all_progress) and old server format (prog/abgabe)
     const ap = buildAp(s, lt);
-    const activeLtKey = s.active_lerntheke || (ltMeta[0]||{}).key;
+
+    // Determine the effective lerntheke for this student (needed for all columns)
+    // Priority: 1) DB-assigned active_lerntheke, 2) last-touched LT, 3) first in ltMeta
+    const lai = s.last_active_info;
+    const lastDate = lai && lai.updated_at
+      ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : '–';
+    const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
+    const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
+    const activeLtKey = (studentActiveLt || lastLt || ltMeta[0] || {}).key || (lt||{}).key;
     const kor = korForLt(s.korrektur, activeLtKey);
 
     // Per-lerntheke group stats
@@ -1463,13 +1472,6 @@ function renderTable(students) {
       </div>`;
     }).join('');
 
-    // Last active: date + lerntheke name (if multiple)
-    const lai = s.last_active_info;
-    const lastDate = lai && lai.updated_at
-      ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
-      : '–';
-    const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
-    const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
     const activeLt = studentActiveLt || lastLt || primaryLt;
     const ltCell = multiLt
       ? `<td>${studentActiveLt ? `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">★ ${studentActiveLt.title}</span>` : lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
