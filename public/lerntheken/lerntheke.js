@@ -245,6 +245,7 @@ function buildGrid(stats){
       return `<div class="station-card ${state}" onclick="showSt(${s.id})">
         ${isDone?'<span class="station-card-badge">✓</span>':''}
         <div class="station-card-title">${s.title}</div>
+        ${s.abgabe?`<div style="font-size:10px;font-weight:600;color:${s.gc};margin-top:5px;letter-spacing:.2px;">📋 zur Abgabe</div>`:''}
       </div>`;
     }).join('');
 
