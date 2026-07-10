@@ -32,9 +32,9 @@
       "bg": "#f5f3ff",
       "border": "#ddd6fe",
       "required": 1,
-      "total": 1,
+      "total": 4,
       "emoji": "🟣",
-      "desc": "Knobeln & Entdecken – 1 von 1 wählen"
+      "desc": "Knobeln & Entdecken – 1 von 4 wählen"
     }
   },
   "groupOrder": [
@@ -43,7 +43,7 @@
     "Aufbau",
     "Abflug"
   ],
-  "total": 23,
+  "total": 26,
   "hilfen": [
     {
       "title": "Funktionsbegriff & Wertetabelle",
