@@ -2,6 +2,7 @@
   "id": 21,
   "title": "Eigene Aufgabe",
   "sort_order": 1,
+  "abgabe": true,
   "group": "Abflug",
   "gc": "#7c3aed",
   "gbg": "#f5f3ff",

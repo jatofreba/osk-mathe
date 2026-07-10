@@ -214,8 +214,10 @@ function buildGrid(stats){
     const st=stats[g];
     const gInfo=GROUPS[g];
 
-    // Sort: erledigt first, then by sort_order (or id as fallback)
+    // Sort: abgabe always last, then erledigt first, then by sort_order (or id as fallback)
     const sorted=[...all].sort((a,b)=>{
+      const aA=a.abgabe?1:0, bA=b.abgabe?1:0;
+      if(aA!==bA)return aA-bA;
       const aD=done.has(a.id)?0:1;
       const bD=done.has(b.id)?0:1;
       if(aD!==bD)return aD-bD;

@@ -2,6 +2,7 @@
   "id": 20,
   "title": "Eigene Aufgabe",
   "sort_order": 6,
+  "abgabe": true,
   "group": "Aufbau",
   "gc": "#16a34a",
   "gbg": "#f0fdf4",
