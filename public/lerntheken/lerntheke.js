@@ -64,6 +64,12 @@ function enhanceInputs() {
     wrap.appendChild(lbl);
     input.placeholder = ' '; // keep placeholder for :not(:placeholder-shown) to work
   });
+  // 3. aria-label fallback: every cell-input not inside a <label> gets a generic accessible name
+  document.querySelectorAll('#st-body .cell-input').forEach(input => {
+    if (!input.getAttribute('aria-label') && !input.closest('label')) {
+      input.setAttribute('aria-label', 'Antwort eingeben');
+    }
+  });
 }
 
 // ── Generic station check/reset (used by stations with cell-inputs) ──────────
@@ -87,7 +93,7 @@ function checkStation(stId) {
     if (empty > 0) { res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.'; res.className='check-result warn'; }
     else if (pct===100) { res.innerHTML='🎉 <strong>100% richtig!</strong> Perfekt!'; res.className='check-result success'; }
     else if (passed) { res.innerHTML='✓ <strong>'+pct+'%</strong> richtig – Lösung freigeschaltet!'; res.className='check-result success'; }
-    else { res.innerHTML='<strong>'+pct+'%</strong> ('+correct+'/'+total+') – mind. 75% zum Freischalten.'; res.className='check-result error'; }
+    else { res.innerHTML='✗ <strong>'+pct+'%</strong> ('+correct+'/'+total+') – mind. 75% zum Freischalten.'; res.className='check-result error'; }
   }
   const solWrap = document.querySelector('.sol-wrap');
   const solLock = document.getElementById('sol-lock-'+stId);
@@ -237,14 +243,14 @@ function buildGrid(stats){
     const cards=sorted.map(s=>{
       if(!META[s.id])return'';
       if(isLocked){
-        return `<div class="station-card state-locked">
+        return `<div class="station-card state-locked" role="button" tabindex="0" aria-disabled="true" aria-label="${s.title} – gesperrt">
           <span class="station-card-lock">🔒</span>
           <div class="station-card-title">${s.title}</div>
         </div>`;
       }
       const isDone=done.has(s.id);
       const state=isDone?'state-erledigt':'state-unbearbeitet';
-      return `<div class="station-card ${state}" onclick="showSt(${s.id})">
+      return `<div class="station-card ${state}" onclick="showSt(${s.id})" role="button" tabindex="0" aria-label="${s.title}${isDone?' – erledigt':''}" onkeydown="if(event.key==='Enter'||event.key===' ')showSt(${s.id})">
         ${isDone?'<span class="station-card-badge">✓</span>':''}
         <div class="station-card-title">${s.title}</div>
         ${s.abgabe?`<div style="font-size:10px;font-weight:600;color:${s.gc};margin-top:5px;letter-spacing:.2px;">📋 zur Abgabe</div>`:''}
@@ -533,7 +539,7 @@ function checkEinheiten() {
     res.innerHTML = '✓ <strong>' + pct + ' %</strong> richtig – Lösung freigeschaltet!';
     res.className = 'check-result success';
   } else {
-    res.innerHTML = '<strong>' + pct + ' %</strong> richtig (' + correct + '/' + total + ') – mind. 75 % zum Freischalten.';
+    res.innerHTML = '✗ <strong>' + pct + ' %</strong> richtig (' + correct + '/' + total + ') – mind. 75 % zum Freischalten.';
     res.className = 'check-result error';
   }
   const solWrap = document.querySelector('.sol-wrap');
@@ -605,7 +611,7 @@ function checkRep() {
     res.innerHTML = '✓ <strong>' + pct + ' %</strong> richtig – Lösung freigeschaltet!';
     res.className = 'check-result success';
   } else {
-    res.innerHTML = '<strong>' + pct + ' %</strong> richtig (' + correct + '/' + total + ') – mind. 75 % zum Freischalten.';
+    res.innerHTML = '✗ <strong>' + pct + ' %</strong> richtig (' + correct + '/' + total + ') – mind. 75 % zum Freischalten.';
     res.className = 'check-result error';
   }
   const solWrap = document.querySelector('.sol-wrap');
@@ -652,7 +658,7 @@ function checkFA() {
     res.innerHTML = '✓ <strong>' + pct + ' %</strong> richtig – Lösung freigeschaltet!';
     res.className = 'check-result success';
   } else {
-    res.innerHTML = '<strong>' + pct + ' %</strong> richtig (' + correct + '/' + total + ') – mind. 75 % zum Freischalten.';
+    res.innerHTML = '✗ <strong>' + pct + ' %</strong> richtig (' + correct + '/' + total + ') – mind. 75 % zum Freischalten.';
     res.className = 'check-result error';
   }
   const solWrap = document.querySelector('.sol-wrap');
@@ -693,7 +699,7 @@ function checkKA() {
   if (empty>0) { res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.'; res.className='check-result warn'; }
   else if (pct===100) { res.innerHTML='🎉 <strong>100 % richtig!</strong>'; res.className='check-result success'; }
   else if (passed) { res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!'; res.className='check-result success'; }
-  else { res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 % zum Freischalten.'; res.className='check-result error'; }
+  else { res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 % zum Freischalten.'; res.className='check-result error'; }
   const solWrap=document.querySelector('.sol-wrap');
   const solLock=document.getElementById('sol-lock-ka');
   if (passed) { if(solWrap) solWrap.style.display=''; if(solLock) solLock.style.display='none'; if(!done.has(cur)){done.add(cur);save();updProg();buildOverview();} }
@@ -732,7 +738,7 @@ function makeCheckFn(selector, resultId, lockId) {
       res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!';
       res.className='check-result success';
     } else {
-      res.innerHTML='<strong>'+pct+' %</strong> richtig ('+correct+'/'+total+') – mind. 75 % zum Freischalten.';
+      res.innerHTML='✗ <strong>'+pct+' %</strong> richtig ('+correct+'/'+total+') – mind. 75 % zum Freischalten.';
       res.className='check-result error';
     }
     const solWrap=document.querySelector('.sol-wrap');
@@ -778,7 +784,7 @@ function checkFrisbee2() {
   if(empty>0){res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.';res.className='check-result warn';}
   else if(pct===100){res.innerHTML='🎉 <strong>100 % richtig!</strong>';res.className='check-result success';}
   else if(passed){res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!';res.className='check-result success';}
-  else{res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
+  else{res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
   const solWrap=document.querySelector('.sol-wrap');
   const solLock=document.getElementById('sol-lock-frisbee');
   if(passed){if(solWrap)solWrap.style.display='';if(solLock)solLock.style.display='none';if(!done.has(cur)){done.add(cur);save();updProg();buildOverview();}}
@@ -811,7 +817,7 @@ function checkPizza() {
   if(empty>0){res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.';res.className='check-result warn';}
   else if(pct===100){res.innerHTML='🎉 <strong>100 % richtig!</strong> Perfekt!';res.className='check-result success';}
   else if(passed){res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!';res.className='check-result success';}
-  else{res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 % zum Freischalten.';res.className='check-result error';}
+  else{res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 % zum Freischalten.';res.className='check-result error';}
   const solWrap=document.querySelector('.sol-wrap');
   const solLock=document.getElementById('sol-lock-pizza');
   if(passed){if(solWrap)solWrap.style.display='';if(solLock)solLock.style.display='none';if(!done.has(cur)){done.add(cur);save();updProg();buildOverview();}}
@@ -908,7 +914,7 @@ function checkSeil() {
   const passed = pct >= 75;
   if (pct===100) { res.innerHTML='🎉 <strong>100 % richtig!</strong> Perfekt!'; res.className='check-result success'; }
   else if (passed) { res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – weiter so!'; res.className='check-result success'; }
-  else { res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – überprüfe deine Rechnung.'; res.className='check-result error'; }
+  else { res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – überprüfe deine Rechnung.'; res.className='check-result error'; }
   if (passed && !done.has(cur)) { done.add(cur); save(); updProg(); buildOverview(); }
 }
 function resetSeil() {
@@ -959,7 +965,7 @@ function checkFlugzeug() {
   if(empty>0){res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.';res.className='check-result warn';}
   else if(pct===100){res.innerHTML='🎉 <strong>100 % richtig!</strong>';res.className='check-result success';}
   else if(passed){res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!';res.className='check-result success';}
-  else{res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
+  else{res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
   const solWrap=document.querySelector('.sol-wrap');
   const solLock=document.getElementById('sol-lock-flugzeug');
   if(passed){if(solWrap)solWrap.style.display='';if(solLock)solLock.style.display='none';if(!done.has(cur)){done.add(cur);save();updProg();buildOverview();}}
@@ -991,7 +997,7 @@ function checkSonnensystem() {
   if(empty>0){res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.';res.className='check-result warn';}
   else if(pct===100){res.innerHTML='🎉 <strong>100 % richtig!</strong> Super!';res.className='check-result success';}
   else if(passed){res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!';res.className='check-result success';}
-  else{res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
+  else{res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
   const solWrap=document.querySelector('.sol-wrap');
   const solLock=document.getElementById('sol-lock-sonnensystem');
   if(passed){if(solWrap)solWrap.style.display='';if(solLock)solLock.style.display='none';if(!done.has(cur)){done.add(cur);save();updProg();buildOverview();}}
@@ -1023,7 +1029,7 @@ function makeCheckGeneric(resultId, lockId) {
     if(empty>0){res.innerHTML='⚠️ Noch <strong>'+empty+'</strong> Feld'+(empty===1?'':'er')+' leer.';res.className='check-result warn';}
     else if(pct===100){res.innerHTML='🎉 <strong>100 % richtig!</strong>';res.className='check-result success';}
     else if(passed){res.innerHTML='✓ <strong>'+pct+' %</strong> richtig – Lösung freigeschaltet!';res.className='check-result success';}
-    else{res.innerHTML='<strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
+    else{res.innerHTML='✗ <strong>'+pct+' %</strong> ('+correct+'/'+total+') – mind. 75 %.';res.className='check-result error';}
     const solWrap=document.querySelector('.sol-wrap');
     const solLock=document.getElementById(lockId);
     if(passed){if(solWrap)solWrap.style.display='';if(solLock)solLock.style.display='none';if(!done.has(cur)){done.add(cur);save();updProg();buildOverview();}}
