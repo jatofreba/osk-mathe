@@ -515,6 +515,8 @@ function showH(idx){
 function parseVal(str) {
   if (!str) return NaN;
   let s = str.trim().replace(/,/g, '.').replace(/\s+/g, '').replace(/[a-zA-Zäöü²³]+$/, '');
+  const frac = s.match(/^([+-]?\d+(?:\.\d+)?)\/([+-]?\d+(?:\.\d+)?)$/);
+  if (frac) return parseFloat(frac[1]) / parseFloat(frac[2]);
   return parseFloat(s);
 }
 function approxEq(a, b) {
