@@ -348,19 +348,6 @@ tr:hover td{background:var(--md-surface-container-low);}
 .gpill-ok{background:var(--md-success-container);color:var(--md-success);}
 .gpill-partial{background:#fffbeb;color:#92400e;}
 .gpill-none{background:var(--md-surface-container);color:var(--md-on-surface-variant);}
-/* Game-style rarity colors per group */
-.gpill-pflicht-ok{background:#fde68a;color:#78350f;border:1.5px solid #f59e0b;}
-.gpill-pflicht-partial{background:#fffbeb;color:#92400e;border:1px solid #fde68a;}
-.gpill-pflicht-none{background:var(--md-surface-container);color:#9ca3af;}
-.gpill-basis-ok{background:#f3f4f6;color:#1f2937;border:1.5px solid #9ca3af;}
-.gpill-basis-partial{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;}
-.gpill-basis-none{background:var(--md-surface-container);color:#9ca3af;}
-.gpill-aufbau-ok{background:#dbeafe;color:#1e40af;border:1.5px solid #60a5fa;}
-.gpill-aufbau-partial{background:#eff6ff;color:#3b82f6;border:1px solid #bfdbfe;}
-.gpill-aufbau-none{background:var(--md-surface-container);color:#9ca3af;}
-.gpill-abflug-ok{background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d;}
-.gpill-abflug-partial{background:#fffbeb;color:#b45309;border:1px solid #fde68a;}
-.gpill-abflug-none{background:var(--md-surface-container);color:#9ca3af;}
 
 .action-btns{display:flex;gap:4px;}
 .btn-icon{
@@ -1045,13 +1032,12 @@ async function showPicker() {
       const pk = lzk.pokale || 0;
       earnedTrophies += pk; maxTrophies += 3;
       const pokalStr = [1,2,3].map(i => `<span style="opacity:${i<=pk?1:.18}">🏆</span>`).join('');
-      const tKey = typ.toLowerCase();
       if (lzk.status === 'bestanden')
-        return `<span class="gpill gpill-${tKey}-ok" style="gap:3px;">${typ}-LZK ✓ ${pokalStr}</span>`;
+        return `<span class="gpill gpill-ok" style="gap:3px;">${typ}-LZK ✓ ${pokalStr}</span>`;
       if (lzk.status === 'nicht_bestanden')
         return `<span class="gpill" style="background:#fef2f2;color:#b3261e;">${typ}-LZK ✗</span>`;
       if (lzk.datum)
-        return `<span class="gpill gpill-${tKey}-partial">📅 ${typ}-LZK ${new Date(lzk.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`;
+        return `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">📅 ${typ}-LZK ${new Date(lzk.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</span>`;
       return '';
     }).join('');
 
@@ -1072,9 +1058,8 @@ async function showPicker() {
       : `<span style="font-size:12px;color:#aaa;">🏆 0 / ${maxTrophies}</span>`;
 
     const badges = Object.entries(groups).map(([g, st]) => {
-      const gKey = g.toLowerCase();
-      const state = st.stationsOk ? 'ok' : st.done > 0 ? 'partial' : 'none';
-      return `<span class="gpill gpill-${gKey}-${state}">${g}: ${st.stationsOk ? '✓' : st.done+'/'+st.req}</span>`;
+      const cls = st.stationsOk ? 'gpill-ok' : st.done > 0 ? 'gpill-partial' : 'gpill-none';
+      return `<span class="gpill ${cls}">${g}: ${st.stationsOk ? '✓' : st.done+'/'+st.req}</span>`;
     }).join('');
 
     const tierBannerText = ['','','✓ Basis-LZK','✓ Aufbau-LZK','🎓 Abgeschlossen'];
