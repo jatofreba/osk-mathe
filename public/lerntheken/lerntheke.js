@@ -452,13 +452,7 @@ async function showSt(id){
       return `<button class="btn-hilfe" onclick="showH(${h-1})">💡 Hilfe: ${hd.title}</button>`;
     }).join('');
     strip.style.display='block';
-    requestAnimationFrame(()=>{
-      document.getElementById('view-st').style.paddingBottom=strip.offsetHeight+'px';
-    });
-  }else{
-    strip.style.display='none';
-    document.getElementById('view-st').style.paddingBottom='';
-  }
+  }else{strip.style.display='none';}
   showView('view-st');
   window.parent.postMessage({type:'STATION_VIEW',open:true},'*');
   setTimeout(()=>{
