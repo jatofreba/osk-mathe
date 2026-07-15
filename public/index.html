@@ -1351,7 +1351,10 @@ async function autoMigrateLzk(students) {
     if (!activeLt) continue;
     for (const typ of ['Basis','Aufbau']) {
       const correct = s.lzk.find(l => l.lerntheke === activeLt.key && l.typ === typ);
-      const orphan = !correct ? s.lzk.find(l => l.typ === typ) : null;
+      // Only migrate records whose lerntheke key doesn't match ANY known lerntheke (true legacy/orphaned data).
+      // A record belonging to a different, still-existing lerntheke is NOT an orphan - migrating it would
+      // wrongly copy that lerntheke's LZK result onto this one.
+      const orphan = !correct ? s.lzk.find(l => l.typ === typ && !ltMeta.some(lt => lt.key === l.lerntheke)) : null;
       if (orphan) {
         await fetch('/api/admin/lzk', {
           method:'POST', headers:{'Content-Type':'application/json'},
