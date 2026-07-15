@@ -1,0 +1,13 @@
+{
+  "id": 15,
+  "title": "Zuwachs und Abnahme kombiniert",
+  "sort_order": 3,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [3, 5],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Erst eine Vermutung</div><p style='font-size:14px;line-height:1.7;margin:0 0 8px 0;'>Ein Zelt f&uuml;r die Klassenkasse kostet <strong>84&nbsp;&euro;</strong>. Der Preis wird zuerst um <strong>10&nbsp;%</strong> gesenkt und danach wieder um <strong>10&nbsp;%</strong> erh&ouml;ht. Was vermutest du: Kostet das Zelt am Ende wieder genau 84&nbsp;&euro;, mehr oder weniger? Warum?</p><textarea rows='2' placeholder='Ich vermute ..., weil ...' style='width:100%;border:1.5px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;'></textarea></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Jetzt rechnest du nach</div><div class='tbl-wrap'><table><thead><tr><th style='background:#16a34a;'>Preis nach &minus;10% (&euro;)</th><th style='background:#16a34a;'>Preis nach +10% (&euro;)</th></tr></thead><tbody><tr><td><input class='cell-input' data-ans='75.6' placeholder='?'></td><td><input class='cell-input' data-ans='83.16' placeholder='?'></td></tr></tbody></table></div></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Vergleich mit deiner Vermutung</div><p style='font-size:14px;margin:0 0 8px 0;'>Wie viel &euro; fehlen am Ende zum urspr&uuml;nglichen Preis von 84&nbsp;&euro;?</p><input class='cell-input' data-ans='0.84' placeholder='Wie viele €?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(15)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(15)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-15'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>84&nbsp;&euro; : 100 = 0,84&nbsp;&euro; (1&nbsp;%) &middot; 90 = <strong>75,60&nbsp;&euro;</strong><br>75,60&nbsp;&euro; : 100 = 0,756&nbsp;&euro; (1&nbsp;%) &middot; 110 = <strong>83,16&nbsp;&euro;</strong><br>84&nbsp;&euro; &minus; 83,16&nbsp;&euro; = <strong>0,84&nbsp;&euro;</strong> fehlen. Der Preis ist am Ende <strong>niedriger</strong> als vorher &ndash; weil die 10&nbsp;% Erh&ouml;hung von einem kleineren Betrag berechnet wird als die 10&nbsp;% Senkung.</div>"
+}

@@ -1,0 +1,13 @@
+{
+  "id": 14,
+  "title": "Preise über 100% berechnen",
+  "sort_order": 2,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [3, 5],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Wer hat richtig gerechnet?</div><p style='font-size:14px;line-height:1.7;margin:0 0 10px 0;'>Ein Sonnenschirmst&auml;nder kostet netto <strong>60&nbsp;&euro;</strong>. Darauf kommen <strong>19&nbsp;% Mehrwertsteuer</strong>. Zwei Kassenw&auml;rte rechnen unterschiedlich:</p></div><div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;'><div class='task-block task-orange'><div class='task-block-label'>Fenja</div><p style='font-size:13px;line-height:1.9;margin:0;font-family:monospace;'>60&nbsp;&euro; + 19&nbsp;&euro;<br>= <strong>79&nbsp;&euro;</strong></p></div><div class='task-block task-blue'><div class='task-block-label'>Bendix</div><p style='font-size:13px;line-height:1.9;margin:0;font-family:monospace;'>60&nbsp;&euro; : 100 = 0,60&nbsp;&euro;<br>0,60&nbsp;&euro; &middot; 119<br>= <strong>71,40&nbsp;&euro;</strong></p></div></div><div class='task-block task-green'><div class='task-block-label'>Deine Einsch&auml;tzung</div><p style='font-size:14px;margin:0 0 8px 0;'>Wer rechnet richtig, und was macht der bzw. die andere falsch?</p><textarea rows='3' placeholder='... rechnet richtig, weil ...' style='width:100%;border:1.5px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;'></textarea></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Jetzt du</div><p style='font-size:14px;margin:0 0 8px 0;'>Ein Sonnenschirm (ohne St&auml;nder) kostet netto 40&nbsp;&euro;, ebenfalls plus 19&nbsp;% Mehrwertsteuer. Rechne wie Bendix. Wie viel &euro; sind das brutto?</p><input class='cell-input' data-ans='47.6' placeholder='Wie viele €?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(14)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(14)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-14'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>Bendix rechnet richtig: Er berechnet 19&nbsp;% vom Preis und schl&auml;gt sie auf 100&nbsp;% drauf (119&nbsp;%). Fenja addiert einfach die Zahl 19 in Euro &ndash; das ist falsch, denn 19&nbsp;% von 60&nbsp;&euro; sind nicht 19&nbsp;&euro;.<br><br>40&nbsp;&euro; : 100 = 0,40&nbsp;&euro; (1&nbsp;%) &middot; 119 = <strong>47,60&nbsp;&euro;</strong></div>"
+}

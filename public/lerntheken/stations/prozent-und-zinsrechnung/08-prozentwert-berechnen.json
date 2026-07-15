@@ -1,0 +1,13 @@
+{
+  "id": 8,
+  "title": "Prozentwert berechnen",
+  "sort_order": 3,
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [2, 3],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-blue'><div class='task-block-label'>So findest du den Prozentwert (den Rabatt-Betrag)</div><p style='font-size:14px;line-height:1.9;margin:0;'>&#9312; Der Preis ist der Grundwert = 100&nbsp;%.<br>&#9313; Grundwert : 100 = Wert f&uuml;r 1&nbsp;%.<br>&#9314; Wert f&uuml;r 1&nbsp;% mal die gesuchte Prozentzahl = Rabatt-Betrag.</p></div><div class='task-block task-green' style='margin-top:12px;'><div class='task-block-label'>Beispiel</div><p style='font-size:14px;line-height:1.7;margin:0;'>Ein Rucksack f&uuml;r die Klassenfahrt kostet <strong>60&nbsp;&euro;</strong>. Ihr bekommt <strong>15&nbsp;% Rabatt</strong>.<br>&#9312; 60&nbsp;&euro; = 100&nbsp;%<br>&#9313; 60&nbsp;&euro; : 100 = 0,60&nbsp;&euro; (1&nbsp;%)<br>&#9314; 0,60&nbsp;&euro; &middot; 15 = <strong>9&nbsp;&euro;</strong> Rabatt</p></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Jetzt du</div><p style='font-size:14px;margin:0 0 10px 0;'>Ein Zelt kostet 80&nbsp;&euro;, ihr bekommt 25&nbsp;% Rabatt. Wie viel &euro; Rabatt sind das?</p><div class='tbl-wrap'><table><thead><tr><th style='background:#2563eb;'>Preis (&euro;)</th><th style='background:#2563eb;'>Rabatt (%)</th><th style='background:#2563eb;'>Rabatt-Betrag (&euro;)</th></tr></thead><tbody><tr><td class='row-label'>80</td><td class='row-label'>25</td><td><input class='cell-input' data-ans='20' placeholder='?'></td></tr></tbody></table></div></div><div class='check-bar'><button class='btn-check' onclick='checkStation(8)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(8)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-8'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>80&nbsp;&euro; : 100 = 0,80&nbsp;&euro; (1&nbsp;%)<br>0,80&nbsp;&euro; &middot; 25 = <strong>20&nbsp;&euro;</strong> Rabatt</div>"
+}

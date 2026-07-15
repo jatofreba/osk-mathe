@@ -1,0 +1,13 @@
+{
+  "id": 10,
+  "title": "Rabatt vergleichen – zwei Wege",
+  "sort_order": 5,
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [2, 5],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-blue'><div class='task-block-label'>Zwei Wege, ein Ergebnis</div><p style='font-size:14px;line-height:1.7;margin:0;'>Melis und Jonas kaufen f&uuml;r die Klassenkasse je einen Sonnenschirm f&uuml;r <strong>50&nbsp;&euro;</strong>. Sie bekommen <strong>12&nbsp;% Rabatt</strong>. Beide rechnen unterschiedlich &ndash; schau dir ihre Wege an.</p></div><div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;'><div class='task-block task-green'><div class='task-block-label'>Melis&#39; Weg</div><p style='font-size:13px;line-height:1.9;margin:0;font-family:monospace;'>50&nbsp;&euro; = 100&nbsp;%<br>50&nbsp;&euro; : 100 = 0,50&nbsp;&euro;<br>0,50&nbsp;&euro; &middot; 12 = 6&nbsp;&euro; Rabatt<br>50&nbsp;&euro; &minus; 6&nbsp;&euro; = <strong>44&nbsp;&euro;</strong></p></div><div class='task-block task-orange'><div class='task-block-label'>Jonas&#39; Weg</div><p style='font-size:13px;line-height:1.9;margin:0;font-family:monospace;'>50&nbsp;&euro; = 100&nbsp;%<br>100&nbsp;% &minus; 12&nbsp;% = 88&nbsp;%<br>50&nbsp;&euro; : 100 = 0,50&nbsp;&euro;<br>0,50&nbsp;&euro; &middot; 88 = <strong>44&nbsp;&euro;</strong></p></div></div><div class='task-block task-blue'><div class='task-block-label'>Aufgabe</div><p style='font-size:14px;margin:0 0 8px 0;'>Ein Sonnenschirm kostet eigentlich <strong>25&nbsp;&euro;</strong>, es gibt wieder <strong>12&nbsp;% Rabatt</strong>. Rechne wie Jonas &ndash; in einem Rechenschritt zu den 88&nbsp;%. Wie viel &euro; bezahlt ihr?</p><input class='cell-input' data-ans='22' placeholder='Wie viele €?'></div><div class='task-block task-green' style='margin-top:12px;'><div class='task-block-label'>Deine Meinung</div><p style='font-size:14px;margin:0 0 8px 0;'>Welchen Weg findest du einfacher &ndash; Melis&#39; oder Jonas&#39;? Begr&uuml;nde kurz.</p><textarea rows='2' placeholder='Ich finde ... einfacher, weil ...' style='width:100%;border:1.5px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;'></textarea></div><div class='check-bar'><button class='btn-check' onclick='checkStation(10)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(10)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-10'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>25&nbsp;&euro; : 100 = 0,25&nbsp;&euro; (1&nbsp;%)<br>0,25&nbsp;&euro; &middot; 88 = <strong>22&nbsp;&euro;</strong></div>"
+}

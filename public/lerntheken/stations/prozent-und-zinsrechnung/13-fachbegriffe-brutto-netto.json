@@ -1,0 +1,13 @@
+{
+  "id": 13,
+  "title": "Fachbegriffe: Brutto, Netto, Rabatt, Skonto",
+  "sort_order": 1,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [3],
+  "hasSol": true,
+  "task_html": "<a href='https://studyflix.de/wirtschaft/skonto-66' target='_blank' class='video-link-card' style='margin-bottom:16px;'><div class='video-link-icon'>&#x25B6;</div><div class='video-link-text'><div class='video-link-title'>Was ist Skonto?</div><div class='video-link-sub'>studyflix.de &middot; Erkl&auml;rvideo</div></div><div class='video-link-arrow'>&#x2197;</div></a><div class='task-block task-green'><div class='task-block-label'>Vier Begriffe, die die Kasse betreffen</div><p style='font-size:14px;line-height:1.8;margin:0;'><strong>Netto</strong> &ndash; der Preis ohne Mehrwertsteuer.<br><strong>Brutto</strong> &ndash; der Preis mit Mehrwertsteuer, also der tats&auml;chliche Zahlbetrag.<br><strong>Rabatt</strong> &ndash; ein Preisnachlass, z.&nbsp;B. beim Kauf gr&ouml;&szlig;erer Mengen.<br><strong>Skonto</strong> &ndash; ein zus&auml;tzlicher Preisnachlass, wenn man eine Rechnung sehr schnell bezahlt.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe a) &ndash; Brutto berechnen</div><p style='font-size:14px;margin:0 0 8px 0;'>Der Getr&auml;nke-Gro&szlig;handel stellt der Klassenkasse einen Netto-Preis von <strong>200&nbsp;&euro;</strong> in Rechnung. Die Mehrwertsteuer betr&auml;gt <strong>19&nbsp;%</strong>. Wie hoch ist der Brutto-Preis?</p><input class='cell-input' data-ans='238' placeholder='Wie viele €?'></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Aufgabe b) &ndash; Skonto nutzen</div><p style='font-size:14px;margin:0 0 8px 0;'>Bezahlt ihr eine Rechnung &uuml;ber <strong>100&nbsp;&euro;</strong> innerhalb von 10 Tagen, gew&auml;hrt der H&auml;ndler <strong>2&nbsp;% Skonto</strong>. Wie viel &euro; bezahlt ihr dann tats&auml;chlich?</p><input class='cell-input' data-ans='98' placeholder='Wie viele €?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(13)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(13)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-13'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>a) 200&nbsp;&euro; : 100 = 2&nbsp;&euro; (1&nbsp;%) &middot; 119 = <strong>238&nbsp;&euro;</strong> Brutto<br>b) 100&nbsp;&euro; : 100 = 1&nbsp;&euro; (1&nbsp;%) &middot; 98 = <strong>98&nbsp;&euro;</strong> Zahlbetrag</div>"
+}

@@ -1,0 +1,14 @@
+{
+  "id": 19,
+  "title": "Eigene Aufgabe",
+  "sort_order": 7,
+  "abgabe": true,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [6, 7],
+  "hasSol": false,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Findet das beste Angebot f&uuml;r die Klassenkasse</div><div style='display:flex;justify-content:center;gap:14px;align-items:flex-end;margin:10px 0;'><svg viewBox='0 0 120 100' xmlns='http://www.w3.org/2000/svg' style='width:160px;display:block;'><rect x='10' y='60' width='24' height='40' rx='3' fill='#2563eb'/><rect x='48' y='40' width='24' height='60' rx='3' fill='#16a34a'/><rect x='86' y='15' width='24' height='85' rx='3' fill='#6d28d9'/><text x='22' y='55' text-anchor='middle' font-size='16' fill='#2563eb' font-weight='bold'>?</text><text x='60' y='35' text-anchor='middle' font-size='16' fill='#16a34a' font-weight='bold'>?</text><text x='98' y='10' text-anchor='middle' font-size='16' fill='#6d28d9' font-weight='bold'>?</text></svg></div><p style='font-size:14px;line-height:1.8;margin:0 0 10px;'>Sucht euch <strong>zwei oder drei Sparangebote</strong> (echte von Bank-Webseiten oder selbst ausgedachte, mit realistischen Zinss&auml;tzen) und vergleicht sie f&uuml;r einen selbst gew&auml;hlten Kassen-Betrag.</p><div style='background:#dcfce7;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;margin-bottom:12px;'><strong>So geht ihr vor:</strong><br>&bull; W&auml;hlt einen Betrag, den die Klassenkasse anlegen will (z.&nbsp;B. 300&nbsp;&euro;).<br>&bull; Berechnet f&uuml;r jedes Angebot die Zinsen nach einem Jahr.<br>&bull; Vergleicht: Welches Angebot bringt am meisten? Gibt es Geb&uuml;hren, die den Vorteil wieder auffressen?<br>&bull; Schreibt eine kurze, begr&uuml;ndete Empfehlung.</div><p style='font-size:13px;line-height:1.7;margin:0;'>Reicht eure Rechnung und Empfehlung bei der Lernbegleitung ein.</p></div>",
+  "sol_html": null
+}

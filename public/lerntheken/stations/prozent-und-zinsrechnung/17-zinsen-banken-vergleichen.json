@@ -1,0 +1,13 @@
+{
+  "id": 17,
+  "title": "Zinsen berechnen – Banken vergleichen",
+  "sort_order": 5,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [6, 7],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Welche Bank ist am besten f&uuml;r die Klassenkasse?</div><p style='font-size:14px;line-height:1.7;margin:0 0 10px 0;'>Die Klassenkasse hat <strong>500&nbsp;&euro;</strong> gespart und vergleicht drei Banken. Berechne die Zinsen f&uuml;r ein Jahr bei jeder Bank.</p><div class='tbl-wrap'><table><thead><tr><th style='background:#16a34a;'>Bank</th><th style='background:#16a34a;'>Zinssatz (%)</th><th style='background:#16a34a;'>Zinsen (&euro;)</th></tr></thead><tbody><tr><td class='row-label'>Sparkasse</td><td class='row-label'>0,5</td><td><input class='cell-input' data-ans='2.5' placeholder='?'></td></tr><tr><td class='row-label'>Direktbank</td><td class='row-label'>1,2</td><td><input class='cell-input' data-ans='6' placeholder='?'></td></tr><tr><td class='row-label'>Filialbank</td><td class='row-label'>0,3</td><td><input class='cell-input' data-ans='1.5' placeholder='?'></td></tr></tbody></table></div></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Deine Empfehlung</div><p style='font-size:14px;margin:0 0 8px 0;'>Welche Bank empfiehlst du der Klassenkasse? Begr&uuml;nde kurz.</p><textarea rows='2' placeholder='Ich empfehle ..., weil ...' style='width:100%;border:1.5px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;'></textarea></div><div class='check-bar'><button class='btn-check' onclick='checkStation(17)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(17)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-17'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>500&nbsp;&euro; : 100 = 5&nbsp;&euro; (1&nbsp;%)<br>Sparkasse: 5&nbsp;&euro; &middot; 0,5 = <strong>2,50&nbsp;&euro;</strong><br>Direktbank: 5&nbsp;&euro; &middot; 1,2 = <strong>6&nbsp;&euro;</strong><br>Filialbank: 5&nbsp;&euro; &middot; 0,3 = <strong>1,50&nbsp;&euro;</strong><br>Die <strong>Direktbank</strong> zahlt hier die meisten Zinsen.</div>"
+}

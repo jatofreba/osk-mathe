@@ -1,0 +1,13 @@
+{
+  "id": 21,
+  "title": "Tageszinsen berechnen",
+  "sort_order": 2,
+  "group": "Abflug",
+  "gc": "#7c3aed",
+  "gbg": "#f5f3ff",
+  "gbr": "#ddd6fe",
+  "hilfen": [7, 8],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Nicht immer ein ganzes Jahr</div><p style='font-size:14px;line-height:1.8;margin:0;'>Legt die Klassenkasse Geld nur f&uuml;r <strong>t Tage</strong> an, bekommt sie nur einen Teil der Jahreszinsen: Z = K &middot; p%&nbsp;/&nbsp;100 &middot; t&nbsp;/&nbsp;365. Beim Z&auml;hlen der Zinstage gilt: der Einzahlungstag z&auml;hlt mit, der Auszahlungstag nicht.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe a) &ndash; Zinstage z&auml;hlen</div><p style='font-size:14px;margin:0 0 8px 0;'>Die Kasse legt Geld vom <strong>5.&nbsp;M&auml;rz</strong> bis zum <strong>20.&nbsp;Mai</strong> an. Wie viele Zinstage sind das? (M&auml;rz und Mai haben je 31 Tage, April hat 30.)</p><input class='cell-input' data-ans='76' placeholder='Wie viele Tage?'></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Aufgabe b) &ndash; Tageszinsen berechnen</div><p style='font-size:14px;margin:0 0 8px 0;'>Die Klassenkasse legt <strong>730&nbsp;&euro;</strong> f&uuml;r <strong>100 Tage</strong> zu einem Zinssatz von <strong>2&nbsp;%</strong> an. Wie hoch sind die Zinsen?</p><input class='cell-input' data-ans='4' placeholder='Wie viele €?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(21)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(21)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-21'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>a) M&auml;rz: 27 Tage (5. bis 31.) + April: 30 Tage + Mai: 19 Tage (1. bis 19.) = <strong>76 Zinstage</strong><br>b) Jahreszinsen: 730&nbsp;&euro; : 100 = 7,30&nbsp;&euro; (1&nbsp;%) &middot; 2 = 14,60&nbsp;&euro;<br>Tageszinsen: 14,60&nbsp;&euro; : 365 = 0,04&nbsp;&euro; pro Tag &middot; 100 Tage = <strong>4&nbsp;&euro;</strong></div>"
+}

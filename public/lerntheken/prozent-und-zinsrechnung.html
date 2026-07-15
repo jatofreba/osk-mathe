@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="/lerntheken/lerntheke.css?v=9">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Baustein Prozent- und Zinsrechnung · Jahrgangsstufe 8</title>
+</head>
+<body>
+
+<div class="bar">
+  <div class="bar-logo">
+    <div class="dot"></div>
+    Baustein Prozent- und Zinsrechnung
+    <span class="bar-sub">Jahrgangsstufe 8</span>
+  </div>
+  <div class="bar-right">
+    <span class="prog-lbl" id="prog-lbl">0 %</span>
+    <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<div class="view active" id="view-ov">
+  <div class="inner">
+    <div class="ov-hero">
+      <h2>Baustein <em>Prozent- und Zinsrechnung</em></h2>
+      <p>Jahrgangsstufe 8 · Eure Klassenfahrt-Kasse wartet auf dich.</p>
+    </div>
+    <div class="panel" style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:18px 22px;margin-bottom:24px;font-size:14px;line-height:1.75;">
+      <p>Eure Klasse plant eine Klassenfahrt und führt dafür eine gemeinsame <strong>Klassenfahrt-Kasse</strong>. Ihr müsst Rabatte beim Einkaufen berechnen, eine Umfrage zum Reiseziel auswerten – und am Ende entscheiden, wie ihr das gesparte Geld am besten anlegt.</p>
+      <p style="margin-top:10px;"><strong>Pflicht</strong> – Grundlage für alle: Pflichtaufgaben.</p>
+      <p><strong>Basis</strong> – Prozentrechnung: Wähle mindestens 4 Basis-Stationen.</p>
+      <p><strong>Aufbau</strong> – Zinsrechnung: Wähle mindestens 4 Aufgaben.</p>
+      <p><strong>Abflug</strong> – für alle Interessierten: Wähle mindestens 1 Knobelaufgabe.</p>
+      <p style="margin-top:10px;color:var(--ink2);">Reiche für Basis, Aufbau und Abflug je eine selbst gewählte Aufgabe zur Korrektur bei der Lehrkraft ein.</p>
+    </div>
+    <div class="req-grid" id="req-grid"></div>
+    <div class="lzk-status" id="lzk-status"></div>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<div class="view" id="view-st">
+  <div class="inner">
+    <div class="st-top" id="st-top-bar">
+      <button class="btn-back" onclick="showOv()">← Übersicht</button>
+      <span class="st-badge" id="st-badge"></span>
+      <span class="st-title" id="st-title"></span>
+    </div>
+    <div id="st-body" class="st-body"></div>
+    <div style="margin-top:16px;">
+      <button class="btn-done" id="btn-done" onclick="toggleDone()">Als erledigt markieren</button>
+    </div>
+  </div>
+  <div id="hilfe-strip" class="hilfe-strip" style="display:none">
+    <div class="hilfe-strip-lbl">💡 Hilfen für diese Station</div>
+    <div id="hilfe-btns" class="hilfe-btns"></div>
+  </div>
+</div>
+
+<div class="view" id="view-h">
+  <div class="inner">
+    <div class="st-top">
+      <button class="btn-back" id="btn-back-h">← Zurück</button>
+      <span class="hv-badge" id="hv-badge"></span>
+      <span id="hv-title" role="heading" aria-level="2" style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;"></span>
+    </div>
+    <div class="panel" id="hilfe-card"></div>
+  </div>
+</div>
+
+<script>
+const KEY='lerntheke_pz_v1';
+const ABGABE_KEY='lerntheke_pz_abgabe_v1';
+let TOTAL=23;
+let GROUPS={"Pflicht":{"color":"#d95f2b","bg":"#fff7f4","border":"#fcd9c8","required":6,"total":6,"emoji":"🔴","desc":"Pflichtaufgaben – Grundlage für alles"},"Basis":{"color":"#2563eb","bg":"#eff6ff","border":"#bfdbfe","required":4,"total":7,"emoji":"🔵","desc":"Prozentrechnung – 4 von 7 wählen"},"Aufbau":{"color":"#16a34a","bg":"#f0fdf4","border":"#bbf7d0","required":4,"total":7,"emoji":"🟢","desc":"Zinsrechnung – 4 von 7 wählen"},"Abflug":{"color":"#7c3aed","bg":"#f5f3ff","border":"#ddd6fe","required":1,"total":3,"emoji":"🟣","desc":"Knobeln & Entdecken – 1 von 3 wählen"}};
+let GROUP_ORDER=["Pflicht","Basis","Aufbau","Abflug"];
+let META=[{"id":0,"title":"Die Klassenfahrt-Kasse","group":"Pflicht","gc":"#d95f2b","gbg":"#fff7f4","gbr":"#fcd9c8","hilfen":[1],"hasSol":true},{"id":1,"title":"Was ist ein Prozent?","group":"Pflicht","gc":"#d95f2b","gbg":"#fff7f4","gbr":"#fcd9c8","hilfen":[1],"hasSol":true},{"id":2,"title":"Anteile vergleichen","group":"Pflicht","gc":"#d95f2b","gbg":"#fff7f4","gbr":"#fcd9c8","hilfen":[1],"hasSol":true},{"id":3,"title":"Rabatt verstehen","group":"Pflicht","gc":"#d95f2b","gbg":"#fff7f4","gbr":"#fcd9c8","hilfen":[1,5],"hasSol":true},{"id":4,"title":"Zinsen – was ist das?","group":"Pflicht","gc":"#d95f2b","gbg":"#fff7f4","gbr":"#fcd9c8","hilfen":[6],"hasSol":true},{"id":5,"title":"Repetitorium: Fachbegriffe der Kassen-Rechnung","group":"Pflicht","gc":"#d95f2b","gbg":"#fff7f4","gbr":"#fcd9c8","hilfen":[1,2,6],"hasSol":true},{"id":6,"title":"Anteile darstellen","sort_order":1,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[1],"hasSol":true},{"id":7,"title":"Prozentsatz berechnen","sort_order":2,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[2,3],"hasSol":true},{"id":8,"title":"Prozentwert berechnen","sort_order":3,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[2,3],"hasSol":true},{"id":9,"title":"Grundwert berechnen","sort_order":4,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[2,3],"hasSol":true},{"id":10,"title":"Rabatt vergleichen – zwei Wege","sort_order":5,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[2,5],"hasSol":true},{"id":11,"title":"Umfrage auswerten","sort_order":6,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[4],"hasSol":true},{"id":12,"title":"Eigene Aufgabe","sort_order":7,"abgabe":true,"group":"Basis","gc":"#2563eb","gbg":"#eff6ff","gbr":"#bfdbfe","hilfen":[4],"hasSol":false},{"id":13,"title":"Fachbegriffe: Brutto, Netto, Rabatt, Skonto","sort_order":1,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[3],"hasSol":true},{"id":14,"title":"Preise über 100% berechnen","sort_order":2,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[3,5],"hasSol":true},{"id":15,"title":"Zuwachs und Abnahme kombiniert","sort_order":3,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[3,5],"hasSol":true},{"id":16,"title":"Grundbegriffe der Zinsrechnung","sort_order":4,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[6,7],"hasSol":true},{"id":17,"title":"Zinsen berechnen – Banken vergleichen","sort_order":5,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[6,7],"hasSol":true},{"id":18,"title":"Kapital und Zinssatz berechnen","sort_order":6,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[7],"hasSol":true},{"id":19,"title":"Eigene Aufgabe","sort_order":7,"abgabe":true,"group":"Aufbau","gc":"#16a34a","gbg":"#f0fdf4","gbr":"#bbf7d0","hilfen":[6,7],"hasSol":false},{"id":20,"title":"Eigene Aufgabe","sort_order":1,"abgabe":true,"group":"Abflug","gc":"#7c3aed","gbg":"#f5f3ff","gbr":"#ddd6fe","hilfen":[8],"hasSol":false},{"id":21,"title":"Tageszinsen berechnen","sort_order":2,"group":"Abflug","gc":"#7c3aed","gbg":"#f5f3ff","gbr":"#ddd6fe","hilfen":[7,8],"hasSol":true},{"id":22,"title":"Fehler finden: Zinsrechnung kritisch prüfen","sort_order":3,"group":"Abflug","gc":"#7c3aed","gbg":"#f5f3ff","gbr":"#ddd6fe","hilfen":[7],"hasSol":true}];
+let CONTENT=[];
+let HILFEN=[{"title":"Prozent, Bruch, Dezimalzahl","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Prozent, Bruch, Dezimalzahl</h3><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'><strong>Prozent</strong> bedeutet <strong>Hundertstel</strong>. 1&nbsp;% = 1 von 100 Teilen = <strong>1/100</strong> = <strong>0,01</strong>.</p></div><p style='font-size:14px;margin:10px 0 6px 0;'>So wandelst du um:</p><table style='width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;'><tr style='background:#1C1B1F;color:#fff;'><td style='padding:6px 10px;font-weight:600;'>Bruch</td><td style='padding:6px 10px;font-weight:600;'>Dezimalzahl</td><td style='padding:6px 10px;font-weight:600;'>Prozentzahl</td></tr><tr><td style='padding:6px 10px;'>1/2</td><td style='padding:6px 10px;'>0,5</td><td style='padding:6px 10px;font-weight:700;color:#2563eb;'>50 %</td></tr><tr><td style='padding:6px 10px;'>1/4</td><td style='padding:6px 10px;'>0,25</td><td style='padding:6px 10px;font-weight:700;color:#2563eb;'>25 %</td></tr><tr><td style='padding:6px 10px;'>3/4</td><td style='padding:6px 10px;'>0,75</td><td style='padding:6px 10px;font-weight:700;color:#2563eb;'>75 %</td></tr></table><p style='font-size:13px;color:#555;'>💡 <strong>Merke:</strong> Von Dezimalzahl zu Prozent: Komma zwei Stellen nach rechts. Von Prozent zu Dezimalzahl: Komma zwei Stellen nach links.</p>"},{"title":"Dreisatz bei der Prozentrechnung","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Dreisatz bei der Prozentrechnung</h3><div style='background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Der <strong>Grundwert (G)</strong> ist immer <strong>100&nbsp;%</strong>. So gehst du in drei Schritten vor:</p></div><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>① Grundwert = 100&nbsp;%<br>② rechne G : 100 → das ist 1&nbsp;%<br>③ mal die gesuchte Prozentzahl → fertig</div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> 3&nbsp;% von 200&nbsp;€</p><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.9;'>200&nbsp;€ sind 100&nbsp;%<br>200&nbsp;€ : 100 = 2&nbsp;€ sind 1&nbsp;%<br>2&nbsp;€ · 3 = <strong>6&nbsp;€ sind 3&nbsp;%</strong></div><p style='font-size:13px;color:#555;margin-top:8px;'>Diesen Weg kannst du für alle drei Größen (Grundwert, Prozentwert, Prozentsatz) nutzen – du musst nur wissen, welche Zeile 100&nbsp;% ist.</p>"},{"title":"Formeln der Prozentrechnung","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Formeln der Prozentrechnung</h3><div style='display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:10px;'><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;margin:0 0 4px 0;color:#2563eb;font-weight:700;'>Prozentwert (W)</p><p style='font-size:15px;font-weight:700;margin:0;text-align:center;'>W = G · p% / 100</p></div><div style='background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;margin:0 0 4px 0;color:#d97706;font-weight:700;'>Prozentsatz (p%)</p><p style='font-size:15px;font-weight:700;margin:0;text-align:center;'>p% = W / G · 100</p></div><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;margin:0 0 4px 0;color:#16a34a;font-weight:700;'>Grundwert (G)</p><p style='font-size:15px;font-weight:700;margin:0;text-align:center;'>G = W / p% · 100</p></div></div><p style='font-size:13px;color:#555;'>💡 <strong>G</strong> = das Ganze (100&nbsp;%), <strong>W</strong> = der Anteil davon, <strong>p%</strong> = wie viel Prozent der Anteil ist.</p>"},{"title":"Diagramme lesen","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Streifen- und Kreisdiagramm lesen</h3><div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;'><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;font-weight:700;margin:0 0 6px 0;color:#2563eb;'>Streifendiagramm</p><p style='font-size:12px;line-height:1.7;margin:0;'>Ein Balken stellt das Ganze (100&nbsp;%) dar. Jeder Abschnitt zeigt einen Anteil – alle Abschnitte zusammen ergeben 100&nbsp;%.</p></div><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;font-weight:700;margin:0 0 6px 0;color:#16a34a;'>Kreisdiagramm</p><p style='font-size:12px;line-height:1.7;margin:0;'>Der ganze Kreis ist 100&nbsp;% = 360°. 1&nbsp;% entspricht 3,6°. Ein Tortenstück von 60&nbsp;% hat also 60 · 3,6° = 216°.</p></div></div><p style='font-size:13px;color:#555;'>💡 <strong>Tipp:</strong> Miss zuerst, wie groß ein Abschnitt im Vergleich zum Ganzen wirkt – schätze dann in 10-%-Schritten.</p>"},{"title":"Rabatt & Preiserhöhung","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Rabatt &amp; Preiserhöhung</h3><div style='background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Bei <strong>20&nbsp;% Rabatt</strong> zahlst du nur noch <strong>80&nbsp;%</strong> des alten Preises (100&nbsp;% − 20&nbsp;% = 80&nbsp;%).<br>Bei <strong>20&nbsp;% Erhöhung</strong> zahlst du <strong>120&nbsp;%</strong> des alten Preises (100&nbsp;% + 20&nbsp;% = 120&nbsp;%).</p></div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> Ein Rad kostet 200&nbsp;€, 15&nbsp;% Rabatt.</p><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>Weg A: 15&nbsp;% von 200&nbsp;€ ausrechnen und abziehen<br>200&nbsp;€ : 100 = 2&nbsp;€ (1&nbsp;%) &nbsp;·&nbsp; 15 = 30&nbsp;€ Rabatt &nbsp;→&nbsp; 200&nbsp;€ − 30&nbsp;€ = <strong>170&nbsp;€</strong><br><br>Weg B: direkt die 85&nbsp;% ausrechnen<br>200&nbsp;€ : 100 = 2&nbsp;€ (1&nbsp;%) &nbsp;·&nbsp; 85 = <strong>170&nbsp;€</strong></div><p style='font-size:13px;color:#555;margin-top:8px;'>Beide Wege führen zum gleichen Ergebnis – Weg B ist meist schneller.</p>"},{"title":"Grundbegriffe der Zinsrechnung","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Grundbegriffe der Zinsrechnung</h3><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.8;margin:0;'><strong>Kapital (K)</strong> – das Geld, das angelegt (gespart) oder geliehen wird.<br><strong>Zinssatz (p%)</strong> – wie viel Prozent des Kapitals man pro Jahr an Zinsen bekommt oder zahlt.<br><strong>Zinsen (Z)</strong> – der Geldbetrag, den man dafür bekommt oder zahlt.</p></div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> Die Klassenkasse legt 200&nbsp;€ auf einem Sparbuch an. Die Bank zahlt 2&nbsp;% Zinsen im Jahr.</p><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>Kapital K = 200&nbsp;€<br>Zinssatz p% = 2&nbsp;%<br>Zinsen Z = 200&nbsp;€ : 100 · 2 = <strong>4&nbsp;€</strong></div><p style='font-size:13px;color:#555;margin-top:8px;'>💡 Die Zinsrechnung ist eine Prozentrechnung – nur heißen Grundwert, Prozentwert und Prozentsatz hier Kapital, Zinsen und Zinssatz.</p>"},{"title":"Formeln der Zinsrechnung","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Formeln der Zinsrechnung</h3><div style='display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:10px;'><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;margin:0 0 4px 0;color:#2563eb;font-weight:700;'>Zinsen (Z)</p><p style='font-size:15px;font-weight:700;margin:0;text-align:center;'>Z = K · p% / 100</p></div><div style='background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;margin:0 0 4px 0;color:#d97706;font-weight:700;'>Kapital (K)</p><p style='font-size:15px;font-weight:700;margin:0;text-align:center;'>K = Z / p% · 100</p></div><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 16px;'><p style='font-size:13px;margin:0 0 4px 0;color:#16a34a;font-weight:700;'>Zinssatz (p%)</p><p style='font-size:15px;font-weight:700;margin:0;text-align:center;'>p% = Z / K · 100</p></div></div><p style='font-size:13px;color:#555;'>💡 Diese drei Formeln sind genau wie bei Grundwert/Prozentwert/Prozentsatz – nur mit K, Z und p% statt G, W und p%.</p>"},{"title":"Tageszinsen","html":"<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Tageszinsen</h3><div style='background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Wird Geld nicht ein ganzes Jahr, sondern nur für <strong>t Tage</strong> angelegt, bekommt man nur einen Teil der Jahreszinsen.</p></div><div style='text-align:center;font-size:16px;font-weight:700;margin:10px 0;'>Z = K · p% / 100 · t / 365</div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> 1000&nbsp;€ werden für 50 Tage zu 1,2&nbsp;% angelegt.</p><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>Zinsen für 1 Jahr: 1000&nbsp;€ : 100 · 1,2 = 12&nbsp;€<br>Zinsen für 1 Tag: 12&nbsp;€ : 365 ≈ 0,0329&nbsp;€<br>Zinsen für 50 Tage: 0,0329&nbsp;€ · 50 ≈ <strong>1,64&nbsp;€</strong></div><p style='font-size:13px;color:#555;margin-top:8px;'>💡 <strong>Zinstage zählen:</strong> Der Tag der Einzahlung zählt mit, der Tag der Auszahlung nicht.</p>"}];
+
+const _inIframe=window.self!==window.top;
+let serverSyncDone=!_inIframe;
+let done=_inIframe?new Set():new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
+let cur=null;
+</script>
+<script src="/lerntheken/lerntheke.js?v=15"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "id": 18,
+  "title": "Kapital und Zinssatz berechnen",
+  "sort_order": 6,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [7],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Auch r&uuml;ckw&auml;rts rechnen</div><p style='font-size:14px;line-height:1.8;margin:0;'>Kennt ihr die Zinsen und den Zinssatz, findet ihr das Kapital: K = Z&nbsp;:&nbsp;p%&nbsp;&middot;&nbsp;100.<br>Kennt ihr die Zinsen und das Kapital, findet ihr den Zinssatz: p% = Z&nbsp;:&nbsp;K&nbsp;&middot;&nbsp;100.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe a) &ndash; Kapital gesucht</div><p style='font-size:14px;margin:0 0 8px 0;'>Die Klassenkasse bekommt nach einem Jahr <strong>8&nbsp;&euro; Zinsen</strong> bei einem Zinssatz von <strong>2&nbsp;%</strong>. Wie hoch war das angelegte Kapital?</p><input class='cell-input' data-ans='400' placeholder='Wie viele €?'></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Aufgabe b) &ndash; Zinssatz gesucht</div><p style='font-size:14px;margin:0 0 8px 0;'>Die Klassenkasse legt <strong>250&nbsp;&euro;</strong> an und bekommt nach einem Jahr <strong>7,50&nbsp;&euro; Zinsen</strong>. Wie hoch ist der Zinssatz?</p><input class='cell-input' data-ans='3' placeholder='Wie viel %?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(18)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(18)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-18'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>a) 8&nbsp;&euro; : 2 = 4&nbsp;&euro; (1&nbsp;%) &middot; 100 = <strong>400&nbsp;&euro;</strong> Kapital<br>b) 7,50&nbsp;&euro; : 250 = 0,03 = <strong>3&nbsp;%</strong> Zinssatz</div>"
+}

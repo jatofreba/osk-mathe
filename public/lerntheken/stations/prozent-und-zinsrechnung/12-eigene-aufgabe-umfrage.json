@@ -1,0 +1,14 @@
+{
+  "id": 12,
+  "title": "Eigene Aufgabe",
+  "sort_order": 7,
+  "abgabe": true,
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [4],
+  "hasSol": false,
+  "task_html": "<div class='task-block task-blue'><div class='task-block-label'>Entwerft eure eigene Umfrage</div><div style='display:flex;justify-content:center;'><svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg' style='width:140px;display:block;margin:8px auto;'><path d='M 60 60 L 60.00 8.00 A 52 52 0 0 1 76.07 109.45 Z' fill='#2563eb'/><path d='M 60 60 L 76.07 109.45 A 52 52 0 0 1 10.55 43.93 Z' fill='#d97706'/><path d='M 60 60 L 10.55 43.93 A 52 52 0 0 1 60.00 8.00 Z' fill='#6d28d9'/><circle cx='60' cy='60' r='52' fill='none' stroke='#1C1B1F' stroke-width='1.5'/><text x='60' y='66' text-anchor='middle' font-size='22' fill='#ffffff' font-weight='bold'>?</text></svg></div><p style='font-size:14px;line-height:1.8;margin:0 0 10px;'>Denkt euch eine eigene Umfrage rund um eure Klassenfahrt-Kasse aus &ndash; zum Beispiel &bdquo;Welches Essen w&uuml;nscht ihr euch unterwegs?&ldquo; oder &bdquo;Wof&uuml;r soll die Kasse noch gespart werden?&ldquo;</p><div style='background:#dbeafe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;margin-bottom:12px;'><strong>So geht ihr vor:</strong><br>&bull; Formuliert eine Frage mit mindestens 3 Antwortm&ouml;glichkeiten.<br>&bull; Befragt eure Klasse oder Lerngruppe.<br>&bull; Zeichnet ein Streifen- oder Kreisdiagramm mit den Ergebnissen in Prozent.<br>&bull; Schreibt dazu, wie viele Personen befragt wurden und wie ihr die Prozentzahlen berechnet habt.</div><p style='font-size:13px;line-height:1.7;margin:0;'>Reicht euer Diagramm mit den Rechnungen bei der Lernbegleitung ein.</p></div>",
+  "sol_html": null
+}

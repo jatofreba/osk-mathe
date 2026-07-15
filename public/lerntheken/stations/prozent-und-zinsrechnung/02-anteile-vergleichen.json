@@ -1,0 +1,12 @@
+{
+  "id": 2,
+  "title": "Anteile vergleichen",
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [1],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-orange'><div class='task-block-label'>Drei Schreibweisen f&uuml;r denselben Anteil</div><p style='font-size:14px;line-height:1.7;margin:0;'>Einen Anteil kann man als <strong>Bruch</strong>, als <strong>Dezimalzahl</strong> oder als <strong>Prozentzahl</strong> schreiben &ndash; es ist immer derselbe Wert. Die H&auml;lfte der Kasse ist zum Beispiel 1/2 = 0,5 = 50&nbsp;%.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe &ndash; Tabelle erg&auml;nzen</div><div class='tbl-wrap'><table><thead><tr><th style='background:#d95f2b;'>Bruch</th><th style='background:#d95f2b;'>Dezimalzahl</th><th style='background:#d95f2b;'>Prozentzahl</th></tr></thead><tbody><tr><td class='row-label'>1/2</td><td><input class='cell-input' data-ans='0.5' placeholder='?'></td><td><input class='cell-input' data-ans='50' placeholder='?'></td></tr><tr><td class='row-label'>1/4</td><td><input class='cell-input' data-ans='0.25' placeholder='?'></td><td><input class='cell-input' data-ans='25' placeholder='?'></td></tr></tbody></table></div></div><div class='check-bar'><button class='btn-check' onclick='checkStation(2)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(2)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-2'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>1/2 = <strong>0,5</strong> = <strong>50&nbsp;%</strong><br>1/4 = <strong>0,25</strong> = <strong>25&nbsp;%</strong></div>"
+}

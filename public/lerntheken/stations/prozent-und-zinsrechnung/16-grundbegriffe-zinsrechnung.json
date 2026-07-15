@@ -1,0 +1,13 @@
+{
+  "id": 16,
+  "title": "Grundbegriffe der Zinsrechnung",
+  "sort_order": 4,
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [6, 7],
+  "hasSol": true,
+  "task_html": "<a href='https://studyflix.de/mathematik/zinsrechnung-2849' target='_blank' class='video-link-card' style='margin-bottom:16px;'><div class='video-link-icon'>&#x25B6;</div><div class='video-link-text'><div class='video-link-title'>Zinsrechnung – die Grundlagen</div><div class='video-link-sub'>studyflix.de &middot; Erkl&auml;rvideo</div></div><div class='video-link-arrow'>&#x2197;</div></a><div class='task-block task-green'><div class='task-block-label'>Die Klassenkasse wird angelegt</div><p style='font-size:14px;line-height:1.8;margin:0;'>Die Zinsrechnung ist eine Prozentrechnung mit eigenen Namen: <strong>Kapital (K)</strong> statt Grundwert, <strong>Zinsen (Z)</strong> statt Prozentwert, <strong>Zinssatz (p%)</strong> statt Prozentsatz. Formel: Z = K &middot; p% / 100.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe &ndash; jeweils die fehlende Gr&ouml;&szlig;e berechnen</div><div class='tbl-wrap'><table><thead><tr><th style='background:#16a34a;'>Kapital (&euro;)</th><th style='background:#16a34a;'>Zinssatz (%)</th><th style='background:#16a34a;'>Zinsen (&euro;)</th></tr></thead><tbody><tr><td class='row-label'>250</td><td class='row-label'>4</td><td><input class='cell-input' data-ans='10' placeholder='?'></td></tr><tr><td><input class='cell-input' data-ans='300' placeholder='?'></td><td class='row-label'>2</td><td class='row-label'>6</td></tr><tr><td class='row-label'>180</td><td><input class='cell-input' data-ans='5' placeholder='?'></td><td class='row-label'>9</td></tr></tbody></table></div></div><div class='check-bar'><button class='btn-check' onclick='checkStation(16)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(16)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-16'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>Zeile 1: 250&nbsp;&euro; : 100 = 2,50&nbsp;&euro; (1&nbsp;%) &middot; 4 = <strong>10&nbsp;&euro;</strong> Zinsen<br>Zeile 2: 6&nbsp;&euro; : 2 = 3&nbsp;&euro; (1&nbsp;%) &middot; 100 = <strong>300&nbsp;&euro;</strong> Kapital<br>Zeile 3: 9&nbsp;&euro; : 180 = 0,05 = <strong>5&nbsp;%</strong> Zinssatz</div>"
+}

@@ -1,0 +1,12 @@
+{
+  "id": 3,
+  "title": "Rabatt verstehen",
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [1, 5],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-orange'><div class='task-block-label'>Rabatt f&uuml;r die Klassenkasse</div><p style='font-size:14px;line-height:1.7;margin:0;'><strong>Rabatt</strong> bedeutet: Ihr bezahlt weniger als den normalen Preis. 10&nbsp;% Rabatt heisst: Ihr spart 10 von 100 Teilen des Preises. Tipp: 10&nbsp;% von einer Zahl bekommt ihr, wenn ihr die Zahl durch 10 teilt.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe</div><p style='font-size:14px;line-height:1.7;margin:0 0 10px 0;'>F&uuml;r die Klassenfahrt kauft ihr Sonnencreme f&uuml;r <strong>15&nbsp;&euro;</strong>. Ihr bekommt <strong>10&nbsp;% Rabatt</strong>.</p><div class='tbl-wrap'><table><thead><tr><th style='background:#d95f2b;'>Ersparnis (&euro;)</th><th style='background:#d95f2b;'>Neuer Preis (&euro;)</th></tr></thead><tbody><tr><td><input class='cell-input' data-ans='1.5' placeholder='?'></td><td><input class='cell-input' data-ans='13.5' placeholder='?'></td></tr></tbody></table></div></div><div class='check-bar'><button class='btn-check' onclick='checkStation(3)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(3)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-3'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>15&nbsp;&euro; : 10 = <strong>1,50&nbsp;&euro;</strong> Ersparnis (10&nbsp;%).<br>15&nbsp;&euro; &minus; 1,50&nbsp;&euro; = <strong>13,50&nbsp;&euro;</strong> neuer Preis.</div>"
+}

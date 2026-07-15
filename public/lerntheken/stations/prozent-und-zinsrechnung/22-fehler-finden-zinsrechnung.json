@@ -1,0 +1,13 @@
+{
+  "id": 22,
+  "title": "Fehler finden: Zinsrechnung kritisch prüfen",
+  "sort_order": 3,
+  "group": "Abflug",
+  "gc": "#7c3aed",
+  "gbg": "#f5f3ff",
+  "gbr": "#ddd6fe",
+  "hilfen": [7],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Kassenwart Nemo rechnet nach</div><p style='font-size:14px;line-height:1.7;margin:0 0 10px 0;'>Die Klassenkasse hat nach einem Jahr <strong>78,40&nbsp;&euro; Zinsen</strong> bekommen, bei einem Zinssatz von <strong>8&nbsp;%</strong>. Kassenwart Nemo will wissen, wie hoch das urspr&uuml;ngliche Kapital war, und rechnet so:</p><div class='task-block task-orange'><div class='task-block-label'>Nemos Rechnung</div><p style='font-size:13px;line-height:1.9;margin:0;font-family:monospace;'>Z = 78,40&nbsp;&euro;<br>p% = 8&nbsp;%<br>K = Z : p% &middot; 100<br>K = 78,40 : 0,08 &middot; 100<br>K = <strong>98&nbsp;000&nbsp;&euro;</strong></p></div></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Deine Einsch&auml;tzung</div><p style='font-size:14px;margin:0 0 8px 0;'>Kann die Klassenkasse wirklich 98&nbsp;000&nbsp;&euro; gehabt haben? Was hat Nemo falsch gemacht?</p><textarea rows='2' placeholder='Das kann nicht stimmen, weil ...' style='width:100%;border:1.5px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;'></textarea></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Rechne richtig</div><p style='font-size:14px;margin:0 0 8px 0;'>Berechne das tats&auml;chliche Kapital.</p><input class='cell-input' data-ans='980' placeholder='Wie viele €?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(22)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(22)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-22'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>Nemo hat den Zinssatz falsch eingesetzt: 8&nbsp;% muss als <strong>8</strong> in die Formel, nicht als 0,08 (das w&auml;re 0,08&nbsp;%). Richtig: K = 78,40&nbsp;&euro; : 8 &middot; 100 = <strong>980&nbsp;&euro;</strong>.</div>"
+}
