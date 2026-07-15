@@ -1,6 +1,7 @@
 {
   "id": 1,
   "title": "Was ist ein Prozent?",
+  "sort_order": 1,
   "group": "Pflicht",
   "gc": "#d95f2b",
   "gbg": "#fff7f4",

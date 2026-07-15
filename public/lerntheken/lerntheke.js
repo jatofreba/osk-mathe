@@ -71,6 +71,8 @@ function enhanceInputs() {
     if (!input.getAttribute('aria-label') && !input.closest('label')) {
       input.setAttribute('aria-label', 'Antwort eingeben');
     }
+    // Prevent browser autofill from suggesting values typed into other stations' inputs
+    input.setAttribute('autocomplete', 'off');
   });
 }
 

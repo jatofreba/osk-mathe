@@ -1,6 +1,7 @@
 {
   "id": 2,
   "title": "Anteile vergleichen",
+  "sort_order": 3,
   "group": "Pflicht",
   "gc": "#d95f2b",
   "gbg": "#fff7f4",
