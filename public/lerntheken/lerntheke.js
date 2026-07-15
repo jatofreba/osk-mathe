@@ -34,7 +34,9 @@ function enhanceInputs() {
         const input = cell.querySelector('.cell-input');
         if (!input || cell.querySelector('.cell-unit-wrap')) return;
         const unit = headers[colIdx] || '';
-        if (!unit) return;
+        const unitText = unit.replace(/\s*\(.*\)/, '').trim();
+        // Skip if header is empty or purely numeric (x-value, not a unit)
+        if (!unitText || /^[+\-−–]?\d/.test(unitText)) return;
 
         // Wrap input + add unit badge
         const wrap = document.createElement('div');
@@ -43,7 +45,7 @@ function enhanceInputs() {
         wrap.appendChild(input);
         const badge = document.createElement('span');
         badge.className = 'cell-unit-badge';
-        badge.textContent = unit.replace(/\s*\(.*\)/, '');
+        badge.textContent = unitText;
         wrap.appendChild(badge);
       });
     });
