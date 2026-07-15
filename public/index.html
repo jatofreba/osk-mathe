@@ -544,10 +544,17 @@ textarea.form-input{
 }
 .access-btn.locked{background:#fef2f2;color:#b3261e;border-color:#fecaca;}
 .access-btn.open{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}
-/* ── Picker: abgeschlossen + gesperrt ────────────────────────────────────────── */
-.lt-card.lt-done{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
+/* ── Picker: Rarity-Tier-Ränder (Common → Uncommon → Rare → Epic) ─────────── */
+.lt-card.lt-tier-1{border:2px solid #9ca3af;background:linear-gradient(135deg,#f9fafb,#fff);}
+.lt-card.lt-tier-2{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
+.lt-card.lt-tier-3{border:2px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);}
+.lt-card.lt-tier-4{border:2px solid #7c3aed;background:linear-gradient(135deg,#f5f3ff,#fff);}
 .lt-card.lt-locked{opacity:.55;pointer-events:none;filter:grayscale(.4);}
-.lt-done-banner{background:#16a34a;color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
+.lt-tier-banner{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;color:#fff;}
+.lt-tier-banner.t1{background:#9ca3af;}
+.lt-tier-banner.t2{background:#16a34a;}
+.lt-tier-banner.t3{background:#2563eb;}
+.lt-tier-banner.t4{background:#7c3aed;}
 .lt-locked-banner{background:#f3f4f6;color:#6b7280;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
 /* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
 .lt-active-btn{
@@ -1048,12 +1055,17 @@ async function showPicker() {
       return '';
     }).join('');
 
-    // Abgeschlossen: alle LZK-Typen der Lerntheke bestanden (nur vorhandene Gruppen)
-    const lzkTypen = Object.keys(lt.groups || {}).filter(g => g === 'Basis' || g === 'Aufbau');
-    const ltAbgeschlossen = lzkTypen.length > 0 && lzkTypen.every(typ => {
-      const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
-      return lzk && lzk.status === 'bestanden';
-    });
+    // Rarity-Tier: 1=Common(Pflicht), 2=Uncommon(Basis-LZK), 3=Rare(Aufbau-LZK), 4=Epic(Abflug)
+    const pflichtDone = groups['Pflicht'] && groups['Pflicht'].stationsOk;
+    const basisLzkOk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === 'Basis' && l.status === 'bestanden');
+    const aufbauLzkOk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === 'Aufbau' && l.status === 'bestanden');
+    const abflugDone = groups['Abflug'] && groups['Abflug'].stationsOk;
+    let tier = 0;
+    if (pflichtDone) tier = 1;
+    if (basisLzkOk) tier = 2;
+    if (aufbauLzkOk) tier = 3;
+    if (aufbauLzkOk && abflugDone) tier = 4;
+    const ltAbgeschlossen = tier >= 3;
 
     const trophyStr = earnedTrophies > 0
       ? `<span style="font-size:12px;font-weight:500;">🏆 ${earnedTrophies} / ${maxTrophies}</span>`
@@ -1065,14 +1077,16 @@ async function showPicker() {
       return `<span class="gpill gpill-${gKey}-${state}">${g}: ${st.stationsOk ? '✓' : st.done+'/'+st.req}</span>`;
     }).join('');
 
+    const tierBannerText = ['','','✓ Basis-LZK','✓ Aufbau-LZK','🎓 Abgeschlossen'];
     const banner = gesperrt
       ? `<div class="lt-locked-banner">🔒 Noch nicht freigeschaltet</div>`
-      : ltAbgeschlossen
-        ? `<div class="lt-done-banner">🎓 Abgeschlossen</div>`
+      : tier >= 2
+        ? `<div class="lt-tier-banner t${tier}">${tierBannerText[tier]}</div>`
         : '';
 
     const btnLabel = gesperrt ? '🔒 Gesperrt' : hasAny ? '→ Weiter' : '→ Starten';
-    const cardClass = `lt-card${gesperrt?' lt-locked':ltAbgeschlossen?' lt-done':''}`;
+    const _tierSuffix = gesperrt ? ' lt-locked' : tier > 0 ? ' lt-tier-' + tier : '';
+    const cardClass = 'lt-card' + _tierSuffix;
 
     const activeBtn = !gesperrt ? `<button class="lt-active-btn${isActive?' is-active':''}"
       onclick="event.stopPropagation();setActiveLerntheke('${lt.key}',this)">
