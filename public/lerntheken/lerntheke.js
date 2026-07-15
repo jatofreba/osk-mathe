@@ -189,8 +189,8 @@ function updProg(){
     const st=stats[g];
     steps+=Math.min(st.done,st.req); total+=st.req;
     if(g!=='Pflicht'){
-      if(st.abgabeOk)steps++;total++;
-      if(st.korOk&&st.abgabeOk)steps++;total++;
+      if(st.abgabeOk){steps++;total++;}
+      if(st.korOk&&st.abgabeOk){steps++;total++;}
       if(st.lzk){total++;if(st.lzkOk)steps++;}
     }
   });
@@ -398,6 +398,10 @@ async function showSt(id){
   saveInputs();
   cur=id;
   if(!CONTENT[id]) await _loadStation(id);
+  if(!CONTENT[id]){
+    document.getElementById('st-body').innerHTML='<p style="color:#dc2626;padding:16px;">Station konnte nicht geladen werden. Bitte Seite neu laden.</p>';
+    return;
+  }
   const m=META[id],c=CONTENT[id];
   const badge=document.getElementById('st-badge');
   badge.textContent=''; badge.style.display='none';
@@ -1095,7 +1099,7 @@ function toggleAbgabe(g,val){
   abgabeState[g]=val;
   const encoded=JSON.stringify(abgabeState);
   localStorage.setItem(ABGABE_KEY,encoded);
-  window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY,value:encoded},'*');
+  if(serverSyncDone) window.parent.postMessage({type:'SAVE_PROGRESS',key:ABGABE_KEY,value:encoded},'*');
   if(val && korrekturState[g] && korrekturState[g].status==='nicht_bestanden'){
     window.parent.postMessage({type:'RESET_KORREKTUR', gruppe:g, lerntheke:KEY}, '*');
     delete korrekturState[g];

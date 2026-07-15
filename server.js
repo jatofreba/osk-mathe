@@ -424,13 +424,13 @@ app.post('/api/admin/sync-stations/:lerntheke', requireAdmin, async (req, res) =
       } catch {}
     }
 
-    // Delete orphaned input entries (lerntheke_inputs_{stationId})
-    const inputPattern = `lerntheke_inputs_%`;
+    // Delete orphaned input entries (format: {ltKey}_i{stationId})
+    const inputPattern = `${ltKey}_i%`;
     const inputRows = await pool.query(
       `SELECT user_id, key FROM progress WHERE key LIKE $1`, [inputPattern]
     );
     for (const row of inputRows.rows) {
-      const stId = parseInt(row.key.replace('lerntheke_inputs_', ''), 10);
+      const stId = parseInt(row.key.replace(ltKey + '_i', ''), 10);
       if (!isNaN(stId) && !existingIds.has(stId)) {
         await pool.query(`DELETE FROM progress WHERE user_id=$1 AND key=$2`, [row.user_id, row.key]);
       }
@@ -549,7 +549,7 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
          FROM progress WHERE user_id=u.id) AS all_progress,
         (SELECT json_build_object('key', key, 'updated_at', updated_at)
          FROM progress WHERE user_id=u.id
-           AND key NOT LIKE 'lerntheke_inputs_%'
+           AND key NOT SIMILAR TO '%[_]i[0-9]+'
            AND key NOT LIKE '%_abgabe_%'
          ORDER BY updated_at DESC LIMIT 1) AS last_active_info,
         (SELECT json_agg(json_build_object('gruppe',gruppe,'status',status,'notiz',notiz,'lerntheke',lerntheke))

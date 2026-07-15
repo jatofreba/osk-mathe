@@ -830,7 +830,7 @@ function computeLtStats(lt, progVal, abgabeVal, kor, lzkRows) {
 // Compute per-lerntheke stats for one student
 function studentLtStats(s, lt) {
   const ap = buildAp(s, lt);
-  return computeLtStats(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur);
+  return computeLtStats(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur, s.lzk || []);
 }
 
 function korForLt(korrekturRaw, ltKey) {
@@ -1504,7 +1504,7 @@ function renderTable(students) {
 
     const groupCells = groupOrder.map(grp => {
       const st = g[grp] || { done:0, req:1, total:1, complete:false, stationsOk:false };
-      const pct = Math.min(100, Math.round(st.done / st.total * 100));
+      const pct = st.total > 0 ? Math.min(100, Math.round(st.done / st.total * 100)) : 0;
       const cls = st.complete ? 'gpill-ok' : st.stationsOk ? 'gpill-partial' : 'gpill-none';
       const lbl = st.complete ? '✓' : `${st.done}/${st.req}`;
       return `<td>
