@@ -359,10 +359,15 @@ function buildOverview(){
     const bReq=stats['Basis']?stats['Basis'].req:4;
     const aDone=stats['Aufbau']?stats['Aufbau'].done:0;
     const aReq=stats['Aufbau']?stats['Aufbau'].req:4;
+    const basisLzkOk=stats['Basis']&&stats['Basis'].lzkOk;
+    const aufbauLzkOk=stats['Aufbau']&&stats['Aufbau'].lzkOk;
     if(aufbauOk&&pflichtOk){
       lzkEl.className='lzk-status aufbau';
       const basisHint=basisOk?'':' · Basis: '+bDone+'/'+bReq;
       lzkEl.innerHTML='<span class="lzk-status-icon">🚀</span><div class="lzk-status-text"><strong>Bereit für die Aufbau-LZK!</strong>Pflicht ✓ · Aufbau-Stationen erledigt'+basisHint+'.</div>';
+    } else if(basisLzkOk){
+      lzkEl.className='lzk-status aufbau';
+      lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
     } else if(basisOk&&pflichtOk){
       lzkEl.className='lzk-status basis';
       lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
@@ -425,7 +430,7 @@ async function showSt(id){
   const db=document.getElementById('btn-done');
   db.className='btn-done'+(isDone?' active':'');
   db.textContent=isDone?'✓ Erledigt':'Als erledigt markieren';
-  const isCheckStation = (id === 0 || id === 1 || id === 3 || id === 4 || id === 5 || id === 8 || id === 9 || id === 10 || id === 11 || id === 12 || id === 13 || id === 14 || id === 15 || id === 16 || id === 17 || id === 18); // Stations with check-gate
+  const isCheckStation = !!(c.task_html && c.task_html.indexOf('cell-input') !== -1) && !m.abgabe && !m.solLocked; // check-gate: has checkable inputs, isn't an open submission, isn't manually-gated
   // Hide manual done-button for check stations
   document.getElementById('btn-done').style.display = isCheckStation ? 'none' : '';
   let body=`<div class="panel"><div class="panel-lbl">Aufgabe</div>${c.task_html}</div>`;
@@ -434,7 +439,7 @@ async function showSt(id){
       // If already done: show solution immediately, hide lock
       const lockDisplay  = isDone ? 'display:none' : '';
       const wrapDisplay  = isDone ? ''             : 'display:none';
-      body+=`<div class="sol-lock" id='${id===0?'sol-lock-einheiten-l':id===1?'sol-lock-einheiten-f':id===2?'sol-lock-einheiten-v':id===3?'sol-lock-fa':id===4?'sol-lock-pizza':id===5?'sol-lock-ring':id===6?'sol-lock-reifen':id===7?'sol-lock-sportplatz':id===12?'sol-lock-minipizza':id===8?'sol-lock-kreisaus':id===9?'sol-lock-flugzeug':id===10?'sol-lock-sonnensystem':id===11?'sol-lock-geraet':id===13?'sol-lock-frisbee':id===15?'sol-lock-tunnel':id===16?'sol-lock-london':'sol-lock-rep'}' style="${lockDisplay}">🔒 Lösung wird nach 75% richtiger Antworten freigeschaltet.</div>`;
+      body+=`<div class="sol-lock" id='sol-lock-${id}' style="${lockDisplay}">🔒 Lösung wird nach 75% richtiger Antworten freigeschaltet.</div>`;
       body+=`<div class="sol-wrap" style="${wrapDisplay}"><button class="btn-reveal" onclick="toggleSol(this)">🔍 Lösung anzeigen</button><div class="panel sol-panel"><div class="panel-lbl">Lösung</div>${c.sol_html}</div></div>`;
     } else if(m.solLocked && !isDone){
       body+=`<div class="sol-lock">🔒 Markiere die Station als erledigt, um die Lösung zu sehen.</div>`;
