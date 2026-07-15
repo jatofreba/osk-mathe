@@ -23,9 +23,9 @@
       "bg": "#f0fdf4",
       "border": "#bbf7d0",
       "required": 4,
-      "total": 7,
+      "total": 8,
       "emoji": "🟢",
-      "desc": "Zinsrechnung – 4 von 7 wählen"
+      "desc": "Zinsrechnung – 4 von 8 wählen"
     },
     "Abflug": {
       "color": "#7c3aed",
@@ -38,7 +38,7 @@
     }
   },
   "groupOrder": ["Pflicht", "Basis", "Aufbau", "Abflug"],
-  "total": 23,
+  "total": 24,
   "hilfen": [
     {
       "title": "Prozent, Bruch, Dezimalzahl",
