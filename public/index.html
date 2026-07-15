@@ -1103,8 +1103,16 @@ async function startLerntheke(url) {
             } catch {}
           }
         }
-        const isEmpty = !v || v === '[]' || v === '{}';
         const existing = frame.contentWindow.localStorage.getItem(k);
+        try {
+          const dbArr = JSON.parse(v || '[]');
+          const localArr = JSON.parse(existing || '[]');
+          if (Array.isArray(dbArr) && Array.isArray(localArr)) {
+            frame.contentWindow.localStorage.setItem(k, JSON.stringify([...new Set([...dbArr, ...localArr])]));
+            return;
+          }
+        } catch {}
+        const isEmpty = !v || v === '[]' || v === '{}';
         const existingEmpty = !existing || existing === '[]' || existing === '{}';
         if (!isEmpty || existingEmpty) frame.contentWindow.localStorage.setItem(k, v);
       });
@@ -1227,9 +1235,17 @@ async function syncProgressToFrame() {
           } catch {}
         }
       }
-      // For other keys: don't overwrite non-empty localStorage with empty server value
-      const isEmpty = !v || v === '[]' || v === '{}';
+      // For progress arrays: take union of DB + local (preserves locally-saved progress on session expiry)
       const existing = frame.contentWindow.localStorage.getItem(k);
+      try {
+        const dbArr = JSON.parse(v || '[]');
+        const localArr = JSON.parse(existing || '[]');
+        if (Array.isArray(dbArr) && Array.isArray(localArr)) {
+          frame.contentWindow.localStorage.setItem(k, JSON.stringify([...new Set([...dbArr, ...localArr])]));
+          return;
+        }
+      } catch {}
+      const isEmpty = !v || v === '[]' || v === '{}';
       const existingEmpty = !existing || existing === '[]' || existing === '{}';
       if (!isEmpty || existingEmpty) {
         frame.contentWindow.localStorage.setItem(k, v);
