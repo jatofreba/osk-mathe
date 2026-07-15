@@ -23,22 +23,22 @@
       "bg": "#f0fdf4",
       "border": "#bbf7d0",
       "required": 4,
-      "total": 8,
+      "total": 9,
       "emoji": "🟢",
-      "desc": "Zinsrechnung – 4 von 8 wählen"
+      "desc": "Zinsrechnung – 4 von 9 wählen"
     },
     "Abflug": {
       "color": "#7c3aed",
       "bg": "#f5f3ff",
       "border": "#ddd6fe",
       "required": 1,
-      "total": 3,
+      "total": 4,
       "emoji": "🟣",
-      "desc": "Knobeln & Entdecken – 1 von 3 wählen"
+      "desc": "Knobeln & Entdecken – 1 von 4 wählen"
     }
   },
   "groupOrder": ["Pflicht", "Basis", "Aufbau", "Abflug"],
-  "total": 24,
+  "total": 26,
   "hilfen": [
     {
       "title": "Prozent, Bruch, Dezimalzahl",
@@ -75,6 +75,10 @@
     {
       "title": "%-Wert berechnen",
       "html": "<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Den Prozentwert (%-Wert) berechnen</h3><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Der <strong>Prozentwert (W)</strong> ist der Teil vom Ganzen – zum Beispiel, wie viele Euro Rabatt ihr bekommt. Gegeben sind Grundwert (G) und Prozentsatz (p%).</p></div><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>① Grundwert = 100&nbsp;%<br>② Grundwert : 100 = Wert für 1&nbsp;%<br>③ Wert für 1&nbsp;% · gesuchte Prozentzahl = Prozentwert (W)</div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> Ein Zelt kostet 60&nbsp;€, ihr bekommt 15&nbsp;% Rabatt.</p><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.9;'>① 60&nbsp;€ = 100&nbsp;%<br>② 60&nbsp;€ : 100 = 0,60&nbsp;€ (1&nbsp;%)<br>③ 0,60&nbsp;€ · 15 = <strong>9&nbsp;€</strong> Rabatt</div><div style='text-align:center;font-size:15px;font-weight:700;margin:12px 0 4px 0;'>W = G · p% / 100</div><p style='font-size:13px;color:#555;'>💡 <strong>G</strong> ist das Ganze (100&nbsp;%), <strong>p%</strong> der gesuchte Anteil in Prozent – das Ergebnis <strong>W</strong> ist der Anteil in Euro (oder einer anderen Einheit).</p>"
+    },
+    {
+      "title": "Zinseszins",
+      "html": "<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Zinseszins</h3><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Bei <strong>einfachen Zinsen</strong> bekommt ihr jedes Jahr Zinsen nur vom urspr&uuml;nglichen Kapital. Bleiben die Zinsen auf dem Konto, z&auml;hlen sie im n&auml;chsten Jahr <strong>mit zum Kapital</strong> &ndash; ihr bekommt dann auch Zinsen auf die Zinsen. Das nennt man <strong>Zinseszins</strong>.</p></div><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>① Zinsen f&uuml;r dieses Jahr berechnen: Kapital : 100 · Zinssatz<br>② Neues Kapital = altes Kapital + Zinsen<br>③ F&uuml;r das n&auml;chste Jahr: wieder bei ① anfangen &ndash; aber mit dem NEUEN Kapital</div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> 500&nbsp;€ zu 4&nbsp;% Zinsen, 2 Jahre lang.</p><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.9;'>Jahr 1: 500&nbsp;€ : 100 · 4 = 20&nbsp;€ Zinsen &rarr; neues Kapital 520&nbsp;€<br>Jahr 2: 520&nbsp;€ : 100 · 4 = 20,80&nbsp;€ Zinsen &rarr; neues Kapital <strong>540,80&nbsp;€</strong></div><p style='font-size:13px;color:#555;'>💡 In Jahr 2 sind es schon mehr Zinsen als in Jahr 1 (20,80&nbsp;€ statt 20&nbsp;€) &ndash; weil das Kapital gewachsen ist. Je l&auml;nger das Geld liegen bleibt, desto st&auml;rker wird dieser Effekt.</p>"
     }
   ]
 }
