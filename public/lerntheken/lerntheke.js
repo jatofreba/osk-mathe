@@ -519,8 +519,16 @@ function showH(idx){
 function parseVal(str) {
   if (!str) return NaN;
   let s = str.trim().replace(/,/g, '.').replace(/\s+/g, '').replace(/[a-zA-Zäöü²³]+$/, '');
-  const frac = s.match(/^([+-]?\d+(?:\.\d+)?)\/([+-]?\d+(?:\.\d+)?)$/);
-  if (frac) return parseFloat(frac[1]) / parseFloat(frac[2]);
+  // Allow simple arithmetic expressions (e.g. "5/6*100", "80:100·25", "1/4") - strict allow-list
+  // of digits/operators only, evaluated safely (never letters, brackets can't escape the expression).
+  // ":" and "·" are accepted alongside "/" and "*" since that's the notation taught in the stations.
+  if (/\d/.test(s) && /^[\d+\-*/:·().]+$/.test(s)) {
+    try {
+      const expr = s.replace(/:/g, '/').replace(/·/g, '*');
+      const result = Function('"use strict";return(' + expr + ')')();
+      if (typeof result === 'number' && isFinite(result)) return result;
+    } catch (e) {}
+  }
   return parseFloat(s);
 }
 function approxEq(a, b) {
