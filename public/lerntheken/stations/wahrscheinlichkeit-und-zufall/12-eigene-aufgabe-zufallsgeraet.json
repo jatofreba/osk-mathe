@@ -1,0 +1,14 @@
+{
+  "id": 12,
+  "title": "Eigene Aufgabe",
+  "sort_order": 7,
+  "abgabe": true,
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [3, 6],
+  "hasSol": false,
+  "task_html": "<div class='task-block task-blue'><div class='task-block-label'>Erfindet euren eigenen Schulfest-Stand</div><div style='display:flex;justify-content:center;'><svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg' style='width:140px;display:block;margin:8px auto;'><path d='M 60 60 L 60.00 8.00 A 52 52 0 0 1 90.56 102.07 Z' fill='#2563eb'/><path d='M 60 60 L 90.56 102.07 A 52 52 0 0 1 10.55 76.07 Z' fill='#d97706'/><path d='M 60 60 L 10.55 76.07 A 52 52 0 0 1 60.00 8.00 Z' fill='#6d28d9'/><circle cx='60' cy='60' r='52' fill='none' stroke='#1C1B1F' stroke-width='1.5'/><text x='60' y='66' text-anchor='middle' font-size='22' fill='#ffffff' font-weight='bold'>?</text></svg></div><p style='font-size:14px;line-height:1.8;margin:0 0 10px;'>Denkt euch ein eigenes Zufallsger&auml;t f&uuml;r einen Schulfest-Stand aus (z.&nbsp;B. ein Gl&uuml;cksrad, ein Lostopf oder ein W&uuml;rfelspiel mit eigenen Regeln).</p><div style='background:#dbeafe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;margin-bottom:12px;'><strong>So geht ihr vor:</strong><br>&bull; Legt fest, wie euer Zufallsger&auml;t aufgebaut ist (wie viele Felder/Lose/Kugeln, welche Farben oder Zahlen).<br>&bull; Formuliert mindestens zwei Ereignisse und berechnet ihre Wahrscheinlichkeiten.<br>&bull; Entscheidet: Ist euer Spiel fair? Begr&uuml;ndet mit euren Rechnungen.<br>&bull; Gebt Bruch, Dezimalzahl und Prozentzahl f&uuml;r mindestens eine Wahrscheinlichkeit an.</div><p style='font-size:13px;line-height:1.7;margin:0;'>Reicht eure Aufgabe mit L&ouml;sung bei der Lernbegleitung ein.</p></div>",
+  "sol_html": null
+}

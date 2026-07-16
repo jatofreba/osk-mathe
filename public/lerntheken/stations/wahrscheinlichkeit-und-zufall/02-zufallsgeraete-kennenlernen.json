@@ -1,0 +1,13 @@
+{
+  "id": 2,
+  "title": "Zufallsgeräte kennenlernen",
+  "sort_order": 3,
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [1],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-orange'><div class='task-block-label'>Zufallsgeräte am Schulfest</div><p style='font-size:14px;line-height:1.7;margin:0;'>Ein <strong>Zufallsger&auml;t</strong> ist ein Gegenstand, mit dem ihr ein Zufallsexperiment durchf&uuml;hrt: W&uuml;rfel, M&uuml;nze, Gl&uuml;cksrad oder eine <strong>Urne</strong> (ein Gef&auml;&szlig; mit Losen oder Kugeln, aus dem man zieht).</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe a) &ndash; Der Lostopf</div><p style='font-size:14px;margin:0 0 8px 0;'>F&uuml;r den Lostopf-Stand habt ihr <strong>5 rote</strong> und <strong>7 blaue</strong> Lose vorbereitet. Wie viele Lose sind insgesamt im Topf?</p><input class='cell-input' data-ans='12' placeholder='Wie viele Lose?'></div><div class='task-block task-green' style='margin-top:12px;'><div class='task-block-label'>Aufgabe b) &ndash; Das Glücksrad</div><p style='font-size:14px;margin:0 0 8px 0;'>Euer Gl&uuml;cksrad hat <strong>8 gleich gro&szlig;e Felder</strong>, davon sind <strong>3 gr&uuml;n</strong>. Wie viele Felder sind <strong>nicht</strong> gr&uuml;n?</p><input class='cell-input' data-ans='5' placeholder='Wie viele Felder?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(2)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(2)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-2'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>a) 5 + 7 = <strong>12 Lose</strong><br>b) 8 &minus; 3 = <strong>5 Felder</strong> sind nicht gr&uuml;n</div>"
+}

@@ -1,0 +1,13 @@
+{
+  "id": 0,
+  "title": "Ein Schulfest voller Zufall",
+  "sort_order": 1,
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [1],
+  "hasSol": false,
+  "task_html": "<div class='task-block task-orange'><div class='task-block-label'>Eure Klasse baut Stände fürs Schulfest</div><p style='font-size:14px;line-height:1.7;margin:0;'>Eine <strong>W&uuml;rfelbude</strong>, ein <strong>M&uuml;nzwurf-Spiel</strong>, ein <strong>Gl&uuml;cksrad</strong> und ein <strong>Lostopf</strong> &ndash; bei jedem Stand entscheidet der Zufall, wer gewinnt. Damit alle Spiele fair sind, m&uuml;sst ihr verstehen, wie Zufall funktioniert.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Deine Ideen</div><p style='font-size:14px;margin:0 0 8px 0;'>Nenne drei Situationen aus deinem Alltag, bei denen der Zufall eine Rolle spielt.</p><textarea rows='3' placeholder='z.B. Beim Würfelspiel ...' style='width:100%;border:1.5px solid var(--outline-var);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;box-sizing:border-box;'></textarea></div>",
+  "sol_html": null
+}

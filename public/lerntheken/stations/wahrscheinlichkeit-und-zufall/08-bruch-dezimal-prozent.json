@@ -1,0 +1,13 @@
+{
+  "id": 8,
+  "title": "Wahrscheinlichkeit als Bruch, Dezimalzahl und Prozent",
+  "sort_order": 3,
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [4],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-blue'><div class='task-block-label'>Drei Schreibweisen für dieselbe Wahrscheinlichkeit</div><p style='font-size:14px;line-height:1.7;margin:0;'>Genau wie beim Rabatt k&ouml;nnt ihr eine Wahrscheinlichkeit als <strong>Bruch</strong>, <strong>Dezimalzahl</strong> oder <strong>Prozentzahl</strong> angeben &ndash; es ist immer derselbe Wert.</p></div><div class='task-block task-orange' style='margin-top:12px;'><div class='task-block-label'>Aufgabe &ndash; Der Lostopf</div><p style='font-size:14px;margin:0 0 10px 0;'>Im Lostopf ist die Wahrscheinlichkeit f&uuml;r einen Gewinn P(Gewinn) = 1/4, f&uuml;r eine Niete P(Niete) = 3/4. Erg&auml;nzt die Tabelle.</p><div class='tbl-wrap'><table><thead><tr><th style='background:#2563eb;'>Bruch</th><th style='background:#2563eb;'>Dezimalzahl</th><th style='background:#2563eb;'>Prozentzahl</th></tr></thead><tbody><tr><td class='row-label'>1/4 (Gewinn)</td><td><input class='cell-input' data-ans='0.25' placeholder='?'></td><td><input class='cell-input' data-ans='25' placeholder='?'></td></tr><tr><td class='row-label'>3/4 (Niete)</td><td><input class='cell-input' data-ans='0.75' placeholder='?'></td><td><input class='cell-input' data-ans='75' placeholder='?'></td></tr></tbody></table></div></div><div class='check-bar'><button class='btn-check' onclick='checkStation(8)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(8)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-8'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>1/4 = <strong>0,25</strong> = <strong>25&nbsp;%</strong><br>3/4 = <strong>0,75</strong> = <strong>75&nbsp;%</strong></div>"
+}

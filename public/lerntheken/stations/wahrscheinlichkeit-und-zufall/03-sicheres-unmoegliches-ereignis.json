@@ -1,0 +1,13 @@
+{
+  "id": 3,
+  "title": "Sicheres und unmögliches Ereignis",
+  "sort_order": 4,
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [2],
+  "hasSol": true,
+  "task_html": "<div class='task-block task-orange'><div class='task-block-label'>Immer, nie oder manchmal?</div><p style='font-size:14px;line-height:1.7;margin:0;'>Ein <strong>sicheres Ereignis</strong> tritt immer ein. Ein <strong>unm&ouml;gliches Ereignis</strong> tritt nie ein. Dazwischen liegt das <strong>zuf&auml;llige Ereignis</strong> &ndash; es kann eintreten, muss aber nicht.</p></div><div class='task-block task-blue' style='margin-top:12px;'><div class='task-block-label'>Aufgabe</div><p style='font-size:14px;margin:0 0 10px 0;'>An der W&uuml;rfelbude wird mit einem normalen W&uuml;rfel gew&uuml;rfelt (Zahlen 1 bis 6).</p><table style='width:100%;border-collapse:collapse;font-size:14px;'><tr><td style='padding:8px 4px;'>Wie viele der 6 Seiten zeigen eine Zahl gr&ouml;&szlig;er als 6?</td><td style='padding:8px 4px;width:100px;'><input class='cell-input' data-ans='0' placeholder='?'></td></tr><tr><td style='padding:8px 4px;'>Wie viele der 6 Seiten zeigen eine Zahl zwischen 1 und 6?</td><td style='padding:8px 4px;'><input class='cell-input' data-ans='6' placeholder='?'></td></tr><tr><td style='padding:8px 4px;'>Wie viele der 6 Seiten zeigen genau die Zahl 3?</td><td style='padding:8px 4px;'><input class='cell-input' data-ans='1' placeholder='?'></td></tr></table></div><div class='check-bar'><button class='btn-check' onclick='checkStation(3)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(3)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-3'></span></div>",
+  "sol_html": "<div style='font-size:14px;line-height:1.8;'>Zahl gr&ouml;&szlig;er als 6: <strong>0</strong> Seiten &ndash; das ist ein <strong>unm&ouml;gliches Ereignis</strong>.<br>Zahl zwischen 1 und 6: <strong>6</strong> Seiten (alle) &ndash; das ist ein <strong>sicheres Ereignis</strong>.<br>Genau die Zahl 3: <strong>1</strong> Seite &ndash; das ist ein <strong>zuf&auml;lliges Ereignis</strong>.</div>"
+}

@@ -1,0 +1,14 @@
+{
+  "id": 17,
+  "title": "Eigene Aufgabe",
+  "sort_order": 5,
+  "abgabe": true,
+  "group": "Abflug",
+  "gc": "#7c3aed",
+  "gbg": "#f5f3ff",
+  "gbr": "#ddd6fe",
+  "hilfen": [7, 8],
+  "hasSol": false,
+  "task_html": "<div class='task-block task-green'><div class='task-block-label'>Führt euer eigenes Zufallsexperiment durch</div><div style='display:flex;justify-content:center;'><svg viewBox='0 0 120 100' xmlns='http://www.w3.org/2000/svg' style='width:160px;display:block;'><rect x='10' y='20' width='100' height='60' rx='10' fill='#f5f3ff' stroke='#ddd6fe' stroke-width='2'/><circle cx='40' cy='50' r='14' fill='#7c3aed'/><text x='40' y='55' text-anchor='middle' font-size='14' fill='#ffffff' font-weight='bold'>?</text><rect x='66' y='38' width='36' height='8' rx='4' fill='#ddd6fe'/><rect x='66' y='54' width='24' height='8' rx='4' fill='#ddd6fe'/></svg></div><p style='font-size:14px;line-height:1.8;margin:0 0 10px;'>Denkt euch ein eigenes Zufallsexperiment aus, das <strong>kein</strong> Laplace-Versuch ist (z.&nbsp;B. ein unsymmetrischer Gegenstand, den ihr werft oder fallen lasst).</p><div style='background:#ede9fe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;margin-bottom:12px;'><strong>So geht ihr vor:</strong><br>&bull; Beschreibt euer Zufallsger&auml;t und die m&ouml;glichen Ergebnisse.<br>&bull; F&uuml;hrt das Experiment mindestens 20-mal durch und notiert die absolute H&auml;ufigkeit jedes Ergebnisses.<br>&bull; Berechnet die relative H&auml;ufigkeit als Bruch, Dezimalzahl und Prozentzahl.<br>&bull; Erkl&auml;rt, warum man die Wahrscheinlichkeit hier nicht einfach berechnen kann.</div><p style='font-size:13px;line-height:1.7;margin:0;'>Reicht eure Ergebnisse bei der Lernbegleitung ein.</p></div>",
+  "sol_html": null
+}
