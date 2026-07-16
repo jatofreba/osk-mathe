@@ -545,6 +545,22 @@ textarea.form-input{
 .lt-locked-banner{background:#f3f4f6;color:#6b7280;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
 /* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
 .lt-last-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;}
+/* ── Trophy summary & Leaderboard ───────────────────────────────────────────── */
+.trophy-section{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start;}
+@media(max-width:680px){.trophy-section{grid-template-columns:1fr;}}
+.trophy-panel{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.trophy-panel-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink2);margin-bottom:12px;}
+.trophy-track{height:12px;background:#f1f5f9;border-radius:99px;overflow:hidden;margin:8px 0 4px;position:relative;}
+.trophy-fill{height:100%;border-radius:99px;transition:width .6s ease;}
+.trophy-milestones{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:2px;padding:0 1px;}
+.lb-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;}
+.lb-row:last-child{border-bottom:none;}
+.lb-row.lb-me{background:#fefce8;border-radius:6px;padding:5px 6px;margin:0 -6px;}
+.lb-rank{font-size:12px;font-weight:700;width:22px;text-align:center;flex-shrink:0;}
+.lb-name{flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lb-val{font-size:12px;color:var(--ink2);flex-shrink:0;}
+.lb-mini-bar{width:60px;height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden;flex-shrink:0;}
+.lb-mini-fill{height:100%;border-radius:99px;}
 .lt-active-btn-UNUSED{
   width:100%;margin-top:8px;padding:6px 0;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
   border:1px solid var(--md-outline-variant);background:var(--md-surface);color:var(--md-on-surface-variant);cursor:pointer;
@@ -612,7 +628,7 @@ textarea.form-input{
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Lerntheken</h2>
       <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Lerntheke du arbeiten möchtest.</p>
       <div class="picker-grid" id="picker-cards"></div>
-      <div id="picker-trophy-summary" style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-top:24px;"></div>
+      <div id="picker-trophy-summary" style="margin-top:24px;"></div>
     </div>
   </div>
 
@@ -986,22 +1002,62 @@ async function showPicker() {
     });
   });
 
-  // Trophy summary header
+  // Trophy summary + leaderboard
   const trophySummary = document.getElementById('picker-trophy-summary');
   if (trophySummary) {
     const pct = totalMax ? Math.round(totalEarned / totalMax * 100) : 0;
-    const trophyIcons = [1,2,3].map(i => {
-      const filled = totalEarned >= Math.ceil(totalMax * i / 3);
-      return `<span style="font-size:22px;${filled?'':'filter:grayscale(1);opacity:.2;'}">🏆</span>`;
-    }).join('');
-    trophySummary.innerHTML = `
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <div style="display:flex;gap:4px;">${trophyIcons}</div>
-        <div>
-          <div style="font-size:16px;font-weight:600;">${totalEarned} von ${totalMax} Pokalen gesammelt</div>
-          <div style="font-size:12px;color:var(--ink2);margin-top:2px;">${pct} % aller möglichen Pokale</div>
+    const fillColor = pct >= 67 ? '#f59e0b' : pct >= 33 ? '#3b82f6' : '#9ca3af';
+
+    let leaderboard = [];
+    try { const lr = await fetch('/api/leaderboard'); if (lr.ok) leaderboard = await lr.json(); } catch {}
+
+    // Sort for relative ranking (pokale/totalMax %) — same sort as server but with ratio
+    const lbRelative = [...leaderboard].sort((a, b) =>
+      (b.pokale / totalMax) - (a.pokale / totalMax) || b.pokale - a.pokale
+    );
+    const lbAbsolute = [...leaderboard]; // already sorted by pokale DESC from server
+
+    function rankIcon(i) { return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`; }
+
+    function renderLb(list, valFn, barFn) {
+      return list.map((s, i) => {
+        const isMe = s.username === me.username;
+        return `<div class="lb-row${isMe?' lb-me':''}">
+          <span class="lb-rank">${rankIcon(i)}</span>
+          <span class="lb-name">${isMe ? '<strong>'+s.username+'</strong>' : s.username}</span>
+          <div class="lb-mini-bar"><div class="lb-mini-fill" style="width:${barFn(s)}%;background:${barFn(s)>=67?'#f59e0b':barFn(s)>=33?'#3b82f6':'#9ca3af'};"></div></div>
+          <span class="lb-val">${valFn(s)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    trophySummary.innerHTML = `<div class="trophy-section">
+      <div class="trophy-panel">
+        <div class="trophy-panel-title">Meine Pokale</div>
+        <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
+        <div class="trophy-track">
+          <div class="trophy-fill" style="width:${pct}%;background:${fillColor};"></div>
         </div>
-      </div>`;
+        <div class="trophy-milestones">
+          <span>0</span><span>🥉 33%</span><span>🥈 67%</span><span>🥇 100%</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct} % aller möglichen Pokale</div>
+      </div>
+      <div class="trophy-panel">
+        <div class="trophy-panel-title">Rangliste – Quote</div>
+        ${renderLb(lbRelative,
+          s => Math.round(s.pokale / totalMax * 100) + ' %',
+          s => Math.min(100, Math.round(s.pokale / totalMax * 100))
+        )}
+      </div>
+      <div class="trophy-panel">
+        <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
+        ${renderLb(lbAbsolute,
+          s => '🏆 ' + s.pokale,
+          s => totalMax ? Math.min(100, Math.round(s.pokale / totalMax * 100)) : 0
+        )}
+      </div>
+    </div>`;
   }
 
   // Sort: active lerntheke first

@@ -725,6 +725,29 @@ app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
 // ── LZK ──────────────────────────────────────────────────────────────────────
 
 // Student: get own LZK entries
+app.get('/api/leaderboard', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT u.username,
+        COALESCE(SUM(l.pokale), 0)::int AS pokale,
+        COALESCE((
+          SELECT SUM(json_array_length(p.value::json))
+          FROM progress p
+          WHERE p.user_id = u.id
+            AND p.key NOT LIKE '%_abgabe_%'
+            AND p.key NOT SIMILAR TO '%[_]i[0-9]+'
+            AND p.value LIKE '[%'
+        ), 0)::int AS stations_done
+      FROM users u
+      LEFT JOIN lzk l ON l.user_id = u.id
+      WHERE u.role = 'student'
+      GROUP BY u.id, u.username
+      ORDER BY pokale DESC, stations_done DESC, u.username
+    `);
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/lzk', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
