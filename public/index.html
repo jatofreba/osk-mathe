@@ -544,6 +544,7 @@ textarea.form-input{
 .lt-tier-banner.t4{background:#7c3aed;}
 .lt-locked-banner{background:#f3f4f6;color:#6b7280;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
 /* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
+.lt-last-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;}
 .lt-active-btn-UNUSED{
   width:100%;margin-top:8px;padding:6px 0;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
   border:1px solid var(--md-outline-variant);background:var(--md-surface);color:var(--md-on-surface-variant);cursor:pointer;
@@ -1070,10 +1071,13 @@ async function showPicker() {
     const btnLabel = gesperrt ? '🔒 Gesperrt' : hasAny ? '→ Weiter' : '→ Starten';
     const _tierSuffix = gesperrt ? ' lt-locked' : tier > 0 ? ' lt-tier-' + tier : '';
     const cardClass = 'lt-card' + _tierSuffix;
+    const lastBadge = lt.key === activeLerntheke
+      ? `<span class="lt-last-badge">Zuletzt bearbeitet</span>`
+      : '';
 
     return `<div class="${cardClass}" onclick="${gesperrt?'':` startLerntheke('${lt.url}')`}">
       ${banner}
-      <div class="lt-card-title">${lt.title}</div>
+      <div class="lt-card-title">${lt.title}${lastBadge}</div>
       <div class="lt-card-groups">${badges}${lzkBadges}</div>
       <div>
         <div class="lt-progress-row"><span>${pct === 100 ? '✓ Abgeschlossen' : pct + ' % der Anforderungen'}</span><span>${pct} %</span></div>
