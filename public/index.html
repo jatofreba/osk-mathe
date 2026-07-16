@@ -544,7 +544,7 @@ textarea.form-input{
 .lt-tier-banner.t4{background:#7c3aed;}
 .lt-locked-banner{background:#f3f4f6;color:#6b7280;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;}
 /* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
-.lt-active-btn{
+.lt-active-btn-UNUSED{
   width:100%;margin-top:8px;padding:6px 0;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
   border:1px solid var(--md-outline-variant);background:var(--md-surface);color:var(--md-on-surface-variant);cursor:pointer;
 }
@@ -954,7 +954,7 @@ async function showPicker() {
   try { const kr = await fetch('/api/korrektur');         if (kr.ok) korData = await kr.json(); } catch {}
   try { const lr = await fetch('/api/lzk');               if (lr.ok) lzkRows = await lr.json(); } catch {}
   try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {}
-  try { const vr = await fetch('/api/active-lerntheke');  if (vr.ok) { const d = await vr.json(); activeLerntheke = d.lerntheke; } } catch {}
+  activeLerntheke = localStorage.getItem('_lastLt') || null;
 
   const container = document.getElementById('picker-cards');
   // Trophy helper (mirrors lerntheke.js trophyCount)
@@ -1016,8 +1016,6 @@ async function showPicker() {
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
     const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows);
     const hasAny = Object.values(groups).some(st => st.done > 0);
-    const isActive = lt.key === activeLerntheke;
-
     // Count trophies (stations + LZK pokale)
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
@@ -1073,11 +1071,6 @@ async function showPicker() {
     const _tierSuffix = gesperrt ? ' lt-locked' : tier > 0 ? ' lt-tier-' + tier : '';
     const cardClass = 'lt-card' + _tierSuffix;
 
-    const activeBtn = !gesperrt ? `<button class="lt-active-btn${isActive?' is-active':''}"
-      onclick="event.stopPropagation();setActiveLerntheke('${lt.key}',this)">
-      ${isActive ? '★ Aktiv' : '☆ Als aktiv markieren'}
-    </button>` : '';
-
     return `<div class="${cardClass}" onclick="${gesperrt?'':` startLerntheke('${lt.url}')`}">
       ${banner}
       <div class="lt-card-title">${lt.title}</div>
@@ -1087,7 +1080,6 @@ async function showPicker() {
         <div class="lt-bar"><div class="lt-bar-fill" style="width:${pct}%;background:${pct===100?'#16a34a':'var(--blue)'}"></div></div>
         <div style="margin-top:6px;">${trophyStr}</div>
       </div>
-      ${activeBtn}
       ${gesperrt ? '' : `<button class="btn-primary" onclick="event.stopPropagation();startLerntheke('${lt.url}')">${btnLabel}</button>`}
     </div>`;
   }).join('');
@@ -1098,6 +1090,8 @@ async function showPicker() {
 async function startLerntheke(url) {
   if (!url) { await loadLerntheken(); return; }
   showView('lerntheke');
+  const _ltForUrl = ltMeta.find(l => l.url === url);
+  if (_ltForUrl) localStorage.setItem('_lastLt', _ltForUrl.key);
   const frame = document.getElementById('lerntheke-frame');
   // Fetch progress in parallel with iframe load
   const progressPromise = fetch('/api/progress').then(r => r.ok ? r.json() : {}).catch(() => ({}));
@@ -1346,8 +1340,7 @@ async function autoMigrateLzk(students) {
     if (!s.lzk || !s.lzk.length) continue;
     const lai = s.last_active_info;
     const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
-    const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
-    const activeLt = studentActiveLt || lastLt || ltMeta[0];
+    const activeLt = lastLt || ltMeta[0];
     if (!activeLt) continue;
     for (const typ of ['Basis','Aufbau']) {
       const correct = s.lzk.find(l => l.lerntheke === activeLt.key && l.typ === typ);
@@ -1489,8 +1482,7 @@ function renderTable(students) {
       ? new Date(lai.updated_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
       : '–';
     const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
-    const studentActiveLt = s.active_lerntheke ? ltMeta.find(l => l.key === s.active_lerntheke) : null;
-    const activeLtKey = (studentActiveLt || lastLt || ltMeta[0] || {}).key || (lt||{}).key;
+    const activeLtKey = (lastLt || ltMeta[0] || {}).key || (lt||{}).key;
     const kor = korForLt(s.korrektur, activeLtKey);
 
     // Per-lerntheke group stats
@@ -1538,9 +1530,9 @@ function renderTable(students) {
       </div>`;
     }).join('');
 
-    const activeLt = studentActiveLt || lastLt || primaryLt;
+    const activeLt = lastLt || primaryLt;
     const ltCell = multiLt
-      ? `<td>${studentActiveLt ? `<span class="gpill" style="background:#EEF2FF;color:#3730A3;">★ ${studentActiveLt.title}</span>` : lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
+      ? `<td>${lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
       : '';
 
     const accessToggles = ltMeta.map(lti => {
@@ -1719,21 +1711,6 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
 }
 
 // ── Active Lerntheke (Student) ────────────────────────────────────────────────
-async function setActiveLerntheke(ltKey, btn) {
-  await fetch('/api/active-lerntheke', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ lerntheke: ltKey })
-  });
-  // Update all active buttons in picker
-  document.querySelectorAll('.lt-active-btn').forEach(b => {
-    b.classList.remove('is-active');
-    b.textContent = '☆ Als aktiv markieren';
-  });
-  btn.classList.add('is-active');
-  btn.textContent = '★ Aktiv';
-  // Move this card to the front
-  showPicker();
-}
 
 // ── Access Toggle ─────────────────────────────────────────────────────────────
 async function toggleAccess(userId, lerntheke, gesperrt, btn) {
