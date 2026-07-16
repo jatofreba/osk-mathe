@@ -552,6 +552,8 @@ textarea.form-input{
 .trophy-panel-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink2);margin-bottom:12px;}
 .trophy-track{height:12px;background:#f1f5f9;border-radius:99px;overflow:hidden;margin:8px 0 4px;position:relative;}
 .trophy-fill{height:100%;border-radius:99px;transition:width .6s ease;}
+@keyframes trophy-shine{0%{background-position:0% center}100%{background-position:200% center}}
+.trophy-fill.trophy-perfect{background:linear-gradient(90deg,#7c3aed,#a855f7,#f59e0b,#fbbf24,#7c3aed)!important;background-size:300% auto!important;animation:trophy-shine 2s linear infinite;}
 .trophy-milestones{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:2px;padding:0 1px;}
 .lb-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px;}
 .lb-row:last-child{border-bottom:none;}
@@ -1037,12 +1039,12 @@ async function showPicker() {
         <div class="trophy-panel-title">Meine Pokale</div>
         <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
         <div class="trophy-track">
-          <div class="trophy-fill" style="width:${pct}%;background:${fillColor};"></div>
+          <div class="trophy-fill${pct>=100?' trophy-perfect':''}" style="width:${Math.min(100,pct)}%;background:${fillColor};"></div>
         </div>
         <div class="trophy-milestones">
           <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
         </div>
-        <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct} % aller möglichen Pokale</div>
+        <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
       </div>
       <div class="trophy-panel">
         <div class="trophy-panel-title">Rangliste – Quote</div>
