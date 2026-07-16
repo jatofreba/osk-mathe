@@ -760,10 +760,11 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       return 1;
     }
 
-    const [usersRes, progRes, lzkRes] = await Promise.all([
-      pool.query(`SELECT id, username FROM users WHERE role='student'`),
+    const [usersRes, progRes, lzkRes, accessRes] = await Promise.all([
+      pool.query(`SELECT id, username, kurs FROM users WHERE role='student'`),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
       pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
+      pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
     ]);
 
     const progByUser = {};
@@ -776,24 +777,40 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       if (!lzkByUser[row.user_id]) lzkByUser[row.user_id] = [];
       lzkByUser[row.user_id].push(row);
     });
+    // access lookup: userId → { ltKey → { gesperrt, kurs } }
+    const accessByUser = {};
+    accessRes.rows.forEach(row => {
+      if (!accessByUser[row.user_id]) accessByUser[row.user_id] = {};
+      accessByUser[row.user_id][row.lerntheke] = { gesperrt: row.gesperrt, kurs: row.kurs };
+    });
 
     const rows = usersRes.rows.map(u => {
-      let pokale = 0;
+      let pokale = 0, ownMax = 0;
       const uProg = progByUser[u.id] || {};
+      const uAccess = accessByUser[u.id] || {};
+      const globalKurs = u.kurs || 'E';
       allMeta.forEach(lt => {
+        const acc = uAccess[lt.key];
+        if (!acc || acc.gesperrt !== false) return; // gesperrt oder kein Eintrag → nicht zählen
         const lu = ltLookup[lt.key];
         if (!lu) return;
+        const kurs = acc.kurs || globalKurs;
         const doneIds = uProg[lt.key] || [];
         const doneCounts = {};
         doneIds.forEach(id => { const g = lu.stMap[id]; if (g) doneCounts[g] = (doneCounts[g] || 0) + 1; });
         Object.entries(lu.groups).forEach(([g, grp]) => {
-          if (grp.total > 0) pokale += tc(doneCounts[g] || 0, grp.required, grp.total);
+          if (kurs === 'G' && g === 'Aufbau') return;
+          if (grp.total > 0) { pokale += tc(doneCounts[g] || 0, grp.required, grp.total); ownMax += 3; }
+        });
+        ['Basis','Aufbau'].forEach(typ => {
+          if (kurs === 'G' && typ === 'Aufbau') return;
+          if (lu.groups[typ]) ownMax += 3;
         });
         (lzkByUser[u.id] || []).forEach(lzk => {
           if (lzk.lerntheke === lt.key) pokale += lzk.pokale || 0;
         });
       });
-      return { username: u.username, pokale };
+      return { username: u.username, pokale, ownMax };
     });
 
     rows.sort((a, b) => b.pokale - a.pokale || a.username.localeCompare(b.username));

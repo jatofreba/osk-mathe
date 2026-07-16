@@ -1067,16 +1067,16 @@ async function showPicker() {
       <div class="trophy-panel">
         <div class="trophy-panel-title">Rangliste – Quote</div>
         <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller insgesamt für dich erreichbaren Pokale</div>
-        ${renderLb(lbRows,
-          s => Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) + ' %',
-          s => Math.round(s.pokale / lbGlobalMax * 100)
+        ${renderLb([...lbRows].sort((a,b) => (b.ownMax?b.pokale/b.ownMax:0)-(a.ownMax?a.pokale/a.ownMax:0)),
+          s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) + ' %' : '–',
+          s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : 0
         )}
       </div>
       <div class="trophy-panel">
         <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
         ${renderLb(lbRows,
           s => '🏆 ' + s.pokale,
-          s => lbGlobalMax ? Math.round(s.pokale / lbGlobalMax * 100) : 0
+          s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
         )}
       </div>
     </div>`;
