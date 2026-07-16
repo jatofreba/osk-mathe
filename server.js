@@ -724,27 +724,68 @@ app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
 
 // ── LZK ──────────────────────────────────────────────────────────────────────
 
-// Student: get own LZK entries
 app.get('/api/leaderboard', requireLogin, async (req, res) => {
   try {
-    const r = await pool.query(`
-      SELECT u.username,
-        COALESCE(SUM(l.pokale), 0)::int AS pokale,
-        COALESCE((
-          SELECT SUM(json_array_length(p.value::json))
-          FROM progress p
-          WHERE p.user_id = u.id
-            AND p.key NOT LIKE '%_abgabe_%'
-            AND p.key NOT SIMILAR TO '%[_]i[0-9]+'
-            AND p.value LIKE '[%'
-        ), 0)::int AS stations_done
-      FROM users u
-      LEFT JOIN lzk l ON l.user_id = u.id
-      WHERE u.role = 'student'
-      GROUP BY u.id, u.username
-      ORDER BY pokale DESC, stations_done DESC, u.username
-    `);
-    res.json(r.rows);
+    const allMeta = getLerntheckenMeta();
+
+    // Station-ID → group lookup + group configs per lerntheke key
+    const ltLookup = {}; // key → { stMap:{id→group}, groups:{name→{required,total}} }
+    let globalMax = 0;
+    allMeta.forEach(lt => {
+      const stMap = {};
+      (lt.stations || []).forEach(s => { stMap[s.id] = s.group; });
+      ltLookup[lt.key] = { stMap, groups: lt.groups || {} };
+      Object.values(lt.groups || {}).forEach(grp => { if (grp.total > 0) globalMax += 3; });
+      ['Basis','Aufbau'].forEach(typ => { if (lt.groups && lt.groups[typ]) globalMax += 3; });
+    });
+
+    function tc(done, req, total) {
+      if (done < req || total <= 0) return 0;
+      const extra = total - req;
+      if (extra === 0) return 3;
+      if (done >= total) return 3;
+      if (done >= req + Math.ceil(extra / 3)) return 2;
+      return 1;
+    }
+
+    const [usersRes, progRes, lzkRes] = await Promise.all([
+      pool.query(`SELECT id, username FROM users WHERE role='student'`),
+      pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
+      pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
+    ]);
+
+    const progByUser = {};
+    progRes.rows.forEach(row => {
+      if (!progByUser[row.user_id]) progByUser[row.user_id] = {};
+      try { progByUser[row.user_id][row.key] = JSON.parse(row.value); } catch {}
+    });
+    const lzkByUser = {};
+    lzkRes.rows.forEach(row => {
+      if (!lzkByUser[row.user_id]) lzkByUser[row.user_id] = [];
+      lzkByUser[row.user_id].push(row);
+    });
+
+    const rows = usersRes.rows.map(u => {
+      let pokale = 0;
+      const uProg = progByUser[u.id] || {};
+      allMeta.forEach(lt => {
+        const lu = ltLookup[lt.key];
+        if (!lu) return;
+        const doneIds = uProg[lt.key] || [];
+        const doneCounts = {};
+        doneIds.forEach(id => { const g = lu.stMap[id]; if (g) doneCounts[g] = (doneCounts[g] || 0) + 1; });
+        Object.entries(lu.groups).forEach(([g, grp]) => {
+          if (grp.total > 0) pokale += tc(doneCounts[g] || 0, grp.required, grp.total);
+        });
+        (lzkByUser[u.id] || []).forEach(lzk => {
+          if (lzk.lerntheke === lt.key) pokale += lzk.pokale || 0;
+        });
+      });
+      return { username: u.username, pokale };
+    });
+
+    rows.sort((a, b) => b.pokale - a.pokale || a.username.localeCompare(b.username));
+    res.json({ rows, globalMax });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

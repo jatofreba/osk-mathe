@@ -1008,24 +1008,24 @@ async function showPicker() {
     const pct = totalMax ? Math.round(totalEarned / totalMax * 100) : 0;
     const fillColor = pct >= 67 ? '#f59e0b' : pct >= 33 ? '#3b82f6' : '#9ca3af';
 
-    let leaderboard = [];
-    try { const lr = await fetch('/api/leaderboard'); if (lr.ok) leaderboard = await lr.json(); } catch {}
-
-    // Sort for relative ranking (pokale/totalMax %) — same sort as server but with ratio
-    const lbRelative = [...leaderboard].sort((a, b) =>
-      (b.pokale / totalMax) - (a.pokale / totalMax) || b.pokale - a.pokale
-    );
-    const lbAbsolute = [...leaderboard]; // already sorted by pokale DESC from server
+    let lbRows = [], lbGlobalMax = totalMax;
+    try {
+      const lr = await fetch('/api/leaderboard');
+      if (lr.ok) { const d = await lr.json(); lbRows = d.rows || []; lbGlobalMax = d.globalMax || totalMax; }
+    } catch {}
 
     function rankIcon(i) { return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`; }
 
     function renderLb(list, valFn, barFn) {
       return list.map((s, i) => {
         const isMe = s.username === me.username;
+        const displayName = isMe ? `<strong>Du</strong>` : '–';
+        const bar = Math.min(100, barFn(s));
+        const barColor = bar >= 67 ? '#f59e0b' : bar >= 33 ? '#3b82f6' : '#9ca3af';
         return `<div class="lb-row${isMe?' lb-me':''}">
           <span class="lb-rank">${rankIcon(i)}</span>
-          <span class="lb-name">${isMe ? '<strong>'+s.username+'</strong>' : s.username}</span>
-          <div class="lb-mini-bar"><div class="lb-mini-fill" style="width:${barFn(s)}%;background:${barFn(s)>=67?'#f59e0b':barFn(s)>=33?'#3b82f6':'#9ca3af'};"></div></div>
+          <span class="lb-name">${displayName}</span>
+          <div class="lb-mini-bar"><div class="lb-mini-fill" style="width:${bar}%;background:${barColor};"></div></div>
           <span class="lb-val">${valFn(s)}</span>
         </div>`;
       }).join('');
@@ -1045,16 +1045,16 @@ async function showPicker() {
       </div>
       <div class="trophy-panel">
         <div class="trophy-panel-title">Rangliste – Quote</div>
-        ${renderLb(lbRelative,
-          s => Math.round(s.pokale / totalMax * 100) + ' %',
-          s => Math.min(100, Math.round(s.pokale / totalMax * 100))
+        ${renderLb(lbRows,
+          s => Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) + ' %',
+          s => Math.round(s.pokale / lbGlobalMax * 100)
         )}
       </div>
       <div class="trophy-panel">
         <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
-        ${renderLb(lbAbsolute,
+        ${renderLb(lbRows,
           s => '🏆 ' + s.pokale,
-          s => totalMax ? Math.min(100, Math.round(s.pokale / totalMax * 100)) : 0
+          s => lbGlobalMax ? Math.round(s.pokale / lbGlobalMax * 100) : 0
         )}
       </div>
     </div>`;
