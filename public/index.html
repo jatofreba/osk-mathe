@@ -1016,6 +1016,7 @@ async function showPicker() {
       totalMax += 3;
     });
     ['Basis','Aufbau'].forEach(typ => {
+      if (!lt.groups || !lt.groups[typ]) return;
       if (kurs === 'G' && typ === 'Aufbau') return;
       const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
       if (lzk) { totalEarned += lzk.pokale || 0; totalMax += 3; }
@@ -1106,6 +1107,7 @@ async function showPicker() {
       maxTrophies += 3;
     });
     const lzkBadges = ['Basis','Aufbau'].map(typ => {
+      if (!lt.groups || !lt.groups[typ]) return '';
       if (kurs === 'G' && typ === 'Aufbau') return '';
       const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
       if (!lzk) return '';

@@ -368,13 +368,14 @@ function buildOverview(){
     const aReq=stats['Aufbau']?stats['Aufbau'].req:4;
     const basisLzkOk=stats['Basis']&&stats['Basis'].lzkOk;
     const aufbauLzkOk=stats['Aufbau']&&stats['Aufbau'].lzkOk;
-    if(KURS==='G'){
+    const hasAufbau=!!GROUPS['Aufbau']; // manche Lerntheken (z.B. Wahrscheinlichkeit und Zufall) haben strukturell kein Aufbau
+    if(KURS==='G'||!hasAufbau){
       if(basisLzkOk){
         lzkEl.className='lzk-status aufbau';
-        lzkEl.innerHTML='<span class="lzk-status-icon">🏆</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Sehr gut – alles für den G-Kurs abgeschlossen.</div>';
+        lzkEl.innerHTML='<span class="lzk-status-icon">🏆</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Sehr gut – du hast alles für diesen Baustein geschafft!</div>';
       } else if(basisOk&&pflichtOk){
         lzkEl.className='lzk-status basis';
-        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Pflicht ✓ · Basis-Stationen erledigt.</div>';
+        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Vereinbare einen Termin für die Basis-LZK mit deiner Lehrkraft.</div>';
       } else {
         lzkEl.className='lzk-status neutral';
         lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+'.</div>';
