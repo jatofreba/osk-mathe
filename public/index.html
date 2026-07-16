@@ -531,6 +531,11 @@ textarea.form-input{
 }
 .access-btn.locked{background:#fef2f2;color:#b3261e;border-color:#fecaca;}
 .access-btn.open{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}
+.kurs-btn{padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;border:1px solid;cursor:pointer;transition:all .12s;}
+.kurs-e{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;}
+.kurs-g{background:#fef9c3;color:#854d0e;border-color:#fde68a;}
+.kurs-lt-btn{padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;border:1px solid;cursor:pointer;opacity:.7;}
+.kurs-lt-btn:hover{opacity:1;}
 /* ── Picker: Rarity-Tier-Ränder (Common → Uncommon → Rare → Epic) ─────────── */
 .lt-card.lt-tier-1{border:2px solid #9ca3af;background:linear-gradient(135deg,#f9fafb,#fff);}
 .lt-card.lt-tier-2{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
@@ -795,6 +800,10 @@ let resetId = null;
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
 let adminViewMode = 'groups'; // 'groups' | 'matrix'
+let accessData = {}; // filled in showPicker(); used globally for effectiveKurs
+function effectiveKurs(ltKey) {
+  return accessData['_kurs_' + ltKey] || accessData['_kursDefault'] || me?.kurs || 'E';
+}
 
 async function syncStations() {
   if (!ltMeta.length) return;
@@ -829,11 +838,13 @@ function buildAp(s, lt) {
   return ap;
 }
 
-function computeLtStats(lt, progVal, abgabeVal, kor, lzkRows) {
+function computeLtStats(lt, progVal, abgabeVal, kor, lzkRows, kurs) {
   if (!lt || !lt.groups) return { groups: {}, pct: 0, steps: 0, total: 0 };
+  kurs = kurs || 'E';
   const groups = parseGroupsForLt(lt, progVal, abgabeVal, kor || {});
   let steps = 0, total = 0;
   Object.entries(lt.groups).forEach(([g, grp]) => {
+    if (kurs === 'G' && g === 'Aufbau') return;
     const st = groups[g] || {};
     steps += Math.min(st.done || 0, grp.required); total += grp.required;
     if (g !== 'Pflicht') {
@@ -849,7 +860,8 @@ function computeLtStats(lt, progVal, abgabeVal, kor, lzkRows) {
 // Compute per-lerntheke stats for one student
 function studentLtStats(s, lt) {
   const ap = buildAp(s, lt);
-  return computeLtStats(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur, s.lzk || []);
+  const kurs = (s.access||[]).find(a => a.lerntheke === lt.key)?.kurs || s.kurs || 'E';
+  return computeLtStats(lt, ap[lt.key], ap[lt.abgabeKey], s.korrektur, s.lzk || [], kurs);
 }
 
 function korForLt(korrekturRaw, ltKey) {
@@ -968,11 +980,11 @@ async function showPicker() {
   if (!ltMeta.length) {
     try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
   }
-  let allProg = {}, korData = {}, lzkRows = [], accessData = {}, activeLerntheke = null;
+  let allProg = {}, korData = {}, lzkRows = [], activeLerntheke = null;
   try { const pr = await fetch('/api/progress');          if (pr.ok) allProg = await pr.json(); } catch {}
   try { const kr = await fetch('/api/korrektur');         if (kr.ok) korData = await kr.json(); } catch {}
   try { const lr = await fetch('/api/lzk');               if (lr.ok) lzkRows = await lr.json(); } catch {}
-  try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {}
+  try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {} // writes module-level accessData
   activeLerntheke = localStorage.getItem('_lastLt') || null;
 
   const container = document.getElementById('picker-cards');
@@ -987,18 +999,21 @@ async function showPicker() {
     return 1;
   }
 
-  // Compute total trophies — only for unlocked lerntheken
+  // Compute total trophies — only for unlocked lerntheken, respecting kurs
   let totalEarned = 0, totalMax = 0;
   ltMeta.forEach(lt => {
     if (accessData[lt.key] !== false) return; // gesperrt = nicht mitzählen
+    const kurs = effectiveKurs(lt.key);
     const pv = localStorage.getItem(lt.key) || allProg[lt.key];
-    const { groups } = computeLtStats(lt, pv, localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey], korData, lzkRows);
+    const { groups } = computeLtStats(lt, pv, localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey], korData, lzkRows, kurs);
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
+      if (kurs === 'G' && g === 'Aufbau') return;
       if (grp.total <= 0) return;
       totalEarned += _tc((groups[g] || {done:0}).done, grp.required, grp.total);
       totalMax += 3;
     });
     ['Basis','Aufbau'].forEach(typ => {
+      if (kurs === 'G' && typ === 'Aufbau') return;
       const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
       if (lzk) { totalEarned += lzk.pokale || 0; totalMax += 3; }
     });
@@ -1073,19 +1088,22 @@ async function showPicker() {
 
   container.innerHTML = sortedMeta.map(lt => {
     const gesperrt = accessData[lt.key] !== false;
+    const kurs = effectiveKurs(lt.key);
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
-    const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows);
+    const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows, kurs);
     const hasAny = Object.values(groups).some(st => st.done > 0);
     // Count trophies (stations + LZK pokale)
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
+      if (kurs === 'G' && g === 'Aufbau') return;
       if (grp.total <= 0) return;
       const st = groups[g] || { done: 0 };
       earnedTrophies += _tc(st.done, grp.required, grp.total);
       maxTrophies += 3;
     });
     const lzkBadges = ['Basis','Aufbau'].map(typ => {
+      if (kurs === 'G' && typ === 'Aufbau') return '';
       const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
       if (!lzk) return '';
       const pk = lzk.pokale || 0;
@@ -1188,6 +1206,7 @@ async function startLerntheke(url) {
         const existingEmpty = !existing || existing === '[]' || existing === '{}';
         if (!isEmpty || existingEmpty) frame.contentWindow.localStorage.setItem(k, v);
       });
+      frame.contentWindow.localStorage.setItem('_kurs', _ltForUrl ? effectiveKurs(_ltForUrl.key) : (me?.kurs || 'E'));
       frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
     } catch(e) { console.warn('[Sync] Progress sync failed:', e); }
   };
@@ -1323,6 +1342,9 @@ async function syncProgressToFrame() {
         frame.contentWindow.localStorage.setItem(k, v);
       }
     });
+    // Inject kurs for this lerntheke
+    const _frameLt = ltMeta.find(l => frame.src.includes(l.url.split('?')[0]));
+    frame.contentWindow.localStorage.setItem('_kurs', _frameLt ? effectiveKurs(_frameLt.key) : (me?.kurs || 'E'));
     // Signal iframe: server data is ready, unlock saves
     frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
     console.log('[Sync] Sent RELOAD_PROGRESS with keys:', Object.keys(data));
@@ -1599,17 +1621,32 @@ function renderTable(students) {
       ? `<td>${lastLt ? `<span class="gpill pill-blue">${lastLt.title}</span>` : '–'}</td>`
       : '';
 
+    const globalKurs = s.kurs || 'E';
     const accessToggles = ltMeta.map(lti => {
       const accessEntry = (s.access||[]).find(a => a.lerntheke === lti.key);
       const gesperrt = accessEntry ? accessEntry.gesperrt : true;
-      return `<button class="access-btn ${gesperrt?'locked':'open'}"
-        onclick="toggleAccess(${s.id},'${lti.key}',${!gesperrt},this)">
-        ${gesperrt?'🔒':'🔓'} ${lti.title.split(' ').slice(-1)[0]}
-      </button>`;
+      const ltKurs = accessEntry?.kurs || globalKurs;
+      const overrideClass = accessEntry?.kurs ? (ltKurs==='G'?'kurs-g':'kurs-e') : 'kurs-e';
+      const overrideStyle = accessEntry?.kurs ? '' : 'opacity:.4;';
+      const kursBtnHtml = !gesperrt
+        ? `<button class="kurs-lt-btn ${overrideClass}" style="${overrideStyle}"
+            title="Kurs für diese Lerntheke (überschreibt globalen Kurs)"
+            onclick="setKursLt(event,${s.id},'${lti.key}','${ltKurs==='G'?'E':'G'}',this,'${globalKurs}')">${ltKurs}</button>`
+        : '';
+      return `<span style="display:inline-flex;align-items:center;gap:2px;">
+        <button class="access-btn ${gesperrt?'locked':'open'}"
+          onclick="toggleAccess(${s.id},'${lti.key}',${!gesperrt},this)">
+          ${gesperrt?'🔒':'🔓'} ${lti.title.split(' ').slice(-1)[0]}
+        </button>${kursBtnHtml}</span>`;
     }).join('');
 
     return `<tr data-name="${s.username}">
-      <td style="font-weight:600;cursor:pointer;" onclick="openStudentSummary(${s.id},'${s.username}')">${s.username} <span style="color:var(--blue);font-size:11px;">↗</span></td>
+      <td style="font-weight:600;cursor:pointer;" onclick="openStudentSummary(${s.id},'${s.username}')">
+        ${s.username} <span style="color:var(--blue);font-size:11px;">↗</span>
+        <button class="kurs-btn ${globalKurs==='G'?'kurs-g':'kurs-e'}" style="margin-left:4px;"
+          title="Globaler Kurs – klicken zum Wechseln"
+          onclick="setKurs(event,${s.id},'${globalKurs==='G'?'E':'G'}',this)">${globalKurs}-Kurs</button>
+      </td>
       ${groupCells}
       <td>${abgaben}</td>
       <td>${korCell||'<span style="color:var(--ink2);font-size:12px;">–</span>'}</td>
@@ -1775,6 +1812,40 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
 }
 
 // ── Active Lerntheke (Student) ────────────────────────────────────────────────
+
+// ── Kurs-Buttons ──────────────────────────────────────────────────────────────
+async function setKurs(e, userId, newKurs, btn) {
+  e.stopPropagation();
+  const r = await fetch('/api/admin/set-kurs', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId, kurs: newKurs })
+  });
+  if (!r.ok) return;
+  const s = allStudents.find(st => st.id === userId);
+  if (s) s.kurs = newKurs;
+  btn.textContent = newKurs + '-Kurs';
+  btn.className = `kurs-btn ${newKurs==='G'?'kurs-g':'kurs-e'}`;
+  btn.onclick = e2 => setKurs(e2, userId, newKurs==='G'?'E':'G', btn);
+}
+
+async function setKursLt(e, userId, ltKey, newKurs, btn, globalKurs) {
+  e.stopPropagation();
+  const r = await fetch('/api/admin/set-kurs', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId, kurs: newKurs, lerntheke: ltKey })
+  });
+  if (!r.ok) return;
+  const s = allStudents.find(st => st.id === userId);
+  if (s) {
+    const acc = (s.access||[]).find(a => a.lerntheke === ltKey);
+    if (acc) acc.kurs = newKurs; else (s.access = s.access||[]).push({ lerntheke: ltKey, gesperrt: false, kurs: newKurs });
+  }
+  const isOverride = newKurs !== globalKurs;
+  btn.textContent = newKurs;
+  btn.className = `kurs-lt-btn ${newKurs==='G'?'kurs-g':'kurs-e'}`;
+  btn.style.opacity = isOverride ? '1' : '.4';
+  btn.onclick = e2 => setKursLt(e2, userId, ltKey, newKurs==='G'?'E':'G', btn, globalKurs);
+}
 
 // ── Access Toggle ─────────────────────────────────────────────────────────────
 async function toggleAccess(userId, lerntheke, gesperrt, btn) {

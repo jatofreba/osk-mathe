@@ -91,6 +91,16 @@ async function initDB() {
     );
     -- Migrate: add lerntheke column if missing, then fix unique constraint
     DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='kurs') THEN
+        ALTER TABLE users ADD COLUMN kurs VARCHAR(1) NOT NULL DEFAULT 'E';
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lerntheke_access' AND column_name='kurs') THEN
+        ALTER TABLE lerntheke_access ADD COLUMN kurs VARCHAR(1) DEFAULT NULL;
+      END IF;
+    END $$;
+    DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='korrektur' AND column_name='lerntheke') THEN
         ALTER TABLE korrektur ADD COLUMN lerntheke TEXT NOT NULL DEFAULT '';
       END IF;
@@ -242,11 +252,13 @@ app.post('/api/logout', (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (!req.session.userId) return res.json({ loggedIn: false });
+  const kr = await pool.query('SELECT kurs FROM users WHERE id=$1', [req.session.userId]).catch(() => ({ rows: [] }));
   res.json({
     loggedIn: true, userId: req.session.userId,
-    username: req.session.username, klasse: req.session.klasse, role: req.session.role
+    username: req.session.username, klasse: req.session.klasse, role: req.session.role,
+    kurs: kr.rows[0]?.kurs || 'E'
   });
 });
 
@@ -544,7 +556,7 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT
-        u.id, u.username, u.klasse, u.created_at,
+        u.id, u.username, u.klasse, u.created_at, u.kurs,
         (SELECT json_object_agg(key, value)
          FROM progress WHERE user_id=u.id) AS all_progress,
         (SELECT json_build_object('key', key, 'updated_at', updated_at)
@@ -556,7 +568,7 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
          FROM korrektur WHERE user_id=u.id) AS korrektur,
         (SELECT json_agg(json_build_object('typ',typ,'lerntheke',lerntheke,'datum',datum,'status',status,'pokale',pokale))
          FROM lzk WHERE user_id=u.id) AS lzk,
-        (SELECT json_agg(json_build_object('lerntheke',lerntheke,'gesperrt',gesperrt))
+        (SELECT json_agg(json_build_object('lerntheke',lerntheke,'gesperrt',gesperrt,'kurs',kurs))
          FROM lerntheke_access WHERE user_id=u.id) AS access,
         (SELECT lerntheke FROM active_lerntheke WHERE user_id=u.id) AS active_lerntheke
       FROM users u
@@ -902,10 +914,37 @@ app.post('/api/active-lerntheke', requireLogin, async (req, res) => {
 // ── Access check für Student ───────────────────────────────────────────────────
 app.get('/api/access', requireLogin, async (req, res) => {
   try {
-    const r = await pool.query('SELECT lerntheke, gesperrt FROM lerntheke_access WHERE user_id=$1', [req.session.userId]);
-    const out = {};
-    r.rows.forEach(row => { out[row.lerntheke] = row.gesperrt; });
+    const [accRes, userRes] = await Promise.all([
+      pool.query('SELECT lerntheke, gesperrt, kurs FROM lerntheke_access WHERE user_id=$1', [req.session.userId]),
+      pool.query('SELECT kurs FROM users WHERE id=$1', [req.session.userId]),
+    ]);
+    const globalKurs = userRes.rows[0]?.kurs || 'E';
+    const out = { _kursDefault: globalKurs };
+    accRes.rows.forEach(row => {
+      out[row.lerntheke] = row.gesperrt;
+      if (row.kurs) out['_kurs_' + row.lerntheke] = row.kurs;
+    });
     res.json(out);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Admin: Kurs setzen (global oder pro Lerntheke) ────────────────────────────
+app.post('/api/admin/set-kurs', requireAdmin, async (req, res) => {
+  try {
+    const { userId, kurs, lerntheke } = req.body;
+    if (!['E','G'].includes(kurs)) return res.status(400).json({ error: 'Ungültig' });
+    const u = await pool.query('SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role=$3', [userId, req.session.klasse, 'student']);
+    if (!u.rows.length) return res.status(403).json({ error: 'Nicht gefunden' });
+    if (lerntheke) {
+      await pool.query(`
+        INSERT INTO lerntheke_access (user_id, lerntheke, gesperrt, kurs)
+        VALUES ($1, $2, false, $3)
+        ON CONFLICT (user_id, lerntheke) DO UPDATE SET kurs=$3, updated_at=NOW()
+      `, [userId, lerntheke, kurs]);
+    } else {
+      await pool.query('UPDATE users SET kurs=$1 WHERE id=$2', [kurs, userId]);
+    }
+    res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 

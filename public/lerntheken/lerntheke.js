@@ -138,6 +138,10 @@ function save(){
 }
 
 
+// Kursstufe – gesetzt via _kurs in localStorage (injiziert vom Parent beim Sync)
+let KURS = 'E';
+function activeGroups() { return KURS === 'G' ? GROUP_ORDER.filter(g => g !== 'Aufbau') : GROUP_ORDER; }
+
 window.addEventListener('message', e => {
   if (!e.data) return;
   if (e.data.type === 'RELOAD_KORREKTUR') {
@@ -147,6 +151,7 @@ window.addEventListener('message', e => {
   }
 
   if (e.data.type !== 'RELOAD_PROGRESS') return;
+  KURS = localStorage.getItem('_kurs') || 'E';
   const stored = localStorage.getItem(KEY);
   if (stored) { try { done = new Set(JSON.parse(stored)); } catch {} }
   const storedAbgabe = localStorage.getItem(ABGABE_KEY);
@@ -165,7 +170,7 @@ window.addEventListener('message', e => {
 
 function groupStats(){
   const stats={};
-  GROUP_ORDER.forEach(g=>{
+  activeGroups().forEach(g=>{
     const all=META.filter(s=>s&&s.group===g);
     const doneCount=all.filter(s=>done.has(s.id)).length;
     const req=GROUPS[g].required;
@@ -185,7 +190,7 @@ function groupStats(){
 function updProg(){
   const stats=groupStats();
   let steps=0,total=0;
-  GROUP_ORDER.forEach(g=>{
+  activeGroups().forEach(g=>{
     const st=stats[g];
     steps+=Math.min(st.done,st.req); total+=st.req;
     if(g!=='Pflicht'){
@@ -211,7 +216,7 @@ function buildReqCards(stats){}
 function buildGrid(stats){
   const gridEl=document.getElementById('grid');
   if(!gridEl)return;
-  const groups=GROUP_ORDER.filter(g=>GROUPS[g]&&stats[g]&&stats[g].total>0);
+  const groups=activeGroups().filter(g=>GROUPS[g]&&stats[g]&&stats[g].total>0);
   if(!groups.length){gridEl.innerHTML='';return;}
 
   const trophyLegend=`<div class="trophy-legend">
@@ -363,19 +368,32 @@ function buildOverview(){
     const aReq=stats['Aufbau']?stats['Aufbau'].req:4;
     const basisLzkOk=stats['Basis']&&stats['Basis'].lzkOk;
     const aufbauLzkOk=stats['Aufbau']&&stats['Aufbau'].lzkOk;
-    if(aufbauOk&&pflichtOk){
-      lzkEl.className='lzk-status aufbau';
-      const basisHint=basisOk?'':' · Basis: '+bDone+'/'+bReq;
-      lzkEl.innerHTML='<span class="lzk-status-icon">🚀</span><div class="lzk-status-text"><strong>Bereit für die Aufbau-LZK!</strong>Pflicht ✓ · Aufbau-Stationen erledigt'+basisHint+'.</div>';
-    } else if(basisLzkOk){
-      lzkEl.className='lzk-status aufbau';
-      lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
-    } else if(basisOk&&pflichtOk){
-      lzkEl.className='lzk-status basis';
-      lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
+    if(KURS==='G'){
+      if(basisLzkOk){
+        lzkEl.className='lzk-status aufbau';
+        lzkEl.innerHTML='<span class="lzk-status-icon">🏆</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Sehr gut – alles für den G-Kurs abgeschlossen.</div>';
+      } else if(basisOk&&pflichtOk){
+        lzkEl.className='lzk-status basis';
+        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Pflicht ✓ · Basis-Stationen erledigt.</div>';
+      } else {
+        lzkEl.className='lzk-status neutral';
+        lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+'.</div>';
+      }
     } else {
-      lzkEl.className='lzk-status neutral';
-      lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+' Basis.</div>';
+      if(aufbauOk&&pflichtOk){
+        lzkEl.className='lzk-status aufbau';
+        const basisHint=basisOk?'':' · Basis: '+bDone+'/'+bReq;
+        lzkEl.innerHTML='<span class="lzk-status-icon">🚀</span><div class="lzk-status-text"><strong>Bereit für die Aufbau-LZK!</strong>Pflicht ✓ · Aufbau-Stationen erledigt'+basisHint+'.</div>';
+      } else if(basisLzkOk){
+        lzkEl.className='lzk-status aufbau';
+        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
+      } else if(basisOk&&pflichtOk){
+        lzkEl.className='lzk-status basis';
+        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
+      } else {
+        lzkEl.className='lzk-status neutral';
+        lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+' Basis.</div>';
+      }
     }
   }
   buildGrid(stats);
