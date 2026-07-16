@@ -430,7 +430,7 @@ textarea.form-input{
 
 /* ── Lerntheke Picker ────────────────────────────────────────────────────── */
 #view-picker{padding:32px 20px;background:var(--md-background);}
-.picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;max-width:960px;margin:0 auto;}
+.picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;max-width:960px;margin:0 auto;align-items:start;}
 .lt-card{
   background:var(--md-surface);
   border:1px solid var(--md-outline-variant);
@@ -544,6 +544,10 @@ textarea.form-input{
 .lt-card.lt-tier-3{border:2px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);}
 .lt-card.lt-tier-4{border:2px solid #7c3aed;background:linear-gradient(135deg,#f5f3ff,#fff);}
 .lt-card.lt-locked{opacity:.55;pointer-events:none;filter:grayscale(.4);}
+.lt-slim-group{display:flex;flex-direction:column;gap:7px;}
+.lt-card-slim{background:var(--md-surface);border:1px solid var(--md-outline-variant);border-radius:var(--md-r);padding:10px 14px;display:flex;align-items:center;gap:10px;opacity:.5;filter:grayscale(.3);box-shadow:var(--md-elevation-1);}
+.lt-slim-lock{font-size:15px;flex-shrink:0;}
+.lt-slim-name{font-size:14px;font-weight:500;letter-spacing:.15px;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lt-tier-banner{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:8px;color:#fff;}
 .lt-tier-banner.t1{background:#9ca3af;}
 .lt-tier-banner.t2{background:#16a34a;}
@@ -1083,21 +1087,22 @@ async function showPicker() {
     </div>`;
   }
 
-  // Sort: active lerntheke first
+  // Sort: active lerntheke first; split unlocked vs locked
   const sortedMeta = [...ltMeta].sort((a, b) => {
     if (a.key === activeLerntheke) return -1;
     if (b.key === activeLerntheke) return 1;
     return 0;
   });
+  const unlockedMeta = sortedMeta.filter(lt => accessData[lt.key] === false);
+  const lockedMeta   = sortedMeta.filter(lt => accessData[lt.key] !== false);
 
-  container.innerHTML = sortedMeta.map(lt => {
-    const gesperrt = accessData[lt.key] !== false;
+  // Full cards for unlocked lerntheken
+  const unlockedHtml = unlockedMeta.map(lt => {
     const kurs = effectiveKurs(lt.key);
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
     const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows, kurs);
     const hasAny = Object.values(groups).some(st => st.done > 0);
-    // Count trophies (stations + LZK pokale)
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
       if (kurs === 'G' && g === 'Aufbau') return;
@@ -1123,17 +1128,15 @@ async function showPicker() {
       return '';
     }).join('');
 
-    // Rarity-Tier: 1=Common(Pflicht), 2=Uncommon(Basis-LZK), 3=Rare(Aufbau-LZK), 4=Epic(Abflug)
     const pflichtDone = groups['Pflicht'] && groups['Pflicht'].stationsOk;
-    const basisLzkOk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === 'Basis' && l.status === 'bestanden');
+    const basisLzkOk  = lzkRows.find(l => l.lerntheke === lt.key && l.typ === 'Basis'  && l.status === 'bestanden');
     const aufbauLzkOk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === 'Aufbau' && l.status === 'bestanden');
-    const abflugDone = groups['Abflug'] && groups['Abflug'].stationsOk;
+    const abflugDone  = groups['Abflug'] && groups['Abflug'].stationsOk;
     let tier = 0;
-    if (pflichtDone) tier = 1;
-    if (basisLzkOk) tier = 2;
-    if (aufbauLzkOk) tier = 3;
+    if (pflichtDone)               tier = 1;
+    if (basisLzkOk)                tier = 2;
+    if (aufbauLzkOk)               tier = 3;
     if (aufbauLzkOk && abflugDone) tier = 4;
-    const ltAbgeschlossen = tier >= 3;
 
     const trophyStr = earnedTrophies > 0
       ? `<span style="font-size:12px;font-weight:500;">🏆 ${earnedTrophies} / ${maxTrophies}</span>`
@@ -1145,20 +1148,12 @@ async function showPicker() {
     }).join('');
 
     const tierBannerText = ['','','✓ Basis-LZK','✓ Aufbau-LZK','🎓 Abgeschlossen'];
-    const banner = gesperrt
-      ? `<div class="lt-locked-banner">🔒 Noch nicht freigeschaltet</div>`
-      : tier >= 2
-        ? `<div class="lt-tier-banner t${tier}">${tierBannerText[tier]}</div>`
-        : '';
+    const banner   = tier >= 2 ? `<div class="lt-tier-banner t${tier}">${tierBannerText[tier]}</div>` : '';
+    const cardClass = 'lt-card' + (tier > 0 ? ' lt-tier-' + tier : '');
+    const lastBadge = lt.key === activeLerntheke ? `<span class="lt-last-badge">Zuletzt bearbeitet</span>` : '';
+    const btnLabel  = hasAny ? '→ Weiter' : '→ Starten';
 
-    const btnLabel = gesperrt ? '🔒 Gesperrt' : hasAny ? '→ Weiter' : '→ Starten';
-    const _tierSuffix = gesperrt ? ' lt-locked' : tier > 0 ? ' lt-tier-' + tier : '';
-    const cardClass = 'lt-card' + _tierSuffix;
-    const lastBadge = lt.key === activeLerntheke
-      ? `<span class="lt-last-badge">Zuletzt bearbeitet</span>`
-      : '';
-
-    return `<div class="${cardClass}" onclick="${gesperrt?'':` startLerntheke('${lt.url}')`}">
+    return `<div class="${cardClass}" onclick="startLerntheke('${lt.url}')">
       ${banner}
       <div class="lt-card-title">${lt.title}${lastBadge}</div>
       <div class="lt-card-groups">${badges}${lzkBadges}</div>
@@ -1167,9 +1162,24 @@ async function showPicker() {
         <div class="lt-bar"><div class="lt-bar-fill" style="width:${pct}%;background:${pct===100?'#16a34a':'var(--blue)'}"></div></div>
         <div style="margin-top:6px;">${trophyStr}</div>
       </div>
-      ${gesperrt ? '' : `<button class="btn-primary" onclick="event.stopPropagation();startLerntheke('${lt.url}')">${btnLabel}</button>`}
+      <button class="btn-primary" onclick="event.stopPropagation();startLerntheke('${lt.url}')">${btnLabel}</button>
     </div>`;
   }).join('');
+
+  // Slim stacked cards for locked lerntheken — 3 per grid slot
+  let lockedHtml = '';
+  if (lockedMeta.length > 0) {
+    const lockedLabel = `<div style="grid-column:1/-1;margin-top:4px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--md-on-surface-variant);">Noch nicht freigeschaltet</div>`;
+    const lockedChunks = [];
+    for (let i = 0; i < lockedMeta.length; i += 3) lockedChunks.push(lockedMeta.slice(i, i + 3));
+    lockedHtml = lockedLabel + lockedChunks.map(chunk =>
+      `<div class="lt-slim-group">${chunk.map(lt =>
+        `<div class="lt-card-slim"><span class="lt-slim-lock">🔒</span><span class="lt-slim-name">${lt.title}</span></div>`
+      ).join('')}</div>`
+    ).join('');
+  }
+
+  container.innerHTML = unlockedHtml + lockedHtml;
 
   showView('picker');
 }
