@@ -1048,7 +1048,7 @@ async function showPicker() {
       </div>
       <div class="trophy-panel">
         <div class="trophy-panel-title">Rangliste – Quote</div>
-        <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller insgesamt erreichbaren Pokale</div>
+        <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller insgesamt für dich erreichbaren Pokale</div>
         ${renderLb(lbRows,
           s => Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) + ' %',
           s => Math.round(s.pokale / lbGlobalMax * 100)
