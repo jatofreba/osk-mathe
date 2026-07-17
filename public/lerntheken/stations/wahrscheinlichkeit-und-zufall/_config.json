@@ -23,13 +23,13 @@
       "bg": "#f5f3ff",
       "border": "#ddd6fe",
       "required": 1,
-      "total": 5,
+      "total": 4,
       "emoji": "🟣",
-      "desc": "Knobeln & Entdecken – 1 von 5 wählen"
+      "desc": "Knobeln & Entdecken – 1 von 4 wählen"
     }
   },
   "groupOrder": ["Pflicht", "Basis", "Abflug"],
-  "total": 18,
+  "total": 17,
   "hilfen": [
     {
       "title": "Zufallsexperiment & Zufallsgeräte",

@@ -156,7 +156,7 @@ async function syncAllStations() {
         groups[g].total = data.stations.filter(s => s.group === g).length;
       });
       let html = fs.readFileSync(htmlPath, 'utf8');
-      html = replaceJsConstant(html, 'TOTAL',   String(data.stations.length));
+      html = replaceJsConstant(html, 'TOTAL',   String(meta.length));
       html = replaceJsConstant(html, 'GROUPS',  JSON.stringify(groups));
       html = replaceJsConstant(html, 'META',    JSON.stringify(meta));
       html = replaceJsConstant(html, 'CONTENT', '[]');
