@@ -802,12 +802,11 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
           if (kurs === 'G' && g === 'Aufbau') return;
           if (grp.total > 0) { pokale += tc(doneCounts[g] || 0, grp.required, grp.total); ownMax += 3; }
         });
-        ['Basis','Aufbau'].forEach(typ => {
-          if (kurs === 'G' && typ === 'Aufbau') return;
-          if (lu.groups[typ]) ownMax += 3;
-        });
         (lzkByUser[u.id] || []).forEach(lzk => {
-          if (lzk.lerntheke === lt.key) pokale += lzk.pokale || 0;
+          if (lzk.lerntheke !== lt.key) return;
+          if (kurs === 'G' && lzk.typ === 'Aufbau') return;
+          pokale += lzk.pokale || 0;
+          if (lu.groups[lzk.typ]) ownMax += 3; // only count LZK max when entry exists (matches client)
         });
       });
       return { username: u.username, pokale, ownMax };
