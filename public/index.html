@@ -1116,8 +1116,10 @@ async function showPicker() {
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
     const { groups } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows, kurs);
     const hasAny = Object.values(groups).some(st => st.done > 0);
+    // Aufbau ausblenden, wenn der Kurs es nicht vorsieht - sonst zählen unerreichbare Stationen mit
+    const groupEntries = Object.entries(groups).filter(([g]) => !(kurs === 'G' && g === 'Aufbau'));
     let stationsDone = 0, stationsTotal = 0;
-    Object.values(groups).forEach(st => { stationsDone += st.done || 0; stationsTotal += st.total || 0; });
+    groupEntries.forEach(([, st]) => { stationsDone += st.done || 0; stationsTotal += st.total || 0; });
     const pct = stationsTotal ? Math.round(stationsDone / stationsTotal * 100) : 0;
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
@@ -1158,7 +1160,7 @@ async function showPicker() {
       ? `<span style="font-size:12px;font-weight:500;">🏆 ${earnedTrophies} / ${maxTrophies}</span>`
       : `<span style="font-size:12px;color:#aaa;">🏆 0 / ${maxTrophies}</span>`;
 
-    const badges = Object.entries(groups).map(([g, st]) => {
+    const badges = groupEntries.map(([g, st]) => {
       const cls = st.stationsOk ? 'gpill-ok' : st.done > 0 ? 'gpill-partial' : 'gpill-none';
       return `<span class="gpill ${cls}">${g}: ${st.stationsOk ? '✓' : st.done+'/'+st.req}</span>`;
     }).join('');
