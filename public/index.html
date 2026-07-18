@@ -558,6 +558,7 @@ textarea.form-input{
 .lt-last-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;}
 /* ── Trophy summary & Leaderboard ───────────────────────────────────────────── */
 .trophy-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;align-items:start;}
+.trophy-lb-col{display:flex;flex-direction:column;gap:16px;}
 @media(max-width:680px){.trophy-section{grid-template-columns:1fr;}}
 .trophy-panel{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
 .trophy-panel-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink2);margin-bottom:12px;}
@@ -1088,20 +1089,22 @@ async function showPicker() {
         </div>
         <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
       </div>
-      <div class="trophy-panel">
-        <div class="trophy-panel-title">Rangliste – Quote</div>
-        <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller insgesamt für dich erreichbaren Pokale</div>
-        ${renderLb([...lbRows].sort((a,b) => (b.ownMax?b.pokale/b.ownMax:0)-(a.ownMax?a.pokale/a.ownMax:0)),
-          s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) + ' %' : '–',
-          s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : 0
-        )}
-      </div>
-      <div class="trophy-panel">
-        <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
-        ${renderLb(lbRows,
-          s => '🏆 ' + s.pokale,
-          s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
-        )}
+      <div class="trophy-lb-col">
+        <div class="trophy-panel">
+          <div class="trophy-panel-title">Rangliste – Quote</div>
+          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller insgesamt für dich erreichbaren Pokale</div>
+          ${renderLb([...lbRows].sort((a,b) => (b.ownMax?b.pokale/b.ownMax:0)-(a.ownMax?a.pokale/a.ownMax:0)),
+            s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) + ' %' : '–',
+            s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : 0
+          )}
+        </div>
+        <div class="trophy-panel">
+          <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
+          ${renderLb(lbRows,
+            s => '🏆 ' + s.pokale,
+            s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
+          )}
+        </div>
       </div>
     </div>`;
   }
@@ -1111,8 +1114,11 @@ async function showPicker() {
     const kurs = effectiveKurs(lt.key);
     const progVal   = localStorage.getItem(lt.key)       || allProg[lt.key];
     const abgabeVal = localStorage.getItem(lt.abgabeKey) || allProg[lt.abgabeKey];
-    const { groups, pct } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows, kurs);
+    const { groups } = computeLtStats(lt, progVal, abgabeVal, korData, lzkRows, kurs);
     const hasAny = Object.values(groups).some(st => st.done > 0);
+    let stationsDone = 0, stationsTotal = 0;
+    Object.values(groups).forEach(st => { stationsDone += st.done || 0; stationsTotal += st.total || 0; });
+    const pct = stationsTotal ? Math.round(stationsDone / stationsTotal * 100) : 0;
     let earnedTrophies = 0, maxTrophies = 0;
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
       if (kurs === 'G' && g === 'Aufbau') return;
@@ -1168,7 +1174,7 @@ async function showPicker() {
       <div class="lt-card-title">${lt.title}${lastBadge}</div>
       <div class="lt-card-groups">${badges}${lzkBadges}</div>
       <div>
-        <div class="lt-progress-row"><span>${pct === 100 ? '✓ Abgeschlossen' : pct + ' % der Anforderungen'}</span><span>${pct} %</span></div>
+        <div class="lt-progress-row"><span>${pct} % der Stationen bearbeitet</span><span>${pct} %</span></div>
         <div class="lt-bar"><div class="lt-bar-fill" style="width:${pct}%;background:${pct===100?'#16a34a':'var(--blue)'}"></div></div>
         <div style="margin-top:6px;">${trophyStr}</div>
       </div>
