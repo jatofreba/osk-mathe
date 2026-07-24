@@ -174,7 +174,9 @@ function groupStats(){
     const all=META.filter(s=>s&&s.group===g);
     const doneCount=all.filter(s=>done.has(s.id)).length;
     const req=GROUPS[g].required;
-    const stationsOk=doneCount>=req;
+    const mandatory=all.filter(s=>s.mandatory);
+    const mandatoryDone=mandatory.filter(s=>done.has(s.id)).length;
+    const stationsOk=doneCount>=req&&mandatoryDone>=mandatory.length;
     const needsAbgabe=g!=='Pflicht';
     const abgabeOk=needsAbgabe?abgabeChecked(g):true;
     const korOk=needsAbgabe?((korrekturState[g]&&korrekturState[g].status)==='bestanden'):true;
@@ -182,7 +184,7 @@ function groupStats(){
     const lzkOk=lzk?(lzk.status==='bestanden'):false;
     const lzkPokale=lzk?(lzk.pokale||0):0;
     const complete=needsAbgabe?(stationsOk&&abgabeOk&&korOk&&lzkOk):(stationsOk);
-    stats[g]={done:doneCount,total:all.length,req,complete,stationsOk,abgabeOk,korOk,lzk,lzkOk,lzkPokale};
+    stats[g]={done:doneCount,total:all.length,req,complete,stationsOk,abgabeOk,korOk,lzk,lzkOk,lzkPokale,mandatoryDone,mandatoryTotal:mandatory.length};
   });
   return stats;
 }
@@ -259,8 +261,10 @@ function buildGrid(stats){
       }
       const isDone=done.has(s.id);
       const state=isDone?'state-erledigt':'state-unbearbeitet';
-      return `<div class="station-card ${state}" onclick="showSt(${s.id})" role="button" tabindex="0" aria-label="${s.title}${isDone?' – erledigt':''}" onkeydown="if(event.key==='Enter'||event.key===' ')showSt(${s.id})">
+      return `<div class="station-card ${state}" onclick="showSt(${s.id})" role="button" tabindex="0" aria-label="${s.title}${isDone?' – erledigt':''}${s.mandatory?' (Vorgabe)':''}" onkeydown="if(event.key==='Enter'||event.key===' ')showSt(${s.id})">
         ${isDone?'<span class="station-card-badge">✓</span>':''}
+        ${s.mandatory&&!isDone?'<span class="mandatory-badge">Vorgabe</span>':''}
+        ${s.mandatory&&isDone?'<span class="mandatory-badge mandatory-done">✓ Vorgabe</span>':''}
         <div class="station-card-title">${s.title}</div>
         ${s.abgabe?`<div style="font-size:10px;font-weight:600;color:${s.gc};margin-top:5px;letter-spacing:.2px;">📋 zur Abgabe</div>`:''}
       </div>`;

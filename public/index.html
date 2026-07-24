@@ -904,13 +904,17 @@ function parseGroupsForLt(lt, progVal, abgabeVal, korrekturRaw) {
   Object.keys(lt.groups).forEach(g => {
     const grp = lt.groups[g];
     const cnt = lt.stations.filter(s => s.group === g && done.has(s.id)).length;
+    const mandatory = lt.stations.filter(s => s.group === g && s.mandatory);
+    const mandatoryDone = mandatory.filter(s => done.has(s.id)).length;
     const abgabe = !!(abg && abg[g]);
     const korStatus = (kor[g] && kor[g].status) || 'ausstehend';
     const korOk = korStatus === 'bestanden';
+    const stationsOk = cnt >= grp.required && mandatoryDone >= mandatory.length;
     result[g] = {
       done: cnt, req: grp.required, total: grp.total,
-      stationsOk: cnt >= grp.required, abgabe, korStatus, korOk,
-      complete: cnt >= grp.required && (g === 'Pflicht' || (abgabe && korOk))
+      stationsOk, abgabe, korStatus, korOk,
+      mandatoryDone, mandatoryTotal: mandatory.length,
+      complete: stationsOk && (g === 'Pflicht' || (abgabe && korOk))
     };
   });
   return result;

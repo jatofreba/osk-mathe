@@ -301,6 +301,8 @@ button,input,textarea,select{font-family:inherit;}
   flex-shrink:0;
 }
 
+.mandatory-badge{position:absolute;bottom:8px;right:8px;font-size:9px;font-weight:700;letter-spacing:.3px;background:#f59e0b;color:#fff;padding:2px 7px;border-radius:99px;text-transform:uppercase;}
+.mandatory-badge.mandatory-done{background:#16a34a;}
 .station-card-title{
   font-size:14px;font-weight:500;letter-spacing:.1px;
   line-height:1.4;
