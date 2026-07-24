@@ -261,10 +261,10 @@ function buildGrid(stats){
       }
       const isDone=done.has(s.id);
       const state=isDone?'state-erledigt':'state-unbearbeitet';
-      return `<div class="station-card ${state}" onclick="showSt(${s.id})" role="button" tabindex="0" aria-label="${s.title}${isDone?' – erledigt':''}${s.mandatory?' (Vorgabe)':''}" onkeydown="if(event.key==='Enter'||event.key===' ')showSt(${s.id})">
+      return `<div class="station-card ${state}" onclick="showSt(${s.id})" role="button" tabindex="0" aria-label="${s.title}${isDone?' – erledigt':''}${s.mandatory?' (Pflichtstation)':''}" onkeydown="if(event.key==='Enter'||event.key===' ')showSt(${s.id})">
         ${isDone?'<span class="station-card-badge">✓</span>':''}
-        ${s.mandatory&&!isDone?'<span class="mandatory-badge">Vorgabe</span>':''}
-        ${s.mandatory&&isDone?'<span class="mandatory-badge mandatory-done">✓ Vorgabe</span>':''}
+        ${s.mandatory&&!isDone?'<span class="mandatory-badge">Pflichtstation</span>':''}
+        ${s.mandatory&&isDone?'<span class="mandatory-badge mandatory-done">✓ Pflichtstation</span>':''}
         <div class="station-card-title">${s.title}</div>
         ${s.abgabe?`<div style="font-size:10px;font-weight:600;color:${s.gc};margin-top:5px;letter-spacing:.2px;">📋 zur Abgabe</div>`:''}
       </div>`;
