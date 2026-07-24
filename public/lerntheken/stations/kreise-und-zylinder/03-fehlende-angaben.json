@@ -1,6 +1,7 @@
 {
   "id": 3,
   "title": "Fehlende Angaben",
+  "mandatory": true,
   "hilfen": [
     2,
     3

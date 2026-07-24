@@ -3,6 +3,7 @@
   "title": "Anteile darstellen",
   "sort_order": 1,
   "group": "Basis",
+  "mandatory": true,
   "gc": "#2563eb",
   "gbg": "#eff6ff",
   "gbr": "#bfdbfe",

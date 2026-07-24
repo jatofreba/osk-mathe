@@ -3,6 +3,7 @@
   "title": "Gleichung aus Graph ablesen",
   "sort_order": 4,
   "group": "Basis",
+  "mandatory": true,
   "gc": "#2563eb",
   "gbg": "#eff6ff",
   "gbr": "#bfdbfe",

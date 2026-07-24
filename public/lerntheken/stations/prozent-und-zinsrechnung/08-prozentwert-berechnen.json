@@ -3,6 +3,7 @@
   "title": "Prozentwert berechnen",
   "sort_order": 3,
   "group": "Basis",
+  "mandatory": true,
   "gc": "#2563eb",
   "gbg": "#eff6ff",
   "gbr": "#bfdbfe",
