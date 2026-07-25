@@ -1207,18 +1207,20 @@ function _doInitGgb(cfg){
   if(!el||typeof GGBApplet==='undefined')return;
   el.innerHTML='';
   const params={
-    appName:cfg.appName||'graphing',
+    appName:cfg.appName||'classic',
     width:600,
     height:cfg.height||420,
     showToolBar:!!cfg.showToolBar,
     showAlgebraInput:!!cfg.showAlgebraInput,
     showMenuBar:false,
     enableShiftDragZoom:cfg.enableShiftDragZoom!==false,
+    enableRightClick:cfg.enableRightClick!==false,
     scaleContainerClass:'ggb-wrap',
     preventFocus:false,
     language:'de',
     appletOnLoad:api=>{(cfg.commands||[]).forEach(cmd=>api.evalCommand(cmd));}
   };
+  if(cfg.perspective)params.perspective=cfg.perspective;
   if(cfg.ggbBase64)params.ggbBase64=cfg.ggbBase64;
   new GGBApplet(params,true).inject(el);
 }

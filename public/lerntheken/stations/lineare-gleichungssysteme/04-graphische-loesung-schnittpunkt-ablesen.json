@@ -10,13 +10,16 @@
   ],
   "hasSol": true,
   "geogebra": {
+    "appName": "classic",
+    "perspective": "G",
     "height": 420,
     "showToolBar": false,
     "showAlgebraInput": false,
     "enableShiftDragZoom": true,
+    "enableRightClick": false,
     "commands": [
-      "f(x) = 0.32 x + 6",
-      "g(x) = 0.25 x + 7.75",
+      "f(x) = 0.32*x + 6",
+      "g(x) = 0.25*x + 7.75",
       "S = Intersect(f, g)",
       "SetColor(f, 37, 99, 235)",
       "SetColor(g, 22, 163, 74)",
