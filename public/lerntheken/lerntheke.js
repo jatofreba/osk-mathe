@@ -1218,7 +1218,14 @@ function _doInitGgb(cfg){
     scaleContainerClass:'ggb-wrap',
     preventFocus:false,
     language:'de',
-    appletOnLoad:api=>{(cfg.commands||[]).forEach(cmd=>api.evalCommand(cmd));}
+    appletOnLoad:api=>{
+      (cfg.commands||[]).forEach(cmd=>api.evalCommand(cmd));
+      (cfg.style||[]).forEach(s=>{
+        const[m,a]=Object.entries(s)[0];
+        if(typeof api[m]==='function')api[m](...a);
+      });
+      if(cfg.zoom)api.setCoordSystem(cfg.zoom[0],cfg.zoom[1],cfg.zoom[2],cfg.zoom[3]);
+    }
   };
   if(cfg.perspective)params.perspective=cfg.perspective;
   if(cfg.ggbBase64)params.ggbBase64=cfg.ggbBase64;
