@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "title": "Bedeutung von Variablen – Wiederholung",
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [
+    1
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'><strong>Wiederholung: Was bedeuten Variablen?</strong></p><p style='font-size:13px;line-height:1.7;margin:8px 0;'>Variablen sind Platzhalter für unbekannte oder veränderliche Größen. x und y sind die häufigsten.</p></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe 1:</strong> Der Stromverbrauch ist x kWh. Die Gesamtkosten y hängen davon ab. Ordne zu:</p><div class='tbl-wrap'><table><thead><tr><th style='background:#d95f2b;'>Aussage</th><th style='background:#d95f2b;'>Variable</th></tr></thead><tbody><tr><td class='given'>(A) Wenn mehr Strom verbraucht wird, steigen die Kosten.</td><td><input class='cell-input' data-ans='y hängt von x ab' placeholder='Wert eingeben'></td></tr><tr><td class='given'>(B) Die unabhängige Größe ist der Verbrauch (kWh).</td><td><input class='cell-input' data-ans='x' placeholder='x oder y'></td></tr><tr><td class='given'>(C) Die abhängige Größe sind die Kosten.</td><td><input class='cell-input' data-ans='y' placeholder='x oder y'></td></tr></tbody></table></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe 2:</strong> Gib ein Beispiel für x und y aus deinem Alltag an:</p><div style='background:#f8f8f8;border-radius:8px;padding:10px;margin:8px 0;text-align:center;'><input class='cell-input' data-ans='*' placeholder='z.B. x=Zeit, y=Entfernung (Auto fahren)' style='width:100%;'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(1)'>&#x2713; Überprüfen</button><button class='btn-reset' onclick='resetStation(1)'>&#x21BA; Zurücksetzen</button><span class='check-result' id='check-result-1'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>(A) <strong>y hängt von x ab</strong> (oder: y ist abhängig von x)<br>(B) <strong>x</strong> (Verbrauch in kWh – du bestimmst ihn)<br>(C) <strong>y</strong> (Kosten – werden durch x bestimmt)<br><br>Beispiel Aufgabe 2: x = Zeit (Minuten), y = zurückgelegte Entfernung (km). Oder x = Anzahl Brötchen gekauft, y = Gesamtpreis. Bei mehr x steigt meist auch y.</p>",
+  "mandatory": true
+}

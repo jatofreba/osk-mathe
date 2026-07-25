@@ -1,15 +1,15 @@
 {
-  "id": 4,
+  "id": 6,
   "title": "Einsetzungsverfahren – Schritt für Schritt",
-  "group": "Pflicht",
-  "gc": "#d95f2b",
-  "gbg": "#fff7f4",
-  "gbr": "#fcd9c8",
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
   "hilfen": [
     3
   ],
   "hasSol": true,
   "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Gegeben: (I) y = 2x+1 &nbsp; (II) 3x+y=16. In (I) ist y schon isoliert &ndash; ideal f&uuml;r das <strong>Einsetzungsverfahren</strong>.</p></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe:</strong> F&uuml;hre die Schritte durch und trage die Ergebnisse ein.</p><div style='font-size:13px;line-height:2.2;'>① y aus (I) in (II) einsetzen: 3x + (2x+1) = 16 &nbsp;&rarr;&nbsp; vereinfacht: 5x + 1 = 16<br>② x = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='3' placeholder='?'><br>③ y = 2&middot;x+1 = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='7' placeholder='?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(4)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(4)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-4'></span></div>",
   "sol_html": "<p style='font-size:14px;line-height:1.8;'>5x+1=16 &rarr; 5x=15 &rarr; <strong>x=3</strong><br>y=2&middot;3+1=<strong>7</strong><br>Probe in (II): 3&middot;3+7=16 &check; &nbsp; L&ouml;sung: <strong>(3|7)</strong></p>",
-  "mandatory": true
+  "mandatory": false
 }
