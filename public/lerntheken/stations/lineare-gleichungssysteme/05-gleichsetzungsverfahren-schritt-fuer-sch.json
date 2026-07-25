@@ -1,0 +1,15 @@
+{
+  "id": 5,
+  "title": "Gleichsetzungsverfahren – Schritt für Schritt",
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [
+    4
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Gegeben: (I) y = 3x&minus;2 &nbsp; (II) y = &minus;2x+8. Beide sind nach y aufgel&ouml;st &ndash; ideal f&uuml;r das <strong>Gleichsetzungsverfahren</strong>.</p></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe:</strong> F&uuml;hre die Schritte durch und trage die Ergebnisse ein.</p><div style='font-size:13px;line-height:2.2;'>① rechte Seiten gleichsetzen: 3x&minus;2 = &minus;2x+8<br>② x = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='2' placeholder='?'><br>③ y = 3&middot;x&minus;2 = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='4' placeholder='?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(5)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(5)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-5'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>3x&minus;2=&minus;2x+8 &rarr; 5x=10 &rarr; <strong>x=2</strong><br>y=3&middot;2&minus;2=<strong>4</strong><br>Probe in (II): &minus;2&middot;2+8=4 &check; &nbsp; L&ouml;sung: <strong>(2|4)</strong></p>",
+  "mandatory": true
+}

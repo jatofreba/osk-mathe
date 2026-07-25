@@ -1,0 +1,15 @@
+{
+  "id": 6,
+  "title": "Einsetzungsverfahren üben I",
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [
+    3
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>L&ouml;se das Gleichungssystem mit dem Einsetzungsverfahren:</p></div><div style='text-align:center;font-family:monospace;font-weight:700;margin:8px 0;'>(I) y = x+4 &nbsp;&nbsp; (II) 2x+y=10</div><div style='font-size:13px;'>x = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='2' placeholder='?'> &nbsp;&nbsp; y = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='6' placeholder='?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(6)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(6)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-6'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>2x+(x+4)=10 &rarr; 3x+4=10 &rarr; 3x=6 &rarr; <strong>x=2</strong><br>y=2+4=<strong>6</strong> &nbsp; Probe: 2&middot;2+6=10 &check; &nbsp; L&ouml;sung: <strong>(2|6)</strong></p>",
+  "mandatory": true
+}

@@ -1,0 +1,16 @@
+{
+  "id": 21,
+  "title": "Zahlenrätsel lösen",
+  "group": "Abflug",
+  "gc": "#7c3aed",
+  "gbg": "#f5f3ff",
+  "gbr": "#ddd6fe",
+  "hilfen": [
+    3,
+    5
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Die Summe zweier Zahlen ist 18, ihre Differenz ist 4. Wie hei&szlig;en die Zahlen?</p></div><div style='font-size:13px;'>x = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='11' placeholder='?'> &nbsp;&nbsp; y = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='7' placeholder='?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(21)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(21)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-21'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>(I) x+y=18 &nbsp; (II) x&minus;y=4. Addition: 2x=22 &rarr; <strong>x=11</strong>, dann y=18&minus;11=<strong>7</strong>. Probe: 11+7=18 &check;, 11&minus;7=4 &check;</p>",
+  "mandatory": false
+}

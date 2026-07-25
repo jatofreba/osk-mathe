@@ -1,0 +1,15 @@
+{
+  "id": 7,
+  "title": "Einsetzungsverfahren üben II",
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [
+    3
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>L&ouml;se das Gleichungssystem mit dem Einsetzungsverfahren:</p></div><div style='text-align:center;font-family:monospace;font-weight:700;margin:8px 0;'>(I) 3x+y=11 &nbsp;&nbsp; (II) y=x&minus;1</div><div style='font-size:13px;'>x = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='3' placeholder='?'> &nbsp;&nbsp; y = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='2' placeholder='?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(7)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(7)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-7'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>3x+(x&minus;1)=11 &rarr; 4x&minus;1=11 &rarr; 4x=12 &rarr; <strong>x=3</strong><br>y=3&minus;1=<strong>2</strong> &nbsp; Probe: 3&middot;3+2=11 &check; &nbsp; L&ouml;sung: <strong>(3|2)</strong></p>",
+  "mandatory": true
+}

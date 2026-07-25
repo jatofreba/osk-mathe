@@ -1,0 +1,14 @@
+{
+  "id": 13,
+  "title": "Eigene Aufgabe",
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [],
+  "hasSol": false,
+  "task_html": "<div class='task-block task-blue'><div class='task-block-label'>Erfinde deine eigene Aufgabe</div><p style='font-size:14px;line-height:1.8;margin:0 0 10px;'>Erfinde ein <strong>eigenes Gleichungssystem</strong> mit zwei Gleichungen und einer sch&ouml;nen ganzzahligen L&ouml;sung &ndash; nicht zu leicht, aber auch nicht zu knifflig.</p><div style='background:#dbeafe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;margin-bottom:12px;'><strong>Ideen f&uuml;r deine Aufgabe:</strong><br>&bull; Ein System, das sich gut mit dem Einsetzungsverfahren l&ouml;st<br>&bull; Ein System, das sich gut mit dem Gleichsetzungsverfahren l&ouml;st<br>&bull; Eine kleine Sachgeschichte (z.B. Tarife, Preise), aus der ein System entsteht</div><p style='font-size:13px;line-height:1.7;margin:0;'>Schreibe deine Aufgabe in dein Heft, l&ouml;se sie selbst und formuliere eine <strong>Musterl&ouml;sung</strong>. Tausche dann mit einem Mitsch&uuml;ler und l&ouml;st gegenseitig eure Aufgaben.</p></div>",
+  "sol_html": null,
+  "abgabe": true,
+  "mandatory": false
+}

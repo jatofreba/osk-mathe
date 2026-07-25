@@ -1,0 +1,17 @@
+{
+  "id": 15,
+  "title": "Sachaufgabe: Herrn Herzigs Solaranlage",
+  "group": "Aufbau",
+  "gc": "#16a34a",
+  "gbg": "#f0fdf4",
+  "gbr": "#bbf7d0",
+  "hilfen": [
+    7,
+    4
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Herr Herzig hat vor Jahren eine kleine Solaranlage in seinen Campervan eingebaut. Anschaffung: Solarpaneele 160&euro;, Batterie 120&euro;, Laderegler 100&euro;, Kabel 40&euro; &ndash; zusammen 420&euro;. Dazu kommen j&auml;hrliche Instandhaltungskosten von 20&euro;.</p></div><div style='background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>In den letzten 4 Jahren hat er 250 kWh selbst erzeugten Strom genutzt. Auf dem Campingplatz h&auml;tte er daf&uuml;r 0,50&euro; je kWh bezahlt.</p></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe:</strong> Stelle eine Kostenfunktion K(x) und eine Ersparnisfunktion E(x) auf (x = Jahre seit Einbau) und ermittle, ab wann sich die Anlage lohnt.</p><p style='font-size:13px;color:#555;'>Tipp: Nimm an, dass der j&auml;hrliche Stromverbrauch &uuml;ber die Jahre etwa gleich bleibt (250 kWh in 4 Jahren &rarr; 62,5 kWh pro Jahr).</p>",
+  "sol_html": "<p style='font-size:14px;line-height:1.9;'>Kostenfunktion: <strong>K(x) = 420 + 20x</strong><br>Ersparnisfunktion: 62,5 kWh/Jahr &middot; 0,50&euro;/kWh = 31,25&euro;/Jahr &rarr; <strong>E(x) = 31,25x</strong><br>Gleichsetzen: 420+20x=31,25x &rarr; 420=11,25x &rarr; x&asymp;<strong>37,3 Jahre</strong><br>Erst nach &uuml;ber 37 Jahren w&auml;re die Ersparnis gr&ouml;&szlig;er als die Kosten &ndash; das &uuml;bersteigt die Lebensdauer der Anlage bei weitem. Rein finanziell lohnt sich die Investition also kaum; Herr Herzig hat sie vor allem wegen der Unabh&auml;ngigkeit unterwegs eingebaut.</p>",
+  "solLocked": true,
+  "mandatory": true
+}

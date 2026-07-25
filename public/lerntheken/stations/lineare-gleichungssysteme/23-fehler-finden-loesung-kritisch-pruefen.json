@@ -1,0 +1,16 @@
+{
+  "id": 23,
+  "title": "Fehler finden: Lösung kritisch prüfen",
+  "group": "Abflug",
+  "gc": "#7c3aed",
+  "gbg": "#f5f3ff",
+  "gbr": "#ddd6fe",
+  "hilfen": [
+    3,
+    8
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Ein Mitsch&uuml;ler l&ouml;st (I) y=2x&minus;3 &nbsp; (II) 3x+y=12 so:</p></div><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;font-family:monospace;line-height:2;'>Schritt 1: 3x + (2x&minus;3) = 12<br>Schritt 2: 5x&minus;3 = 12<br>Schritt 3: 5x = 12&minus;3 = 9 &nbsp;&larr; hier passiert ein Fehler!<br>Schritt 4: x = 1,8</div><p style='font-size:14px;margin:10px 0 8px;'><strong>Aufgabe:</strong> Finde den Fehler und berechne die richtige L&ouml;sung.</p><div style='font-size:13px;'>richtiges x = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='3' placeholder='?'> &nbsp;&nbsp; richtiges y = <input class='cell-input' style='width:70px;display:inline-block;' data-ans='3' placeholder='?'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(23)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(23)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-23'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>Fehler in Schritt 3: Aus 5x&minus;3=12 muss man auf <strong>beiden</strong> Seiten +3 rechnen: 5x=12+3=15, nicht 12&minus;3. Richtig: 5x=15 &rarr; <strong>x=3</strong>, y=2&middot;3&minus;3=<strong>3</strong>. Probe: 3&middot;3+3=12 &check;</p>",
+  "mandatory": false
+}

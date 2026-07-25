@@ -1,0 +1,17 @@
+{
+  "id": 11,
+  "title": "Welches Verfahren passt am besten?",
+  "group": "Basis",
+  "gc": "#2563eb",
+  "gbg": "#eff6ff",
+  "gbr": "#bfdbfe",
+  "hilfen": [
+    3,
+    4
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Manchmal ist das Einsetzungsverfahren geschickter, manchmal das Gleichsetzungsverfahren. Schau dir die drei Systeme an und &uuml;berlege, welches Verfahren du jeweils w&auml;hlen w&uuml;rdest &ndash; und warum.</p></div><div style='display:grid;grid-template-columns:1fr;gap:10px;margin:12px 0;font-family:monospace;font-size:13px;'><div style='background:#f8f8f8;border-radius:8px;padding:10px 14px;'>A: (I) y=5x&minus;3 &nbsp; (II) y=2x+9</div><div style='background:#f8f8f8;border-radius:8px;padding:10px 14px;'>B: (I) y=4x+1 &nbsp; (II) 2x+y=13</div><div style='background:#f8f8f8;border-radius:8px;padding:10px 14px;'>C: (I) 3x+2y=12 &nbsp; (II) x=y&minus;1</div></div><p style='font-size:13px;line-height:1.7;'>Schreibe zu jedem System in dein Heft, welches Verfahren du w&auml;hlst und warum. Markiere die Station anschlie&szlig;end als erledigt, um die Musterl&ouml;sung zu sehen.</p>",
+  "sol_html": "<p style='font-size:14px;line-height:1.9;'>A: Beide Gleichungen sind nach y aufgel&ouml;st &rarr; <strong>Gleichsetzungsverfahren</strong>.<br>B: Nur (I) ist nach y aufgel&ouml;st &rarr; <strong>Einsetzungsverfahren</strong> (y aus (I) in (II) einsetzen).<br>C: Nur (II) ist nach x aufgel&ouml;st &rarr; <strong>Einsetzungsverfahren</strong> (x aus (II) in (I) einsetzen).</p>",
+  "solLocked": true,
+  "mandatory": false
+}

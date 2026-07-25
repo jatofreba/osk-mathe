@@ -1,0 +1,16 @@
+{
+  "id": 1,
+  "title": "Die drei Gesichter einer Gleichung",
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [
+    1,
+    2
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Ein Elektrizit&auml;tsunternehmen bietet den Tarif <strong>AKZENT</strong> an: 6&euro; monatlicher Grundpreis + 0,32&euro; je kWh.</p></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe:</strong> Stelle die Gleichung f&uuml;r die Kosten y in Abh&auml;ngigkeit vom Verbrauch x (in kWh) auf und f&uuml;lle die Wertetabelle.</p><div class='tbl-wrap'><table><thead><tr><th style='background:#2563eb;'>x (kWh)</th><th style='background:#2563eb;'>0</th><th style='background:#2563eb;'>10</th><th style='background:#2563eb;'>20</th></tr></thead><tbody><tr><td class='row-label'>y (&euro;)</td><td><input class='cell-input' data-ans='6' placeholder='?'></td><td><input class='cell-input' data-ans='9.2' placeholder='?'></td><td><input class='cell-input' data-ans='12.4' placeholder='?'></td></tr></tbody></table></div><div class='check-bar'><button class='btn-check' onclick='checkStation(1)'>&#x2713; &Uuml;berpr&uuml;fen</button><button class='btn-reset' onclick='resetStation(1)'>&#x21BA; Zur&uuml;cksetzen</button><span class='check-result' id='check-result-1'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'>Gleichung: <strong>y = 0,32x + 6</strong><br>x=0 &rarr; y=6 &nbsp;|&nbsp; x=10 &rarr; y=9,20 &nbsp;|&nbsp; x=20 &rarr; y=12,40<br>Die drei \"Gesichter\" derselben Information: <strong>Text</strong> (Tarifbeschreibung), <strong>Gleichung</strong> (y=0,32x+6) und <strong>Graph</strong> (eine Gerade).</p>",
+  "mandatory": true
+}
