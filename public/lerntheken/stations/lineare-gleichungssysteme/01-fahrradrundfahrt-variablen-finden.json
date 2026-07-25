@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "title": "Fest mit Menschen und Hunden – Gleichungssystem aufstellen",
+  "group": "Pflicht",
+  "gc": "#d95f2b",
+  "gbg": "#fff7f4",
+  "gbr": "#fcd9c8",
+  "hilfen": [
+    1
+  ],
+  "hasSol": true,
+  "task_html": "<div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'><strong>🎉 Szenario: Fest mit Menschen und Hunden</strong></p><p style='font-size:13px;line-height:1.7;margin:8px 0;'>Auf einem Fest laufen Menschen und Hunde herum.</p><div style='display:flex;gap:20px;margin:12px 0;font-size:13px;'><div style='flex:1;'><strong>Menschen:</strong><br>• 2 Beine<br>• 2 Augen</div><div style='flex:1;'><strong>Hunde:</strong><br>• 4 Beine<br>• 2 Augen</div></div><p style='font-size:13px;margin:8px 0;'>Wir zählen: <strong>x</strong> = Anzahl Menschen, <strong>y</strong> = Anzahl Hunde</p></div><p style='font-size:14px;margin:12px 0 8px;'><strong>Aufgabe:</strong> Stelle zwei Gleichungen auf (löse sie NICHT, nur aufstellen!):</p><div style='background:#f8f8f8;border-radius:8px;padding:12px;margin:10px 0;'><p style='font-size:13px;font-weight:600;margin:0 0 8px;'>(I) Gesamtzahl der Beine:</p><input type='text' class='cell-input' data-ans='2x+4y' placeholder='z.B. 2x+4y' style='width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:13px;'></div><div style='background:#f8f8f8;border-radius:8px;padding:12px;margin:10px 0;'><p style='font-size:13px;font-weight:600;margin:0 0 8px;'>(II) Gesamtzahl der Augen:</p><input type='text' class='cell-input' data-ans='2x+2y' placeholder='z.B. 2x+2y' style='width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:13px;'></div><div class='check-bar'><button class='btn-check' onclick='checkStation(1)'>&#x2713; Überprüfen</button><button class='btn-reset' onclick='resetStation(1)'>&#x21BA; Zurücksetzen</button><span class='check-result' id='check-result-1'></span></div>",
+  "sol_html": "<p style='font-size:14px;line-height:1.8;'><strong>✓ Richtig!</strong><br><br><strong>(I) Beine:</strong> 2x + 4y<br>→ Jeder Mensch hat 2 Beine (2x), jeder Hund hat 4 Beine (4y)<br><br><strong>(II) Augen:</strong> 2x + 2y<br>→ Jeder Mensch hat 2 Augen (2x), jeder Hund hat 2 Augen (2y)<br><br><strong>Das ist ein Gleichungssystem:</strong> Zwei Gleichungen mit den gleichen zwei Variablen (x und y). Wenn wir wissen, wie viele Beine und Augen insgesamt gezählt wurden, können wir x und y später lösen!</p>",
+  "mandatory": true
+}
