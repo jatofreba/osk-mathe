@@ -26,9 +26,9 @@
       "SetLineThickness(g, 4)",
       "ShowLabel(S, false)",
       "SetCaption(f, \"AKZENT\")",
-      "SetLabelStyle(f, 3)",
+      "SetLabelMode(f, 3)",
       "SetCaption(g, \"BASIS\")",
-      "SetLabelStyle(g, 3)",
+      "SetLabelMode(g, 3)",
       "ZoomIn(-2, -1, 35, 18)"
     ]
   },
