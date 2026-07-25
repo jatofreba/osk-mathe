@@ -508,6 +508,7 @@ async function showSt(id){
       });
     });
     window.scrollTo({top:0,behavior:'instant'});
+    if(c.geogebra) initGgbApplet(c.geogebra);
   },50);
 }
 
@@ -1182,5 +1183,43 @@ function loadInputs(id){
 function showOv(){saveInputs();buildOverview();showView('view-ov');window.parent.postMessage({type:'STATION_VIEW',open:false},'*');}
 if(!_inIframe){
   Promise.all([loadKorrektur(), loadLzk()]).then(() => { buildOverview(); });
+}
+
+// ── GeoGebra Integration ──────────────────────────────────────────────────────
+let _ggbLoaded=false,_ggbLoading=false,_ggbQueue=[];
+function initGgbApplet(cfg){
+  if(_ggbLoaded){_doInitGgb(cfg);return;}
+  _ggbQueue.push(cfg);
+  if(_ggbLoading)return;
+  _ggbLoading=true;
+  const s=document.createElement('script');
+  s.src='https://www.geogebra.org/apps/deployggb.js';
+  s.onload=()=>{_ggbLoaded=true;_ggbLoading=false;_ggbQueue.splice(0).forEach(_doInitGgb);};
+  s.onerror=()=>{
+    _ggbLoading=false;
+    const el=document.getElementById('ggb-container');
+    if(el)el.innerHTML='<p style="color:#dc2626;padding:16px;font-size:13px;">GeoGebra konnte nicht geladen werden. Bitte Internetverbindung prüfen.</p>';
+  };
+  document.head.appendChild(s);
+}
+function _doInitGgb(cfg){
+  const el=document.getElementById('ggb-container');
+  if(!el||typeof GGBApplet==='undefined')return;
+  el.innerHTML='';
+  const params={
+    appName:cfg.appName||'graphing',
+    width:600,
+    height:cfg.height||420,
+    showToolBar:!!cfg.showToolBar,
+    showAlgebraInput:!!cfg.showAlgebraInput,
+    showMenuBar:false,
+    enableShiftDragZoom:cfg.enableShiftDragZoom!==false,
+    scaleContainerClass:'ggb-wrap',
+    preventFocus:false,
+    language:'de',
+    appletOnLoad:api=>{(cfg.commands||[]).forEach(cmd=>api.evalCommand(cmd));}
+  };
+  if(cfg.ggbBase64)params.ggbBase64=cfg.ggbBase64;
+  new GGBApplet(params,true).inject(el);
 }
 
