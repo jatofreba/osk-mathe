@@ -18,32 +18,22 @@
       "emoji": "🔵",
       "desc": "Verfahren einüben – 4 von 8 wählen"
     },
-    "Aufbau": {
-      "color": "#16a34a",
-      "bg": "#f0fdf4",
-      "border": "#bbf7d0",
-      "required": 3,
-      "total": 4,
-      "emoji": "🟢",
-      "desc": "Additionsverfahren, Sachaufgabe & Sonderfälle"
-    },
     "Abflug": {
       "color": "#7c3aed",
       "bg": "#f5f3ff",
       "border": "#ddd6fe",
       "required": 1,
-      "total": 4,
+      "total": 6,
       "emoji": "🟣",
-      "desc": "Knobeln & Entdecken – 1 von 4 wählen"
+      "desc": "Additionsverfahren, Sonderfälle & Knobeln – 1 von 6 wählen"
     }
   },
   "groupOrder": [
     "Pflicht",
     "Basis",
-    "Aufbau",
     "Abflug"
   ],
-  "total": 22,
+  "total": 20,
   "hilfen": [
     {
       "title": "Was ist ein lineares Gleichungssystem?",
