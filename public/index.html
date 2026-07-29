@@ -240,6 +240,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 #view-admin{display:none;padding:24px;}
+#view-talking{display:none;padding:24px;}
 
 .admin-top{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:24px;}
 .admin-title{
@@ -623,6 +624,7 @@ textarea.form-input{
 
   <div class="tabs" id="app-tabs">
     <div class="tab active" id="tab-lt" onclick="showView('lerntheke')">📚 Lerntheke</div>
+    <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Talking Sessions</div>
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Klassen-Übersicht</div>
   </div>
 
@@ -682,6 +684,14 @@ textarea.form-input{
         <tbody id="stbl"></tbody>
       </table>
     </div>
+  </div>
+
+  <div id="view-talking">
+    <div class="admin-top">
+      <div class="admin-title">🗣️ Talking Sessions</div>
+    </div>
+    <div id="talking-student" style="display:none;"></div>
+    <div id="talking-admin" style="display:none;"></div>
   </div>
 
   <div id="view-changepw">
@@ -800,6 +810,101 @@ textarea.form-input{
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-lzk')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="saveLzkModal()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Talking-Session-Termin anlegen (Admin) ═══════════════════════════ -->
+<div class="overlay" id="modal-talking-slot">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">Termin anlegen</div>
+    <div class="form-group">
+      <label class="form-label">Halbjahr</label>
+      <input class="form-input" id="tslot-halbjahr" placeholder="z.B. 2026/1">
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+        <input type="checkbox" id="tslot-recurring" onchange="toggleTalkingRecurring()"> Wiederkehrend (mehrere Termine auf einmal)
+      </label>
+    </div>
+    <div id="tslot-single-fields">
+      <div class="form-group">
+        <label class="form-label">Datum</label>
+        <input class="form-input" id="tslot-datum" type="date">
+      </div>
+    </div>
+    <div id="tslot-recurring-fields" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">Wochentag</label>
+        <select class="form-input" id="tslot-weekday">
+          <option value="1">Montag</option>
+          <option value="2">Dienstag</option>
+          <option value="3">Mittwoch</option>
+          <option value="4">Donnerstag</option>
+          <option value="5">Freitag</option>
+          <option value="6">Samstag</option>
+          <option value="0">Sonntag</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label class="form-label">Von</label>
+          <input class="form-input" id="tslot-von" type="date">
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Bis</label>
+          <input class="form-input" id="tslot-bis" type="date">
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Uhrzeit / Stunde</label>
+      <input class="form-input" id="tslot-uhrzeit" placeholder="z.B. 5. Stunde">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ort</label>
+      <input class="form-input" id="tslot-ort" placeholder="z.B. Raum 204">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talking-slot')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="submitTalkingSlot()">Anlegen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Talking-Session buchen (Schüler:in) ═══════════════════════════════ -->
+<div class="overlay" id="modal-talking-book">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">Talking Session anmelden</div>
+    <div class="form-group">
+      <label class="form-label">Termin</label>
+      <select class="form-input" id="tbook-slot"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Thema</label>
+      <input class="form-input" id="tbook-thema" placeholder="z.B. Wie funktioniert der Dreisatz?">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Wen lädst du ein?</label>
+      <div id="tbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talking-book')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="submitBookSession()">Anmelden</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Weitere Personen einladen (Schüler:in) ═════════════════════════════ -->
+<div class="overlay" id="modal-talking-invite">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title">Weitere Personen einladen</div>
+    <div class="form-group">
+      <div id="tinvite-classmates" style="max-height:240px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talking-invite')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="submitInviteMore()">Einladen</button>
     </div>
   </div>
 </div>
@@ -1426,13 +1531,13 @@ function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','picker','admin','changepw'].forEach(id => {
+  ['lerntheke','picker','admin','talking','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'picker' || id === 'admin') {
+    } else if (id === 'picker' || id === 'admin' || id === 'talking') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -1455,6 +1560,7 @@ function showView(v) {
   } else {
     clearInterval(adminRefreshTimer);
   }
+  if (v === 'talking') loadTalkingSessions();
 }
 
 // Auto-migrate LZK entries stored under wrong lerntheke key (from old bug)
@@ -1977,6 +2083,328 @@ async function saveLzkModal() {
   });
   closeModal('modal-lzk');
   loadStudents();
+}
+
+// ── Talking Sessions ───────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtTalkingDatum(d) {
+  return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
+}
+
+async function loadTalkingSessions() {
+  const stu = document.getElementById('talking-student');
+  const adm = document.getElementById('talking-admin');
+  if (me.role === 'admin') {
+    stu.style.display = 'none';
+    adm.style.display = 'block';
+    await loadTalkingAdmin();
+  } else {
+    adm.style.display = 'none';
+    stu.style.display = 'block';
+    await loadTalkingStudent();
+  }
+}
+
+// ── Student ──────────────────────────────────────────────────────────────────
+let talkingClassmates = [];
+let talkingOpenSlots = [];
+let talkingMine = { presenting: [], invitations: [], presentedCounts: [], attendedCounts: [] };
+
+async function loadTalkingStudent() {
+  const el = document.getElementById('talking-student');
+  el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
+  try {
+    const [cmRes, slotsRes, mineRes] = await Promise.all([
+      fetch('/api/classmates'), fetch('/api/talking-slots/open'), fetch('/api/talking-sessions/mine')
+    ]);
+    talkingClassmates = cmRes.ok ? await cmRes.json() : [];
+    talkingOpenSlots = slotsRes.ok ? await slotsRes.json() : [];
+    talkingMine = mineRes.ok ? await mineRes.json() : { presenting: [], invitations: [], presentedCounts: [], attendedCounts: [] };
+  } catch(e) {
+    el.innerHTML = '<div style="padding:20px;color:var(--md-error);">Fehler beim Laden.</div>';
+    return;
+  }
+  renderTalkingStudent();
+}
+
+function renderTalkingStudent() {
+  const el = document.getElementById('talking-student');
+  const pCounts = talkingMine.presentedCounts || [];
+  const aCounts = talkingMine.attendedCounts || [];
+  const halbjahre = [...new Set([...pCounts.map(c => c.halbjahr), ...aCounts.map(c => c.halbjahr)])].sort();
+  const progressCards = halbjahre.length ? halbjahre.map(hj => {
+    const p = parseInt(pCounts.find(c => c.halbjahr === hj)?.presented_done) || 0;
+    const a = parseInt(aCounts.find(c => c.halbjahr === hj)?.attended_done) || 0;
+    return `
+      <div class="stat-card">
+        <div class="stat-lbl">Halbjahr ${escHtml(hj)}</div>
+        <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
+        <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
+      </div>`;
+  }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch keine Talking Session</div></div>`;
+
+  const pendingInvites = (talkingMine.invitations || []).filter(i => i.status === 'eingeladen');
+  const invitesHtml = pendingInvites.length ? pendingInvites.map(i => `
+    <div class="stat-card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div>
+        <strong>${escHtml(i.presenter_username)}</strong> · ${escHtml(i.thema)}<br>
+        <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-act btn-green" onclick="respondTalkingInvitation(${i.id}, true)">Annehmen</button>
+        <button class="btn-cancel" onclick="respondTalkingInvitation(${i.id}, false)">Ablehnen</button>
+      </div>
+    </div>`).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine offenen Einladungen.</div>`;
+
+  const presentingHtml = (talkingMine.presenting || []).length ? talkingMine.presenting.map(s => {
+    const invitees = s.invitees || [];
+    const inviteeList = invitees.map(iv => {
+      const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
+      return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${iv.attendedConfirmed ? ' 👂✓' : ''}</span>`;
+    }).join(' ');
+    return `
+      <div class="stat-card" style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
+          <div>
+            <strong>${escHtml(s.thema)}</strong><br>
+            <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · ${escHtml(s.halbjahr)}</span>
+          </div>
+          <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}">${s.presented_confirmed ? '✓ bestätigt' : '⏳ ausstehend'}</span>
+        </div>
+        <div style="margin-top:8px;">${inviteeList || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
+        ${!s.presented_confirmed ? `<button class="btn-sm" style="margin-top:8px;" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
+      </div>`;
+  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Session angemeldet.</div>`;
+
+  const accepted = (talkingMine.invitations || []).filter(i => i.status === 'angenommen');
+  const attendingHtml = accepted.length ? accepted.map(i => {
+    const missed = !i.attended_confirmed && new Date(i.datum) < new Date(new Date().toDateString());
+    return `
+      <div class="stat-card" style="margin-bottom:10px;">
+        <strong>${escHtml(i.presenter_username)}</strong> · ${escHtml(i.thema)}<br>
+        <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</span>
+        <div style="margin-top:6px;">
+          ${i.attended_confirmed ? '<span class="pill pill-green">👂 Teilnahme bestätigt</span>' :
+            (missed ? '<span class="pill pill-yellow">Verpasst?</span>' : '<span class="pill pill-blue">Ausstehend</span>')}
+        </div>
+      </div>`;
+  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine angenommenen Einladungen.</div>`;
+
+  el.innerHTML = `
+    <div class="stats-row">${progressCards}</div>
+    <div class="admin-top" style="margin-top:8px;"><div class="admin-title" style="font-size:16px;">📬 Meine Einladungen</div></div>
+    ${invitesHtml}
+    <div class="admin-top" style="margin-top:24px;">
+      <div class="admin-title" style="font-size:16px;">🎤 Meine Talking Sessions</div>
+      <button class="btn-act btn-green" onclick="openBookSessionModal()" ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ Session anmelden</button>
+    </div>
+    ${presentingHtml}
+    <div class="admin-top" style="margin-top:24px;"><div class="admin-title" style="font-size:16px;">👂 Sessions, die ich besuche</div></div>
+    ${attendingHtml}
+  `;
+}
+
+function openBookSessionModal() {
+  document.getElementById('tbook-slot').innerHTML = talkingOpenSlots.map(s =>
+    `<option value="${s.id}">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} (${escHtml(s.halbjahr)})</option>`
+  ).join('');
+  document.getElementById('tbook-thema').value = '';
+  document.getElementById('tbook-classmates').innerHTML = talkingClassmates.map(c =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+      <input type="checkbox" value="${c.id}" class="tbook-cm-cb"> ${escHtml(c.username)}
+    </label>`
+  ).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Mitschüler:innen gefunden.</span>';
+  openModal('modal-talking-book');
+}
+
+async function submitBookSession() {
+  const slotId = parseInt(document.getElementById('tbook-slot').value);
+  const thema = document.getElementById('tbook-thema').value.trim();
+  const inviteeIds = [...document.querySelectorAll('.tbook-cm-cb:checked')].map(cb => parseInt(cb.value));
+  if (!slotId || !thema || !inviteeIds.length) { alert('Bitte Termin, Thema und mindestens eine Person auswählen.'); return; }
+  const r = await fetch('/api/talking-sessions', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ slotId, thema, inviteeIds })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler beim Buchen.'); return; }
+  closeModal('modal-talking-book');
+  loadTalkingStudent();
+}
+
+let _inviteMoreSessionId = null;
+function openInviteMoreModal(sessionId) {
+  _inviteMoreSessionId = sessionId;
+  const session = talkingMine.presenting.find(s => s.id === sessionId);
+  const alreadyInvited = new Set((session?.invitees || []).map(iv => iv.listenerId));
+  const remaining = talkingClassmates.filter(c => !alreadyInvited.has(c.id));
+  document.getElementById('tinvite-classmates').innerHTML = remaining.map(c =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+      <input type="checkbox" value="${c.id}" class="tinvite-cm-cb"> ${escHtml(c.username)}
+    </label>`
+  ).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Bereits alle Mitschüler:innen eingeladen.</span>';
+  openModal('modal-talking-invite');
+}
+
+async function submitInviteMore() {
+  const inviteeIds = [...document.querySelectorAll('.tinvite-cm-cb:checked')].map(cb => parseInt(cb.value));
+  if (!inviteeIds.length) { alert('Bitte mindestens eine Person auswählen.'); return; }
+  const r = await fetch(`/api/talking-sessions/${_inviteMoreSessionId}/invite`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ inviteeIds })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler beim Einladen.'); return; }
+  closeModal('modal-talking-invite');
+  loadTalkingStudent();
+}
+
+async function respondTalkingInvitation(id, accept) {
+  await fetch(`/api/talking-invitations/${id}/respond`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ accept })
+  });
+  loadTalkingStudent();
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+let talkingAdminSlots = [];
+
+async function loadTalkingAdmin() {
+  const el = document.getElementById('talking-admin');
+  el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
+  try {
+    const r = await fetch('/api/admin/talking-slots');
+    talkingAdminSlots = r.ok ? await r.json() : [];
+  } catch(e) {
+    el.innerHTML = '<div style="padding:20px;color:var(--md-error);">Fehler beim Laden.</div>';
+    return;
+  }
+  renderTalkingAdmin();
+}
+
+function renderTalkingAdmin() {
+  const el = document.getElementById('talking-admin');
+  const rows = talkingAdminSlots.map(s => {
+    const booked = !!s.session_id;
+    const invitees = s.invitees || [];
+    const inviteesHtml = invitees.map(iv => {
+      const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
+      return `<span class="pill ${iv.attendedConfirmed ? 'pill-green' : 'pill-blue'}" style="cursor:pointer;" title="Teilnahme bestätigen/zurücksetzen" onclick="toggleTalkingAttended(${iv.id}, ${!iv.attendedConfirmed})">
+        ${escHtml(iv.username)} ${statusIcon}${iv.attendedConfirmed ? ' 👂✓' : ''}
+      </span>`;
+    }).join(' ');
+    return `
+      <div class="stat-card" style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
+          <div>
+            <strong>${fmtTalkingDatum(s.datum)}</strong> · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · <span class="pill pill-blue">${escHtml(s.halbjahr)}</span>
+          </div>
+          ${booked ? '' : `<button class="btn-icon red" onclick="deleteTalkingSlot(${s.id})" title="Termin löschen">🗑</button>`}
+        </div>
+        ${booked ? `
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            🎤 <strong>${escHtml(s.presenter_username)}</strong> · ${escHtml(s.thema)}
+            <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}" style="cursor:pointer;" title="Vortrag bestätigen/zurücksetzen" onclick="toggleTalkingPresented(${s.session_id}, ${!s.presented_confirmed})">
+              ${s.presented_confirmed ? '✓ Vortrag bestätigt' : '⏳ Vortrag bestätigen'}
+            </span>
+            <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
+          </div>
+          <div style="margin-top:6px;">${inviteesHtml || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
+        ` : `<div style="margin-top:8px;color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</div>`}
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="admin-top">
+      <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
+      <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
+      <button class="btn-act btn-outline" onclick="loadTalkingAdmin()">↺ Laden</button>
+    </div>
+    ${rows || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Termine angelegt.</div>'}
+  `;
+}
+
+function currentHalbjahrGuess() {
+  const d = new Date();
+  const m = d.getMonth() + 1, y = d.getFullYear();
+  return (m >= 2 && m <= 7) ? `${y}/2` : (m >= 8 ? `${y}/1` : `${y - 1}/1`);
+}
+
+function openTalkingSlotModal() {
+  document.getElementById('tslot-halbjahr').value = currentHalbjahrGuess();
+  document.getElementById('tslot-datum').value = '';
+  document.getElementById('tslot-uhrzeit').value = '';
+  document.getElementById('tslot-ort').value = '';
+  document.getElementById('tslot-recurring').checked = false;
+  document.getElementById('tslot-recurring-fields').style.display = 'none';
+  document.getElementById('tslot-single-fields').style.display = 'block';
+  document.getElementById('tslot-von').value = '';
+  document.getElementById('tslot-bis').value = '';
+  document.getElementById('tslot-weekday').value = '1';
+  openModal('modal-talking-slot');
+}
+
+function toggleTalkingRecurring() {
+  const checked = document.getElementById('tslot-recurring').checked;
+  document.getElementById('tslot-recurring-fields').style.display = checked ? 'block' : 'none';
+  document.getElementById('tslot-single-fields').style.display = checked ? 'none' : 'block';
+}
+
+async function submitTalkingSlot() {
+  const halbjahr = document.getElementById('tslot-halbjahr').value.trim();
+  const uhrzeit = document.getElementById('tslot-uhrzeit').value.trim();
+  const ort = document.getElementById('tslot-ort').value.trim();
+  if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
+  const recurring = document.getElementById('tslot-recurring').checked;
+  let body;
+  if (recurring) {
+    const weekday = document.getElementById('tslot-weekday').value;
+    const von = document.getElementById('tslot-von').value;
+    const bis = document.getElementById('tslot-bis').value;
+    if (!von || !bis) { alert('Bitte Zeitraum angeben.'); return; }
+    body = { halbjahr, uhrzeit, ort, recurring: { weekday, von, bis } };
+  } else {
+    const datum = document.getElementById('tslot-datum').value;
+    if (!datum) { alert('Bitte Datum angeben.'); return; }
+    body = { halbjahr, uhrzeit, ort, datum };
+  }
+  const r = await fetch('/api/admin/talking-slots', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler beim Anlegen.'); return; }
+  closeModal('modal-talking-slot');
+  loadTalkingAdmin();
+}
+
+async function deleteTalkingSlot(id) {
+  if (!confirm('Termin wirklich löschen?')) return;
+  const r = await fetch(`/api/admin/talking-slots/${id}`, { method: 'DELETE' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Löschen.'); return; }
+  loadTalkingAdmin();
+}
+
+async function cancelTalkingSession(sessionId) {
+  if (!confirm('Buchung wirklich stornieren? Der Termin wird wieder frei.')) return;
+  await fetch(`/api/admin/talking-sessions/${sessionId}`, { method: 'DELETE' });
+  loadTalkingAdmin();
+}
+
+async function toggleTalkingPresented(sessionId, confirmed) {
+  await fetch(`/api/admin/talking-sessions/${sessionId}/confirm-presented`, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ confirmed })
+  });
+  loadTalkingAdmin();
+}
+
+async function toggleTalkingAttended(invitationId, confirmed) {
+  await fetch(`/api/admin/talking-invitations/${invitationId}/confirm-attended`, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ confirmed })
+  });
+  loadTalkingAdmin();
 }
 
 let viewingStudent = null;
