@@ -373,6 +373,11 @@ function buildOverview(){
     const basisLzkOk=stats['Basis']&&stats['Basis'].lzkOk;
     const aufbauLzkOk=stats['Aufbau']&&stats['Aufbau'].lzkOk;
     const hasAufbau=!!GROUPS['Aufbau']; // manche Lerntheken (z.B. Wahrscheinlichkeit und Zufall) haben strukturell kein Aufbau
+    const basisAbgabeOk=!!(stats['Basis']&&stats['Basis'].abgabeOk);
+    const basisKorOk=!!(stats['Basis']&&stats['Basis'].korOk);
+    const basisTermin=!!(stats['Basis']&&stats['Basis'].lzk&&stats['Basis'].lzk.datum);
+    const basisBereit=basisOk&&pflichtOk&&basisAbgabeOk&&basisKorOk&&basisTermin;
+    const basisMissing=()=>{const m=[];if(!basisAbgabeOk)m.push('Aufgabe abgeben');else if(!basisKorOk)m.push('Korrektur bestehen');if(!basisTermin)m.push('Termin vereinbaren');return m.join(' · ');};
     // Wenn schon ein Termin vereinbart (aber noch nicht bestanden) ist, das statt der Aufforderung zeigen
     const terminHint=(typ,lzk)=>{
       if(!lzk||!lzk.datum||lzk.status==='bestanden')return null;
@@ -383,10 +388,12 @@ function buildOverview(){
       if(basisLzkOk){
         lzkEl.className='lzk-status aufbau';
         lzkEl.innerHTML='<span class="lzk-status-icon">🏆</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Sehr gut – du hast alles für diesen Baustein geschafft!</div>';
-      } else if(basisOk&&pflichtOk){
+      } else if(basisBereit){
         lzkEl.className='lzk-status basis';
-        const tt=terminHint('Basis',stats['Basis']&&stats['Basis'].lzk);
-        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>'+(tt||'Vereinbare einen Termin für die Basis-LZK mit deiner Lehrkraft.')+'</div>';
+        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>'+terminHint('Basis',stats['Basis']&&stats['Basis'].lzk)+'</div>';
+      } else if(basisOk&&pflichtOk){
+        lzkEl.className='lzk-status neutral';
+        lzkEl.innerHTML='<span class="lzk-status-icon">📋</span><div class="lzk-status-text"><strong>Stationen erledigt!</strong>Noch: '+basisMissing()+'</div>';
       } else {
         lzkEl.className='lzk-status neutral';
         lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+'.</div>';
@@ -400,10 +407,12 @@ function buildOverview(){
       } else if(basisLzkOk){
         lzkEl.className='lzk-status aufbau';
         lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).</div>';
-      } else if(basisOk&&pflichtOk){
+      } else if(basisBereit){
         lzkEl.className='lzk-status basis';
-        const tt=terminHint('Basis',stats['Basis']&&stats['Basis'].lzk);
-        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>'+(tt||('Weiter mit Aufbau für die Aufbau-LZK ('+aDone+'/'+aReq+' Aufbau-Stationen).'))+'</div>';
+        lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>'+terminHint('Basis',stats['Basis']&&stats['Basis'].lzk)+'</div>';
+      } else if(basisOk&&pflichtOk){
+        lzkEl.className='lzk-status neutral';
+        lzkEl.innerHTML='<span class="lzk-status-icon">📋</span><div class="lzk-status-text"><strong>Stationen erledigt!</strong>Noch: '+basisMissing()+'</div>';
       } else {
         lzkEl.className='lzk-status neutral';
         lzkEl.innerHTML='<span class="lzk-status-icon">🎯</span><div class="lzk-status-text"><strong>Nächstes Ziel: Basis-LZK</strong>Pflicht + mind. '+bReq+' Basis-Stationen – bisher: '+bDone+'/'+bReq+' Basis.</div>';
