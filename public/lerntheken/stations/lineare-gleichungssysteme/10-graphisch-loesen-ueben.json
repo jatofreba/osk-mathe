@@ -10,8 +10,7 @@
   ],
   "hasSol": true,
   "geogebra": {
-    "appName": "classic",
-    "perspective": "G",
+    "appName": "graphing",
     "height": 400,
     "showToolBar": false,
     "showAlgebraInput": true,
