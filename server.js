@@ -111,6 +111,39 @@ async function initDB() {
         ALTER TABLE korrektur ADD CONSTRAINT korrektur_user_id_lerntheke_gruppe_key UNIQUE(user_id, lerntheke, gruppe);
       END IF;
     END $$;
+    CREATE TABLE IF NOT EXISTS talking_slots (
+      id         SERIAL PRIMARY KEY,
+      klasse     TEXT NOT NULL,
+      datum      DATE NOT NULL,
+      uhrzeit    TEXT NOT NULL DEFAULT '',
+      ort        TEXT NOT NULL DEFAULT '',
+      halbjahr   TEXT NOT NULL,
+      admin_id   INTEGER REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS talking_sessions (
+      id                  SERIAL PRIMARY KEY,
+      slot_id             INTEGER NOT NULL UNIQUE REFERENCES talking_slots(id) ON DELETE CASCADE,
+      presenter_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      thema               TEXT NOT NULL,
+      presented_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+      admin_id            INTEGER REFERENCES users(id),
+      updated_at          TIMESTAMPTZ DEFAULT NOW(),
+      created_at          TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS talking_invitations (
+      id                 SERIAL PRIMARY KEY,
+      session_id         INTEGER NOT NULL REFERENCES talking_sessions(id) ON DELETE CASCADE,
+      listener_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status             TEXT NOT NULL DEFAULT 'eingeladen',
+      attended_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+      admin_id           INTEGER REFERENCES users(id),
+      updated_at         TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(session_id, listener_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_talking_slots_klasse ON talking_slots(klasse, datum);
+    CREATE INDEX IF NOT EXISTS idx_talking_sessions_presenter ON talking_sessions(presenter_id);
+    CREATE INDEX IF NOT EXISTS idx_talking_invitations_listener ON talking_invitations(listener_id);
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -960,6 +993,284 @@ app.post('/api/admin/set-kurs', requireAdmin, async (req, res) => {
     } else {
       await pool.query('UPDATE users SET kurs=$1 WHERE id=$2', [kurs, userId]);
     }
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Talking Sessions ───────────────────────────────────────────────────────────
+// Schüler/geteilt
+app.get('/api/classmates', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id, username FROM users WHERE role=$1 AND klasse=$2 AND id != $3 ORDER BY username',
+      ['student', req.session.klasse, req.session.userId]
+    );
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.get('/api/talking-slots/open', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr
+      FROM talking_slots s
+      WHERE s.klasse=$1 AND s.datum >= CURRENT_DATE
+        AND NOT EXISTS (SELECT 1 FROM talking_sessions ts WHERE ts.slot_id=s.id)
+      ORDER BY s.datum, s.uhrzeit
+    `, [req.session.klasse]);
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const [presenting, invitations, presentedCounts, attendedCounts] = await Promise.all([
+      pool.query(`
+        SELECT ts.id, ts.thema, ts.presented_confirmed,
+               sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
+               COALESCE(json_agg(json_build_object(
+                 'id', ti.id, 'listenerId', u.id, 'username', u.username,
+                 'status', ti.status, 'attendedConfirmed', ti.attended_confirmed
+               )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
+        FROM talking_sessions ts
+        JOIN talking_slots sl ON sl.id = ts.slot_id
+        LEFT JOIN talking_invitations ti ON ti.session_id = ts.id
+        LEFT JOIN users u ON u.id = ti.listener_id
+        WHERE ts.presenter_id = $1
+        GROUP BY ts.id, sl.id
+        ORDER BY sl.datum DESC, sl.uhrzeit
+      `, [uid]),
+      pool.query(`
+        SELECT ti.id, ti.status, ti.attended_confirmed,
+               ts.id AS session_id, ts.thema, ts.presented_confirmed,
+               sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
+               pu.username AS presenter_username
+        FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        JOIN talking_slots sl ON sl.id = ts.slot_id
+        JOIN users pu ON pu.id = ts.presenter_id
+        WHERE ti.listener_id = $1
+        ORDER BY sl.datum DESC, sl.uhrzeit
+      `, [uid]),
+      pool.query(`
+        SELECT tsl.halbjahr, COUNT(*) FILTER (WHERE ts.presented_confirmed) AS presented_done
+        FROM talking_sessions ts JOIN talking_slots tsl ON tsl.id = ts.slot_id
+        WHERE ts.presenter_id = $1 GROUP BY tsl.halbjahr
+      `, [uid]),
+      pool.query(`
+        SELECT tsl.halbjahr, COUNT(*) FILTER (WHERE ti.attended_confirmed) AS attended_done
+        FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        JOIN talking_slots tsl ON tsl.id = ts.slot_id
+        WHERE ti.listener_id = $1 GROUP BY tsl.halbjahr
+      `, [uid]),
+    ]);
+    res.json({
+      presenting: presenting.rows,
+      invitations: invitations.rows,
+      presentedCounts: presentedCounts.rows,
+      attendedCounts: attendedCounts.rows
+    });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Bucht einen offenen Termin: legt Session + Einladungen in einer Transaktion an,
+// damit nie eine Session ohne eingeladene Personen übrig bleibt (einzige Transaktion im Projekt).
+app.post('/api/talking-sessions', requireLogin, async (req, res) => {
+  const { slotId, thema, inviteeIds } = req.body;
+  if (!slotId || !thema || !Array.isArray(inviteeIds) || !inviteeIds.length)
+    return res.status(400).json({ error: 'Fehlende Angaben' });
+  const ids = [...new Set(inviteeIds.map(Number))].filter(id => id && id !== req.session.userId);
+  if (!ids.length) return res.status(400).json({ error: 'Mindestens eine eingeladene Person nötig' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const slotCheck = await client.query(
+      'SELECT id FROM talking_slots WHERE id=$1 AND klasse=$2',
+      [slotId, req.session.klasse]
+    );
+    if (!slotCheck.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Termin nicht gefunden' });
+    }
+    const validInvitees = await client.query(
+      'SELECT id FROM users WHERE id = ANY($1) AND role=$2 AND klasse=$3',
+      [ids, 'student', req.session.klasse]
+    );
+    if (validInvitees.rows.length !== ids.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Ungültige eingeladene Person' });
+    }
+    const sessionResult = await client.query(
+      'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,$2,$3) RETURNING id',
+      [slotId, req.session.userId, thema]
+    );
+    const sessionId = sessionResult.rows[0].id;
+    for (const listenerId of ids) {
+      await client.query(
+        'INSERT INTO talking_invitations (session_id, listener_id) VALUES ($1,$2)',
+        [sessionId, listenerId]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, sessionId });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    if (e.code === '23505') return res.status(409).json({ error: 'Termin bereits gebucht' });
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/talking-sessions/:id/invite', requireLogin, async (req, res) => {
+  try {
+    const { inviteeIds } = req.body;
+    if (!Array.isArray(inviteeIds) || !inviteeIds.length)
+      return res.status(400).json({ error: 'Fehlende Angaben' });
+    const session = await pool.query(
+      'SELECT id, presented_confirmed FROM talking_sessions WHERE id=$1 AND presenter_id=$2',
+      [req.params.id, req.session.userId]
+    );
+    if (!session.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    if (session.rows[0].presented_confirmed)
+      return res.status(409).json({ error: 'Vortrag bereits bestätigt, keine Einladungen mehr möglich' });
+    const ids = [...new Set(inviteeIds.map(Number))].filter(id => id && id !== req.session.userId);
+    if (!ids.length) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const validInvitees = await pool.query(
+      'SELECT id FROM users WHERE id = ANY($1) AND role=$2 AND klasse=$3',
+      [ids, 'student', req.session.klasse]
+    );
+    if (validInvitees.rows.length !== ids.length)
+      return res.status(400).json({ error: 'Ungültige eingeladene Person' });
+    for (const listenerId of ids) {
+      await pool.query(
+        'INSERT INTO talking_invitations (session_id, listener_id) VALUES ($1,$2) ON CONFLICT (session_id, listener_id) DO NOTHING',
+        [req.params.id, listenerId]
+      );
+    }
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
+  try {
+    const { accept } = req.body;
+    const status = accept ? 'angenommen' : 'abgelehnt';
+    const r = await pool.query(
+      'UPDATE talking_invitations SET status=$1, updated_at=NOW() WHERE id=$2 AND listener_id=$3 RETURNING id',
+      [status, req.params.id, req.session.userId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Lehrkraft
+app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
+  try {
+    const { datum, uhrzeit, ort, halbjahr, recurring } = req.body;
+    if (!halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const dates = [];
+    if (recurring) {
+      const { weekday, von, bis } = recurring;
+      if (weekday === undefined || weekday === null || !von || !bis)
+        return res.status(400).json({ error: 'Fehlende Angaben' });
+      let d = new Date(von + 'T00:00:00');
+      const end = new Date(bis + 'T00:00:00');
+      if (isNaN(d) || isNaN(end) || end < d) return res.status(400).json({ error: 'Ungültiger Zeitraum' });
+      while (d <= end) {
+        if (d.getDay() === Number(weekday)) dates.push(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() + 1);
+      }
+      if (!dates.length) return res.status(400).json({ error: 'Kein passender Wochentag im Zeitraum' });
+    } else {
+      if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
+      dates.push(datum);
+    }
+    for (const d of dates) {
+      await pool.query(`
+        INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id)
+        VALUES ($1,$2,$3,$4,$5,$6)
+      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr, req.session.userId]);
+    }
+    res.json({ ok: true, count: dates.length });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr,
+             ts.id AS session_id, ts.thema, ts.presented_confirmed, pu.username AS presenter_username,
+             COALESCE(json_agg(json_build_object(
+               'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
+               'status', ti.status, 'attendedConfirmed', ti.attended_confirmed
+             )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
+      FROM talking_slots s
+      LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+      LEFT JOIN users pu ON pu.id = ts.presenter_id
+      LEFT JOIN talking_invitations ti ON ti.session_id = ts.id
+      LEFT JOIN users lu ON lu.id = ti.listener_id
+      WHERE s.klasse=$1
+      GROUP BY s.id, ts.id, pu.username
+      ORDER BY s.datum DESC, s.uhrzeit
+    `, [req.session.klasse]);
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {
+  try {
+    const booked = await pool.query('SELECT id FROM talking_sessions WHERE slot_id=$1', [req.params.id]);
+    if (booked.rows.length) return res.status(409).json({ error: 'Termin ist bereits gebucht' });
+    const r = await pool.query(
+      'DELETE FROM talking_slots WHERE id=$1 AND klasse=$2 RETURNING id',
+      [req.params.id, req.session.klasse]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, async (req, res) => {
+  try {
+    const { confirmed } = req.body;
+    const r = await pool.query(`
+      UPDATE talking_sessions ts SET presented_confirmed=$1, admin_id=$2, updated_at=NOW()
+      FROM talking_slots sl
+      WHERE ts.slot_id = sl.id AND ts.id=$3 AND sl.klasse=$4
+      RETURNING ts.id
+    `, [!!confirmed, req.session.userId, req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, async (req, res) => {
+  try {
+    const { confirmed } = req.body;
+    const r = await pool.query(`
+      UPDATE talking_invitations ti SET attended_confirmed=$1, admin_id=$2, updated_at=NOW()
+      FROM talking_sessions ts, talking_slots sl
+      WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$3 AND sl.klasse=$4
+      RETURNING ti.id
+    `, [!!confirmed, req.session.userId, req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.delete('/api/admin/talking-sessions/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      DELETE FROM talking_sessions ts USING talking_slots sl
+      WHERE ts.slot_id = sl.id AND ts.id=$1 AND sl.klasse=$2
+      RETURNING ts.id
+    `, [req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
