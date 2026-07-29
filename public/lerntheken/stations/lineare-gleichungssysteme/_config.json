@@ -22,10 +22,10 @@
       "color": "#16a34a",
       "bg": "#f0fdf4",
       "border": "#bbf7d0",
-      "required": 4,
-      "total": 7,
+      "required": 3,
+      "total": 4,
       "emoji": "🟢",
-      "desc": "Sachaufgaben & Sonderfälle – 4 von 7 wählen"
+      "desc": "Additionsverfahren, Sachaufgabe & Sonderfälle"
     },
     "Abflug": {
       "color": "#7c3aed",
@@ -43,7 +43,7 @@
     "Aufbau",
     "Abflug"
   ],
-  "total": 25,
+  "total": 22,
   "hilfen": [
     {
       "title": "Was ist ein lineares Gleichungssystem?",
