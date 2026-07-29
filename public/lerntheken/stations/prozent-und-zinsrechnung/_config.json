@@ -37,7 +37,12 @@
       "desc": "Knobeln & Entdecken – 1 von 4 wählen"
     }
   },
-  "groupOrder": ["Pflicht", "Basis", "Aufbau", "Abflug"],
+  "groupOrder": [
+    "Pflicht",
+    "Basis",
+    "Aufbau",
+    "Abflug"
+  ],
   "total": 26,
   "hilfen": [
     {
@@ -78,7 +83,7 @@
     },
     {
       "title": "Zinseszins",
-      "html": "<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Zinseszins</h3><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Bei <strong>einfachen Zinsen</strong> bekommt ihr jedes Jahr Zinsen nur vom urspr&uuml;nglichen Kapital. Bleiben die Zinsen auf dem Konto, z&auml;hlen sie im n&auml;chsten Jahr <strong>mit zum Kapital</strong> &ndash; ihr bekommt dann auch Zinsen auf die Zinsen. Das nennt man <strong>Zinseszins</strong>.</p></div><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>① Zinsen f&uuml;r dieses Jahr berechnen: Kapital : 100 · Zinssatz<br>② Neues Kapital = altes Kapital + Zinsen<br>③ F&uuml;r das n&auml;chste Jahr: wieder bei ① anfangen &ndash; aber mit dem NEUEN Kapital</div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> 500&nbsp;€ zu 4&nbsp;% Zinsen, 2 Jahre lang.</p><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.9;'>Jahr 1: 500&nbsp;€ : 100 · 4 = 20&nbsp;€ Zinsen &rarr; neues Kapital 520&nbsp;€<br>Jahr 2: 520&nbsp;€ : 100 · 4 = 20,80&nbsp;€ Zinsen &rarr; neues Kapital <strong>540,80&nbsp;€</strong></div><p style='font-size:13px;color:#555;'>💡 In Jahr 2 sind es schon mehr Zinsen als in Jahr 1 (20,80&nbsp;€ statt 20&nbsp;€) &ndash; weil das Kapital gewachsen ist. Je l&auml;nger das Geld liegen bleibt, desto st&auml;rker wird dieser Effekt.</p>"
+      "html": "<h3 style='font-size:16px;font-weight:600;margin-bottom:12px;'>Zinseszins</h3><div style='background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin:10px 0;'><p style='font-size:14px;line-height:1.7;margin:0;'>Bei <strong>einfachen Zinsen</strong> bekommt ihr jedes Jahr Zinsen nur vom urspr&uuml;nglichen Kapital. Bleiben die Zinsen auf dem Konto, z&auml;hlen sie im n&auml;chsten Jahr <strong>mit zum Kapital</strong> &ndash; ihr bekommt dann auch Zinsen auf die Zinsen. Das nennt man <strong>Zinseszins</strong>.</p></div><div style='background:#f8f8f8;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2;'>① Zinsen f&uuml;r dieses Jahr berechnen: Kapital : 100 · Zinssatz<br>② Neues Kapital = altes Kapital + Zinsen<br>③ F&uuml;r das n&auml;chste Jahr: wieder bei ① anfangen &ndash; aber mit dem NEUEN Kapital</div><p style='font-size:13px;margin:10px 0 4px 0;'><strong>Beispiel:</strong> 500&nbsp;€ zu 4&nbsp;% Zinsen, 2 Jahre lang.</p><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.9;'>Jahr 1: 500&nbsp;€ : 100 · 4 = 20&nbsp;€ Zinsen &rarr; neues Kapital 520&nbsp;€<br>Jahr 2: 520&nbsp;€ : 100 · 4 = 20,80&nbsp;€ Zinsen &rarr; neues Kapital <strong>540,80&nbsp;€</strong></div><p style='font-size:13px;color:#555;'>💡 In Jahr 2 sind es schon mehr Zinsen als in Jahr 1 (20,80&nbsp;€ statt 20&nbsp;€) &ndash; weil das Kapital gewachsen ist. Je l&auml;nger das Geld liegen bleibt, desto st&auml;rker wird dieser Effekt.</p><div style='background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;line-height:1.9;'><strong>Abk&uuml;rzung mit dem Wachstumsfaktor:</strong> 100&nbsp;% + 4&nbsp;% = 104&nbsp;% = Faktor <strong>1,04</strong>. Damit direkt: Kapital-Ende = Kapital-Start &middot; 1,04 (f&uuml;r 2 Jahre: &middot; 1,04 &middot; 1,04). Beispiel: 500&nbsp;&euro; &middot; 1,04 &middot; 1,04 = <strong>540,80&nbsp;&euro;</strong> &ndash; gleiches Ergebnis wie oben, nur k&uuml;rzer.</div>"
     }
   ]
 }
