@@ -126,7 +126,7 @@ async function initDB() {
       slot_id             INTEGER NOT NULL UNIQUE REFERENCES talking_slots(id) ON DELETE CASCADE,
       presenter_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       thema               TEXT NOT NULL,
-      presented_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+      presented_status    TEXT NOT NULL DEFAULT 'ausstehend',
       admin_id            INTEGER REFERENCES users(id),
       updated_at          TIMESTAMPTZ DEFAULT NOW(),
       created_at          TIMESTAMPTZ DEFAULT NOW()
@@ -136,7 +136,7 @@ async function initDB() {
       session_id         INTEGER NOT NULL REFERENCES talking_sessions(id) ON DELETE CASCADE,
       listener_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       status             TEXT NOT NULL DEFAULT 'eingeladen',
-      attended_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+      attended_status    TEXT NOT NULL DEFAULT 'ausstehend',
       admin_id           INTEGER REFERENCES users(id),
       updated_at         TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(session_id, listener_id)
@@ -162,6 +162,22 @@ async function initDB() {
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_invitations' AND column_name='quality_emoji') THEN
         ALTER TABLE talking_invitations ADD COLUMN quality_emoji TEXT;
+      END IF;
+    END $$;
+    -- Migration: presented_confirmed/attended_confirmed (Boolean) -> presented_status/attended_status
+    -- (Tri-State: ausstehend/erledigt/nicht_erledigt) für "nicht teilgenommen" als eigenen Zustand.
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_sessions' AND column_name='presented_confirmed') THEN
+        ALTER TABLE talking_sessions ADD COLUMN IF NOT EXISTS presented_status TEXT NOT NULL DEFAULT 'ausstehend';
+        UPDATE talking_sessions SET presented_status = CASE WHEN presented_confirmed THEN 'erledigt' ELSE 'ausstehend' END;
+        ALTER TABLE talking_sessions DROP COLUMN presented_confirmed;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_invitations' AND column_name='attended_confirmed') THEN
+        ALTER TABLE talking_invitations ADD COLUMN IF NOT EXISTS attended_status TEXT NOT NULL DEFAULT 'ausstehend';
+        UPDATE talking_invitations SET attended_status = CASE WHEN attended_confirmed THEN 'erledigt' ELSE 'ausstehend' END;
+        ALTER TABLE talking_invitations DROP COLUMN attended_confirmed;
       END IF;
     END $$;
   `);
@@ -287,6 +303,8 @@ const requireAdmin = (req, res, next) =>
 
 // Vorgegebene Auswahl für die Qualitäts-Bewertung von Mathe-Talks (Admin)
 const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
+// Tri-State statt Boolean, damit "nicht teilgenommen" von "noch nicht bewertet" unterscheidbar ist.
+const TALKING_STATUS_VALUES = ['ausstehend', 'erledigt', 'nicht_erledigt'];
 
 // Pokale-Gesamtcount für Mathe-Talks: Pflicht (1. Vortrag, erste 2 Zuhör-Termine
 // je Halbjahr) zählt immer zum Max, auch wenn noch nicht wahrgenommen. Zusatz/Bonus
@@ -299,19 +317,19 @@ function computeTalkingTrophies(halbjahre, presenting, listening) {
     const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     max += 3;
-    if (myPresenting[0] && myPresenting[0].presented_confirmed) earned += myPresenting[0].pokale || 0;
+    if (myPresenting[0] && myPresenting[0].presentedStatus === 'erledigt') earned += myPresenting[0].pokale || 0;
     myPresenting.slice(1).forEach(s => { // beliebig viele Zusatz-Vorträge, nur wenn angemeldet
       max += 3;
-      if (s.presented_confirmed) earned += s.pokale || 0;
+      if (s.presentedStatus === 'erledigt') earned += s.pokale || 0;
     });
     max += 4;
     [0, 1].forEach(idx => {
       const iv = myListening[idx];
-      if (iv && iv.attended_confirmed) earned += iv.pokale || 0;
+      if (iv && iv.attendedStatus === 'erledigt') earned += iv.pokale || 0;
     });
     myListening.slice(2).forEach(iv => {
       max += 2;
-      if (iv.attended_confirmed) earned += iv.pokale || 0;
+      if (iv.attendedStatus === 'erledigt') earned += iv.pokale || 0;
     });
   });
   return { earned, max };
@@ -851,11 +869,11 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
       pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
       pool.query(`
-        SELECT ts.presenter_id AS user_id, ts.presented_confirmed, ts.pokale, sl.halbjahr, sl.datum
+        SELECT ts.presenter_id AS user_id, ts.presented_status AS "presentedStatus", ts.pokale, sl.halbjahr, sl.datum
         FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
       `),
       pool.query(`
-        SELECT ti.listener_id AS user_id, ti.attended_confirmed, ti.pokale, sl.halbjahr, sl.datum
+        SELECT ti.listener_id AS user_id, ti.attended_status AS "attendedStatus", ti.pokale, sl.halbjahr, sl.datum
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -1100,11 +1118,11 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     const uid = req.session.userId;
     const [presenting, invitations, slotHalbjahre] = await Promise.all([
       pool.query(`
-        SELECT ts.id, ts.thema, ts.presented_confirmed, ts.pokale, ts.quality_emoji,
+        SELECT ts.id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji",
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
                COALESCE(json_agg(json_build_object(
                  'id', ti.id, 'listenerId', u.id, 'username', u.username,
-                 'status', ti.status, 'attendedConfirmed', ti.attended_confirmed,
+                 'status', ti.status, 'attendedStatus', ti.attended_status,
                  'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
                )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
         FROM talking_sessions ts
@@ -1116,8 +1134,8 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid]),
       pool.query(`
-        SELECT ti.id, ti.status, ti.attended_confirmed, ti.pokale, ti.quality_emoji,
-               ts.id AS session_id, ts.thema, ts.presented_confirmed,
+        SELECT ti.id, ti.status, ti.attended_status AS "attendedStatus", ti.pokale, ti.quality_emoji AS "qualityEmoji",
+               ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus",
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
                pu.username AS presenter_username
         FROM talking_invitations ti
@@ -1197,12 +1215,12 @@ app.post('/api/talking-sessions/:id/invite', requireLogin, async (req, res) => {
     if (!Array.isArray(inviteeIds) || !inviteeIds.length)
       return res.status(400).json({ error: 'Fehlende Angaben' });
     const session = await pool.query(
-      'SELECT id, presented_confirmed FROM talking_sessions WHERE id=$1 AND presenter_id=$2',
+      'SELECT id, presented_status FROM talking_sessions WHERE id=$1 AND presenter_id=$2',
       [req.params.id, req.session.userId]
     );
     if (!session.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
-    if (session.rows[0].presented_confirmed)
-      return res.status(409).json({ error: 'Vortrag bereits bestätigt, keine Einladungen mehr möglich' });
+    if (session.rows[0].presented_status !== 'ausstehend')
+      return res.status(409).json({ error: 'Vortrag bereits bewertet, keine Einladungen mehr möglich' });
     const ids = [...new Set(inviteeIds.map(Number))].filter(id => id && id !== req.session.userId);
     if (!ids.length) return res.status(400).json({ error: 'Fehlende Angaben' });
     const validInvitees = await pool.query(
@@ -1270,10 +1288,10 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr,
-             ts.id AS session_id, ts.thema, ts.presented_confirmed, ts.pokale, ts.quality_emoji, pu.username AS presenter_username,
+             ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji", pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
-               'status', ti.status, 'attendedConfirmed', ti.attended_confirmed,
+               'status', ti.status, 'attendedStatus', ti.attended_status,
                'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
              )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
       FROM talking_slots s
@@ -1304,16 +1322,17 @@ app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, async (req, res) => {
   try {
-    const { confirmed, pokale, qualityEmoji } = req.body;
+    const { status, pokale, qualityEmoji } = req.body;
+    if (!TALKING_STATUS_VALUES.includes(status)) return res.status(400).json({ error: 'Ungültiger Status' });
     if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
       return res.status(400).json({ error: 'Ungültiges Emoji' });
     const pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
     const r = await pool.query(`
-      UPDATE talking_sessions ts SET presented_confirmed=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
+      UPDATE talking_sessions ts SET presented_status=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
       FROM talking_slots sl
       WHERE ts.slot_id = sl.id AND ts.id=$5 AND sl.klasse=$6
       RETURNING ts.id
-    `, [!!confirmed, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
+    `, [status, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -1321,16 +1340,17 @@ app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, asyn
 
 app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, async (req, res) => {
   try {
-    const { confirmed, pokale, qualityEmoji } = req.body;
+    const { status, pokale, qualityEmoji } = req.body;
+    if (!TALKING_STATUS_VALUES.includes(status)) return res.status(400).json({ error: 'Ungültiger Status' });
     if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
       return res.status(400).json({ error: 'Ungültiges Emoji' });
     const pk = Math.min(2, Math.max(0, parseInt(pokale) || 0));
     const r = await pool.query(`
-      UPDATE talking_invitations ti SET attended_confirmed=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
+      UPDATE talking_invitations ti SET attended_status=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
       FROM talking_sessions ts, talking_slots sl
       WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$5 AND sl.klasse=$6
       RETURNING ti.id
-    `, [!!confirmed, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
+    `, [status, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
