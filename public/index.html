@@ -563,9 +563,11 @@ textarea.form-input{
 /* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
 .lt-last-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;}
 /* ── Trophy summary & Leaderboard ───────────────────────────────────────────── */
-.trophy-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;align-items:start;}
-.trophy-lb-col{display:flex;flex-direction:column;gap:16px;}
-@media(max-width:680px){.trophy-section{grid-template-columns:1fr;}}
+.trophy-section{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;}
+.trophy-lb-col{display:flex;flex-direction:column;gap:16px;flex:1 1 260px;}
+.trophy-lb-col.tsum-col{flex:1.7 1 360px;}
+.trophy-lb-col.rank-col{flex:1 1 260px;}
+@media(max-width:680px){.trophy-section{flex-direction:column;}.trophy-section>*{width:100%;}}
 .trophy-panel{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
 .trophy-panel-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink2);margin-bottom:12px;}
 .trophy-track{height:12px;background:#f1f5f9;border-radius:99px;overflow:hidden;margin:8px 0 4px;position:relative;}
@@ -582,9 +584,9 @@ textarea.form-input{
 .lb-mini-bar{width:60px;height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden;flex-shrink:0;}
 .lb-mini-fill{height:100%;border-radius:99px;}
 
-/* ── Talking-Session-Übersicht im Picker (angelehnt an das Papier-Arbeitsblatt) ── */
+/* ── Mathe-Talks-Übersicht im Picker (angelehnt an das Papier-Arbeitsblatt) ── */
 .tsum-header{background:linear-gradient(135deg,#fde4ef,#f6c9de);border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
-.tsum-header-title{font-size:15px;font-weight:800;color:#7c3f78;letter-spacing:.2px;}
+.tsum-header-title{font-size:15px;font-weight:800;color:#7c3f78;letter-spacing:.2px;display:flex;align-items:center;gap:8px;}
 .tsum-header-legend{font-size:10px;color:#8a5a80;text-align:right;line-height:1.6;white-space:nowrap;}
 .tsum-hj-title{font-size:12px;font-weight:700;margin:16px 0 6px;color:var(--ink);}
 .tsum-hj-title:first-of-type{margin-top:0;}
@@ -647,8 +649,8 @@ textarea.form-input{
   </div>
 
   <div class="tabs" id="app-tabs">
-    <div class="tab active" id="tab-lerntheke" onclick="showView('lerntheke')">📚 Lerntheke</div>
-    <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Talking Sessions</div>
+    <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Lerntheke</div>
+    <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Klassen-Übersicht</div>
   </div>
 
@@ -706,8 +708,17 @@ textarea.form-input{
   </div>
 
   <div id="view-talking">
-    <div class="admin-top">
-      <div class="admin-title">🗣️ Talking Sessions</div>
+    <div class="tsum-header" style="margin-bottom:16px;">
+      <div class="tsum-header-title" style="font-size:19px;">
+        <svg width="34" height="34" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0;">
+          <path d="M6 8c0-2.2 1.8-4 4-4h20c2.2 0 4 1.8 4 4v14c0 2.2-1.8 4-4 4H16l-7 6v-6H10c-2.2 0-4-1.8-4-4V8z" fill="#f4a6c9" stroke="#7c3f78" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="14" cy="15" r="1.8" fill="#7c3f78"/>
+          <circle cx="20" cy="15" r="1.8" fill="#7c3f78"/>
+          <circle cx="26" cy="15" r="1.8" fill="#7c3f78"/>
+          <path d="M31 3l1.1 2.7L35 7l-2.9 1.1L31 11l-1.1-2.9L27 7l2.9-1.3z" fill="#f6c945" stroke="#c99a1f" stroke-width="0.6" stroke-linejoin="round"/>
+        </svg>
+        Mathe-Talks
+      </div>
     </div>
     <div id="talking-student" style="display:none;"></div>
     <div id="talking-admin" style="display:none;"></div>
@@ -833,7 +844,7 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Talking-Session-Termin anlegen (Admin) ═══════════════════════════ -->
+<!-- ══ MODAL: Mathe-Talk-Termin anlegen (Admin) ═══════════════════════════ -->
 <div class="overlay" id="modal-talking-slot">
   <div class="modal" style="max-width:440px;">
     <div class="modal-title">Termin anlegen</div>
@@ -891,10 +902,10 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Talking-Session buchen (Schüler:in) ═══════════════════════════════ -->
+<!-- ══ MODAL: Mathe-Talk buchen (Schüler:in) ═══════════════════════════════ -->
 <div class="overlay" id="modal-talking-book">
   <div class="modal" style="max-width:440px;">
-    <div class="modal-title">Talking Session anmelden</div>
+    <div class="modal-title">Mathe-Talk anmelden</div>
     <div class="form-group">
       <label class="form-label">Termin</label>
       <select class="form-input" id="tbook-slot"></select>
@@ -928,7 +939,7 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Talking Session bewerten (Admin) ═══════════════════════════════════ -->
+<!-- ══ MODAL: Mathe-Talk bewerten (Admin) ═══════════════════════════════════ -->
 <div class="overlay" id="modal-talking-rate">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="trate-modal-title">Bewerten</div>
@@ -1239,8 +1250,7 @@ async function showPicker() {
       </div>` : '';
 
     trophySummary.innerHTML = `<div class="trophy-section">
-      ${lockedPanelHtml}
-      <div class="trophy-lb-col">
+      <div class="trophy-lb-col tsum-col">
         <div class="trophy-panel">
           <div class="trophy-panel-title">Meine Pokale</div>
           <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
@@ -1253,8 +1263,9 @@ async function showPicker() {
           <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
         </div>
         ${buildTalkingPickerSummaryHtml(talkingMineData)}
+        ${lockedPanelHtml}
       </div>
-      <div class="trophy-lb-col">
+      <div class="trophy-lb-col rank-col">
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Quote</div>
           <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller aktuell für dich erreichbaren Pokale</div>
@@ -1600,6 +1611,11 @@ function showView(v) {
     const tab = document.getElementById('tab-' + id);
     if (tab) tab.classList.toggle('active', isActive);
   });
+  // Picker gehört zum Lerntheke-Bereich, hat aber keinen eigenen Tab - Lerntheke-Tab mit hervorheben
+  if (v === 'picker') {
+    const tabLerntheke = document.getElementById('tab-lerntheke');
+    if (tabLerntheke) tabLerntheke.classList.add('active');
+  }
   // Show back-to-picker bar only when in lerntheke view with multiple options
   const backBar = document.getElementById('picker-back-bar');
   if (backBar) {
@@ -2138,7 +2154,7 @@ async function saveLzkModal() {
   loadStudents();
 }
 
-// ── Talking Sessions ───────────────────────────────────────────────────────────
+// ── Mathe-Talks ───────────────────────────────────────────────────────────
 // Muss mit TALKING_QUALITY_EMOJIS in server.js übereinstimmen.
 const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
 
@@ -2199,18 +2215,18 @@ function buildTalkingPickerSummaryHtml(data) {
   };
 
   const blocks = groups.map(g => {
-    const presentCols = Math.max(2, g.presenting.length);
+    const presentCols = Math.max(3, g.presenting.length);
     const listenCols = Math.max(2, g.listening.length);
     const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(g.presenting[idx], idx === 0)).join('');
     const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(g.listening[idx], idx < 2)).join('');
     return `
       <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>
-      <div class="tsum-block-title">🎤 Meine Talking Session:</div>
+      <div class="tsum-block-title">🎤 Mein Mathe-Talk:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
         ${presentRow}
       </div>
-      <div class="tsum-block-title">👂 Talking Sessions anderer:</div>
+      <div class="tsum-block-title">👂 Mathe-Talks anderer:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
         ${listenRow}
@@ -2220,11 +2236,20 @@ function buildTalkingPickerSummaryHtml(data) {
   return `
     <div class="trophy-panel">
       <div class="tsum-header">
-        <div class="tsum-header-title">🗣️ Let's Talk Sessions</div>
+        <div class="tsum-header-title">
+          <svg width="30" height="30" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0;">
+            <path d="M6 8c0-2.2 1.8-4 4-4h20c2.2 0 4 1.8 4 4v14c0 2.2-1.8 4-4 4H16l-7 6v-6H10c-2.2 0-4-1.8-4-4V8z" fill="#f4a6c9" stroke="#7c3f78" stroke-width="1.6" stroke-linejoin="round"/>
+            <circle cx="14" cy="15" r="1.8" fill="#7c3f78"/>
+            <circle cx="20" cy="15" r="1.8" fill="#7c3f78"/>
+            <circle cx="26" cy="15" r="1.8" fill="#7c3f78"/>
+            <path d="M31 3l1.1 2.7L35 7l-2.9 1.1L31 11l-1.1-2.9L27 7l2.9-1.3z" fill="#f6c945" stroke="#c99a1f" stroke-width="0.6" stroke-linejoin="round"/>
+          </svg>
+          Mathe-Talks
+        </div>
         <div class="tsum-header-legend"><span class="tsum-legend-swatch grey"></span> graues Feld: Pflicht<br><span class="tsum-legend-swatch white"></span> weißes Feld: Zusatz-Punkte</div>
       </div>
       ${blocks}
-      <button class="btn-sm" style="margin-top:12px;" onclick="showView('talking')">→ Zu den Talking Sessions</button>
+      <button class="btn-sm" style="margin-top:12px;" onclick="showView('talking')">→ Zu den Mathe-Talks</button>
     </div>`;
 }
 
@@ -2269,7 +2294,7 @@ function renderTalkingStudent() {
   const groups = talkingGroupByHalbjahr(talkingMine.presenting, talkingMine.invitations);
   const trophyCard = `
     <div class="stat-card">
-      <div class="stat-lbl">🏆 Talking-Session-Pokale</div>
+      <div class="stat-lbl">🏆 Mathe-Talk-Pokale</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
   const progressCards = groups.length ? groups.map(g => {
@@ -2281,7 +2306,7 @@ function renderTalkingStudent() {
         <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
       </div>`;
-  }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch keine Talking Session</div></div>`;
+  }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch kein Mathe-Talk</div></div>`;
 
   const pendingInvites = (talkingMine.invitations || []).filter(i => i.status === 'eingeladen');
   const invitesHtml = pendingInvites.length ? pendingInvites.map(i => `
@@ -2316,7 +2341,7 @@ function renderTalkingStudent() {
         <div style="margin-top:8px;">${inviteeList || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
         ${!s.presented_confirmed ? `<button class="btn-sm" style="margin-top:8px;" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
       </div>`;
-  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Session angemeldet.</div>`;
+  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein Mathe-Talk angemeldet.</div>`;
 
   const accepted = (talkingMine.invitations || []).filter(i => i.status === 'angenommen');
   const attendingHtml = accepted.length ? accepted.map(i => {
@@ -2338,11 +2363,11 @@ function renderTalkingStudent() {
     <div class="admin-top" style="margin-top:8px;"><div class="admin-title" style="font-size:16px;">📬 Meine Einladungen</div></div>
     ${invitesHtml}
     <div class="admin-top" style="margin-top:24px;">
-      <div class="admin-title" style="font-size:16px;">🎤 Meine Talking Sessions</div>
-      <button class="btn-act btn-green" onclick="openBookSessionModal()" ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ Session anmelden</button>
+      <div class="admin-title" style="font-size:16px;">🎤 Meine Mathe-Talks</div>
+      <button class="btn-act btn-green" onclick="openBookSessionModal()" ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ Mathe-Talk anmelden</button>
     </div>
     ${presentingHtml}
-    <div class="admin-top" style="margin-top:24px;"><div class="admin-title" style="font-size:16px;">👂 Sessions, die ich besuche</div></div>
+    <div class="admin-top" style="margin-top:24px;"><div class="admin-title" style="font-size:16px;">👂 Mathe-Talks, die ich besuche</div></div>
     ${attendingHtml}
   `;
 }
