@@ -2510,22 +2510,28 @@ function computeTalkingOverview(slots) {
   const halbjahrOrder = [];
   const ensure = (hj, uname) => {
     if (!byHalbjahr[hj]) { byHalbjahr[hj] = {}; halbjahrOrder.push(hj); }
-    if (!byHalbjahr[hj][uname]) byHalbjahr[hj][uname] = { presentDone: 0, presentReg: 0, listenDone: 0, listenReg: 0 };
+    if (!byHalbjahr[hj][uname]) byHalbjahr[hj][uname] = {
+      presentDone: 0, presentPending: 0, presentFailed: 0,
+      listenDone: 0, listenPending: 0, listenFailed: 0
+    };
     return byHalbjahr[hj][uname];
   };
   slots.forEach(s => {
     if (!byHalbjahr[s.halbjahr]) { byHalbjahr[s.halbjahr] = {}; halbjahrOrder.push(s.halbjahr); }
     if (!s.session_id) return;
     const pRow = ensure(s.halbjahr, s.presenter_username);
-    pRow.presentReg++;
     if (s.presentedStatus === 'erledigt') pRow.presentDone++;
+    else if (s.presentedStatus === 'nicht_erledigt') pRow.presentFailed++;
+    else pRow.presentPending++;
     (s.invitees || []).forEach(iv => {
-      // "registriert" = Einladung angenommen ODER Admin hat trotzdem schon ein Ergebnis eingetragen
-      // (z.B. "nicht teilgenommen" direkt gesetzt, ohne dass die Einladung formal angenommen wurde).
+      // Ein/e Zuhörer:in zählt mit, wenn die Einladung angenommen wurde ODER der Admin trotzdem
+      // schon ein Ergebnis eingetragen hat (z.B. "nicht teilgenommen" direkt gesetzt, ohne dass die
+      // Einladung formal angenommen wurde). Reines "eingeladen" ohne jedes Ergebnis zählt nicht.
       if (iv.status !== 'angenommen' && iv.attendedStatus === 'ausstehend') return;
       const lRow = ensure(s.halbjahr, iv.username);
-      lRow.listenReg++;
       if (iv.attendedStatus === 'erledigt') lRow.listenDone++;
+      else if (iv.attendedStatus === 'nicht_erledigt') lRow.listenFailed++;
+      else lRow.listenPending++;
     });
   });
   return { byHalbjahr, halbjahre: [...new Set(halbjahrOrder)].sort().reverse() };
