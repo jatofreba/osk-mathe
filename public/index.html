@@ -2409,7 +2409,9 @@ function renderTalkingStudent() {
   };
   const listenDetailCell = (i, grey) => {
     if (!i) return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei zum freiwilligen Zuhören –</span></div>`;
-    const pending = i.status === 'eingeladen';
+    // Annehmen/Ablehnen nur solange die TS des Presenters noch nicht bewertet wurde - danach
+    // entscheidet nur noch die Zuhören-Bewertung der Lehrkraft (attendedStatus), ob teilgenommen wurde.
+    const pending = i.status === 'eingeladen' && i.presentedStatus === 'ausstehend';
     const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
     return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Von:</div>
