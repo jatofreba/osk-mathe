@@ -971,6 +971,17 @@ textarea.form-input{
   </div>
 </div>
 
+<!-- ══ MODAL: Mathe-Talks Detailübersicht pro Schüler:in (Admin) ═══════════════════ -->
+<div class="overlay" id="modal-talking-student-detail">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-title" id="tsdetail-name">Mathe-Talks</div>
+    <div id="tsdetail-content"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talking-student-detail')">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ State ════════════════════════════════════════════════════════════════════
 let me = null;
@@ -2547,7 +2558,7 @@ function renderTalkingOverview(slots, roster) {
           ? badge('gpill-none', nothingStyle, '⚠️ nichts los')
           : badge('gpill-partial', '', '… in Arbeit');
 
-      return `<tr${nothing ? ' style="background:#fef2f2;"' : ''}>
+      return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openTalkingStudentDetail('${stu.username}')" title="Details anzeigen">
         <td>${escHtml(stu.username)}</td>
         <td>${presentBadge}</td>
         <td>${listenBadge}</td>
@@ -2574,6 +2585,59 @@ function renderTalkingOverview(slots, roster) {
     <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">Pflicht je Halbjahr: 🎤 1x präsentieren · 👂 mind. 2x zuhören</div>
     ${sections}
   `;
+}
+
+// Detailauflistung für eine Schüler:in (Klick auf Zeile in renderTalkingOverview): alle Mathe-Talks
+// als Presenter bzw. als (angenommene) Zuhörer:in, gruppiert nach presentedStatus/attendedStatus.
+function openTalkingStudentDetail(username) {
+  const presenting = talkingAdminSlots
+    .filter(s => s.session_id && s.presenter_username === username)
+    .sort((a, b) => new Date(b.datum) - new Date(a.datum));
+
+  const listening = [];
+  talkingAdminSlots.forEach(s => {
+    (s.invitees || []).forEach(iv => {
+      if (iv.username === username && iv.status === 'angenommen') listening.push({ ...iv, slot: s });
+    });
+  });
+  listening.sort((a, b) => new Date(b.slot.datum) - new Date(a.slot.datum));
+
+  const presentGroups = { erledigt: [], ausstehend: [], nicht_erledigt: [] };
+  presenting.forEach(s => (presentGroups[s.presentedStatus] || presentGroups.ausstehend).push(s));
+  const listenGroups = { erledigt: [], ausstehend: [], nicht_erledigt: [] };
+  listening.forEach(iv => (listenGroups[iv.attendedStatus] || listenGroups.ausstehend).push(iv));
+
+  const presentItem = s => `
+    <div class="stat-card" style="margin-bottom:6px;">
+      <strong>${escHtml(s.thema)}</strong><br>
+      <span style="color:var(--md-on-surface-variant);font-size:12px;">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · ${escHtml(s.halbjahr)}</span>
+      ${s.presentedStatus === 'erledigt' ? `<div style="margin-top:4px;">${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}</div>` : ''}
+    </div>`;
+
+  const listenItem = iv => `
+    <div class="stat-card" style="margin-bottom:6px;">
+      <strong>${escHtml(iv.slot.presenter_username)}</strong> · ${escHtml(iv.slot.thema)}<br>
+      <span style="color:var(--md-on-surface-variant);font-size:12px;">${fmtTalkingDatum(iv.slot.datum)} · ${escHtml(iv.slot.uhrzeit || '')} ${escHtml(iv.slot.ort || '')} · ${escHtml(iv.slot.halbjahr)}</span>
+      ${iv.attendedStatus === 'erledigt' ? `<div style="margin-top:4px;">${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}</div>` : ''}
+    </div>`;
+
+  const section = (title, items, renderItem, emptyText) => `
+    <div style="font-weight:600;font-size:12.5px;margin:10px 0 4px;color:var(--md-on-surface-variant);">${title}</div>
+    ${items.length ? items.map(renderItem).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:4px;">${emptyText}</div>`}
+  `;
+
+  document.getElementById('tsdetail-name').textContent = `🗣️ Mathe-Talks: ${username}`;
+  document.getElementById('tsdetail-content').innerHTML = `
+    <div class="admin-top" style="margin-bottom:2px;"><div class="admin-title" style="font-size:14px;">🎤 Präsentieren</div></div>
+    ${section('✓ Gehalten', presentGroups.erledigt, presentItem, 'Noch keinen Vortrag gehalten.')}
+    ${section('📅 Angemeldet, ausstehend', presentGroups.ausstehend, presentItem, 'Keine offenen Anmeldungen.')}
+    ${section('✗ Nicht teilgenommen', presentGroups.nicht_erledigt, presentItem, 'Keine.')}
+    <div class="admin-top" style="margin:18px 0 2px;"><div class="admin-title" style="font-size:14px;">👂 Zuhören</div></div>
+    ${section('✓ Zugehört', listenGroups.erledigt, listenItem, 'Noch keine Session besucht.')}
+    ${section('📅 Angemeldet, ausstehend', listenGroups.ausstehend, listenItem, 'Keine offenen Anmeldungen.')}
+    ${section('✗ Nicht teilgenommen', listenGroups.nicht_erledigt, listenItem, 'Keine.')}
+  `;
+  openModal('modal-talking-student-detail');
 }
 
 function renderTalkingAdmin() {
