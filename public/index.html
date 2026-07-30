@@ -552,6 +552,7 @@ textarea.form-input{
 .lt-card.lt-tier-4{border:2px solid #7c3aed;background:linear-gradient(135deg,#f5f3ff,#fff);}
 .stat-card.tt-tier-1{border:2px solid #9ca3af;background:linear-gradient(135deg,#f9fafb,#fff);}
 .stat-card.tt-tier-2{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
+.stat-card.tt-tier-3{border:2px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);}
 .stat-card.tt-tier-4{border:2px solid #7c3aed;background:linear-gradient(135deg,#f5f3ff,#fff);}
 .lt-card.lt-locked{opacity:.55;pointer-events:none;filter:grayscale(.4);}
 .lt-slim-group{display:flex;flex-direction:column;gap:7px;}
@@ -2196,17 +2197,18 @@ function talkingGroupByHalbjahr(presenting, invitations) {
     listening: accepted.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
   }));
 }
-// Tier-System wie bei den Lerntheken-Karten (grau/grün/lila = t1/t2/t4): grau = in Arbeit,
-// Pflicht erfüllt (1 Vortrag + 2 Zuhören erledigt) = grün, +1 Bonus-Talk = Epic (lila).
-// Anders als bei den Lerntheken-Karten (dort kein Banner bei t1) wird hier IMMER ein Banner
-// gezeigt, auch im "in Arbeit"-Zustand, damit die Statusleiste nie unsichtbar ist.
+// Tier-System wie bei den Lerntheken-Karten (grau/grün/blau/lila = t1-t4): grau = in Arbeit,
+// Pflicht erfüllt (1 Vortrag + 2 Zuhören erledigt) = grün, +1 Bonus-Talk = Rare (blau), +2 Bonus-Talks = Epic (lila).
+// Kein sichtbares Badge/Banner mehr (fand der Nutzer hässlich) - nur noch farbiger Kartenrand
+// (.tt-tier-N) + Tooltip (title-Attribut) als dezenter Hinweis.
 function talkTier(presentDone, listenDone) {
   if (!(presentDone >= 1 && listenDone >= 2)) return 1;
   const bonus = Math.max(0, presentDone - 1) + Math.max(0, listenDone - 2);
-  if (bonus >= 1) return 4;
+  if (bonus >= 2) return 4;
+  if (bonus >= 1) return 3;
   return 2;
 }
-const TALK_TIER_TEXT = { 1: '⏳ In Arbeit', 2: '✓ Pflicht erfüllt', 4: '💎 Epic' };
+const TALK_TIER_TEXT = { 1: '⏳ In Arbeit', 2: '✓ Pflicht erfüllt', 3: '⭐ Rare', 4: '💎 Epic' };
 
 // Übersicht im Lerntheken-Picker – bewusst am Papier-Arbeitsblatt "Let's Talk Sessions"
 // aus dem Englischunterricht orientiert (zwei Tabellen mit Schritte-Liste + Feldern
@@ -2251,9 +2253,8 @@ function buildTalkingPickerSummaryHtml(data) {
     const pDone = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const aDone = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(pDone, aDone);
-    const tierBadge = ` <span class="lt-tier-banner t${tier}" style="margin-bottom:0;vertical-align:middle;">${TALK_TIER_TEXT[tier]}</span>`;
     return `
-      <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}${tierBadge}</div>
+      <div class="tsum-hj-title" title="${TALK_TIER_TEXT[tier]}">Halbjahr ${escHtml(g.halbjahr)}</div>
       <div class="tsum-block-title">🎤 Meine Mathe-Talks:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
@@ -2334,10 +2335,8 @@ function renderTalkingStudent() {
     const p = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(p, a);
-    const banner = `<div class="lt-tier-banner t${tier}">${TALK_TIER_TEXT[tier]}</div>`;
     return `
-      <div class="stat-card tt-tier-${tier}">
-        ${banner}
+      <div class="stat-card tt-tier-${tier}" title="${TALK_TIER_TEXT[tier]}">
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
         <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
