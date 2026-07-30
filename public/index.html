@@ -2659,7 +2659,15 @@ function openTalkingStudentDetail(username) {
 
 function renderTalkingAdmin() {
   const el = document.getElementById('talking-admin');
-  const rows = talkingAdminSlots.map(s => {
+  const today = new Date(new Date().toDateString());
+  const upcoming = talkingAdminSlots
+    .filter(s => new Date(s.datum) >= today)
+    .sort((a, b) => new Date(a.datum) - new Date(b.datum) || (a.uhrzeit || '').localeCompare(b.uhrzeit || ''));
+  const past = talkingAdminSlots
+    .filter(s => new Date(s.datum) < today)
+    .sort((a, b) => new Date(b.datum) - new Date(a.datum) || (b.uhrzeit || '').localeCompare(a.uhrzeit || ''));
+
+  const renderSlotCard = (s) => {
     const booked = !!s.session_id;
     const invitees = s.invitees || [];
     const inviteesHtml = invitees.map(iv => {
@@ -2692,7 +2700,10 @@ function renderTalkingAdmin() {
           <div style="margin-top:6px;">${inviteesHtml || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
         ` : `<div style="margin-top:8px;color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</div>`}
       </div>`;
-  }).join('');
+  };
+
+  const upcomingHtml = upcoming.map(renderSlotCard).join('');
+  const pastHtml = past.map(renderSlotCard).join('');
 
   el.innerHTML = `
     ${renderTalkingOverview(talkingAdminSlots, talkingAdminRoster)}
@@ -2701,7 +2712,12 @@ function renderTalkingAdmin() {
       <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
       <button class="btn-act btn-outline" onclick="loadTalkingAdmin()">↺ Laden</button>
     </div>
-    ${rows || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Termine angelegt.</div>'}
+    ${talkingAdminSlots.length === 0 ? '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Termine angelegt.</div>' : `
+      <div style="font-weight:700;font-size:13px;margin:12px 0 6px;">Anstehende Termine</div>
+      ${upcomingHtml || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine anstehenden Termine.</div>'}
+      <div style="font-weight:700;font-size:13px;margin:20px 0 6px;">Vergangene Termine</div>
+      ${pastHtml || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine vergangenen Termine.</div>'}
+    `}
   `;
 }
 
