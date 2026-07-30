@@ -605,6 +605,7 @@ textarea.form-input{
 .tsum-label li{margin-bottom:2px;}
 .tsum-cell{flex:1 0 130px;min-width:130px;padding:8px 10px;border-right:1px solid #cfc3e8;}
 .tsum-cell:last-child{border-right:none;}
+.tsum-cell.tsum-cell-wide{flex:1 0 220px;min-width:220px;}
 .tsum-cell.grey{background:#e2e2e2;}
 .tsum-cell.white{background:#fff;}
 .tsum-field-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b6b6b;}
@@ -2197,6 +2198,18 @@ function talkingGroupByHalbjahr(presenting, invitations) {
     listening: accepted.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
   }));
 }
+// Wie talkingGroupByHalbjahr(), aber inkl. noch unbeantworteter Einladungen (status='eingeladen') -
+// für die Detailansicht im Mathe-Talks-Tab, wo "Meine Einladungen" direkt in die Zuhören-Tabelle
+// einsortiert wird (mit Annehmen/Ablehnen statt Bewertung). Abgelehnte bleiben weiterhin ausgeblendet.
+function talkingGroupByHalbjahrFull(presenting, invitations) {
+  const relevant = (invitations || []).filter(i => i.status !== 'abgelehnt');
+  const halbjahre = [...new Set([...(presenting || []).map(s => s.halbjahr), ...relevant.map(i => i.halbjahr)])].sort();
+  return halbjahre.map(hj => ({
+    halbjahr: hj,
+    presenting: (presenting || []).filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
+    listening: relevant.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
+  }));
+}
 // Tier-System wie bei den Lerntheken-Karten (grau/grün/blau/lila = t1-t4): grau = in Arbeit,
 // Pflicht erfüllt (1 Vortrag + 2 Zuhören erledigt) = grün, +1 Bonus-Talk = Rare (blau), +2 Bonus-Talks = Epic (lila).
 // Kein sichtbares Badge/Banner mehr (fand der Nutzer hässlich) - nur noch farbiger Kartenrand
@@ -2343,20 +2356,9 @@ function renderTalkingStudent() {
       </div>`;
   }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch kein Mathe-Talk</div></div>`;
 
-  const pendingInvites = (talkingMine.invitations || []).filter(i => i.status === 'eingeladen');
-  const invitesHtml = pendingInvites.length ? pendingInvites.map(i => `
-    <div class="stat-card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-      <div>
-        <strong>${escHtml(i.presenter_username)}</strong> · ${escHtml(i.thema)}<br>
-        <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</span>
-      </div>
-      <div style="display:flex;gap:6px;">
-        <button class="btn-act btn-green" onclick="respondTalkingInvitation(${i.id}, true)">Annehmen</button>
-        <button class="btn-cancel" onclick="respondTalkingInvitation(${i.id}, false)">Ablehnen</button>
-      </div>
-    </div>`).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine offenen Einladungen.</div>`;
-
-  const presentingHtml = (talkingMine.presenting || []).length ? talkingMine.presenting.map(s => {
+  // Detail-Tabellen im selben Design wie der Picker/das PDF-Vorbild, nur mit vollem Detailgrad:
+  // Datum/Ort, Thema, Zuschauer:innen bzw. Von, sowie Bewertung/Aktionen pro Feld.
+  const presentDetailCell = (s, grey) => {
     const invitees = s.invitees || [];
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
@@ -2365,50 +2367,73 @@ function renderTalkingStudent() {
       const removeBtn = canRemove ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${iv.id})">✕</span>` : '';
       return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}${removeBtn}</span>`;
     }).join(' ');
-    const rating = s.presentedStatus === 'erledigt' ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}` : '';
-    const statusCls = s.presentedStatus === 'erledigt' ? 'pill-green' : s.presentedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
-    const statusTxt = s.presentedStatus === 'erledigt' ? '✓ bewertet' : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ ausstehend';
-    return `
-      <div class="stat-card" style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
-          <div>
-            <strong>${escHtml(s.thema)}</strong><br>
-            <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · ${escHtml(s.halbjahr)}</span>
-          </div>
-          <span class="pill ${statusCls}">${statusTxt}${rating}</span>
-        </div>
-        <div style="margin-top:8px;">${inviteeList || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
-        ${s.presentedStatus === 'ausstehend' ? `<button class="btn-sm" style="margin-top:8px;" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
-      </div>`;
-  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein Mathe-Talk angemeldet.</div>`;
-
-  const accepted = (talkingMine.invitations || []).filter(i => i.status === 'angenommen');
-  const attendingHtml = accepted.length ? accepted.map(i => {
+    const quality = s.presentedStatus === 'erledigt'
+      ? `${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}`
+      : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ ausstehend';
+    return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">
+      <div class="tsum-field-label">Datum:</div>
+      <div class="tsum-field-value">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</div>
+      <div class="tsum-field-label">Topic:</div>
+      <div class="tsum-field-value">${escHtml(s.thema)}</div>
+      <div class="tsum-field-label">Zuschauer:innen:</div>
+      <div class="tsum-field-value">${inviteeList || '<span class="tsum-empty">Niemand eingeladen</span>'}</div>
+      <div class="tsum-field-label">Quality:</div>
+      <div class="tsum-field-value">${quality}</div>
+      ${s.presentedStatus === 'ausstehend' ? `<button class="btn-sm" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
+    </div>`;
+  };
+  const listenDetailCell = (i, grey) => {
+    const pending = i.status === 'eingeladen';
     const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
-    const rating = i.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(i.pokale || 0, 2)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}` : '';
+    return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">
+      <div class="tsum-field-label">Von:</div>
+      <div class="tsum-field-value">${escHtml(i.presenter_username)}</div>
+      <div class="tsum-field-label">Datum:</div>
+      <div class="tsum-field-value">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</div>
+      <div class="tsum-field-label">Topic:</div>
+      <div class="tsum-field-value">${escHtml(i.thema)}</div>
+      ${pending ? `
+        <div class="tsum-field-label">Status:</div>
+        <div class="tsum-field-value" style="display:flex;gap:6px;">
+          <button class="btn-act btn-green" style="padding:4px 10px;font-size:12px;" onclick="respondTalkingInvitation(${i.id}, true)">Annehmen</button>
+          <button class="btn-cancel" style="padding:4px 10px;font-size:12px;" onclick="respondTalkingInvitation(${i.id}, false)">Ablehnen</button>
+        </div>` : `
+        <div class="tsum-field-label">Quality:</div>
+        <div class="tsum-field-value">${i.attendedStatus === 'erledigt'
+          ? `${talkingPokalStr(i.pokale || 0, 2)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}`
+          : i.attendedStatus === 'nicht_erledigt' ? '✗ nicht teilgenommen' : (missed ? 'Verpasst?' : '⏳ ausstehend')}</div>`}
+    </div>`;
+  };
+
+  const groupsFull = talkingGroupByHalbjahrFull(talkingMine.presenting, talkingMine.invitations);
+  const detailBlocks = groupsFull.length ? groupsFull.map(g => {
+    const presentRow = g.presenting.length
+      ? g.presenting.map((s, idx) => presentDetailCell(s, idx === 0)).join('')
+      : `<div class="tsum-cell white"><span class="tsum-empty">Noch kein Mathe-Talk angemeldet</span></div>`;
+    const listenRow = g.listening.length
+      ? g.listening.map((i, idx) => listenDetailCell(i, idx < 2)).join('')
+      : `<div class="tsum-cell white"><span class="tsum-empty">Keine Einladungen</span></div>`;
     return `
-      <div class="stat-card" style="margin-bottom:10px;">
-        <strong>${escHtml(i.presenter_username)}</strong> · ${escHtml(i.thema)}<br>
-        <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</span>
-        <div style="margin-top:6px;">
-          ${i.attendedStatus === 'erledigt' ? `<span class="pill pill-green">👂 bewertet${rating}</span>` :
-            i.attendedStatus === 'nicht_erledigt' ? '<span class="pill pill-red">✗ nicht teilgenommen</span>' :
-            (missed ? '<span class="pill pill-yellow">Verpasst?</span>' : '<span class="pill pill-blue">Ausstehend</span>')}
-        </div>
+      <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>
+      <div class="tsum-block-title">🎤 Meine Mathe-Talks:</div>
+      <div class="tsum-table">
+        <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
+        ${presentRow}
+      </div>
+      <div class="tsum-block-title">👂 Mathe-Talks anderer:</div>
+      <div class="tsum-table">
+        <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
+        ${listenRow}
       </div>`;
-  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine angenommenen Einladungen.</div>`;
+  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein Mathe-Talk.</div>`;
 
   el.innerHTML = `
     <div class="stats-row">${trophyCard}${progressCards}</div>
-    <div class="admin-top" style="margin-top:8px;"><div class="admin-title" style="font-size:16px;">📬 Meine Einladungen</div></div>
-    ${invitesHtml}
-    <div class="admin-top" style="margin-top:24px;">
-      <div class="admin-title" style="font-size:16px;">🎤 Meine Mathe-Talks</div>
+    <div class="admin-top" style="margin-top:16px;">
+      <div class="admin-title" style="font-size:16px;">🗣️ Meine Mathe-Talks im Detail</div>
       <button class="btn-act btn-green" onclick="openBookSessionModal()" ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ Mathe-Talk anmelden</button>
     </div>
-    ${presentingHtml}
-    <div class="admin-top" style="margin-top:24px;"><div class="admin-title" style="font-size:16px;">👂 Mathe-Talks, die ich besuche</div></div>
-    ${attendingHtml}
+    ${detailBlocks}
   `;
 }
 
