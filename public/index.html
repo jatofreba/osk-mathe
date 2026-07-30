@@ -983,6 +983,30 @@ textarea.form-input{
   </div>
 </div>
 
+<!-- ══ MODAL: Mathe-Talk-Termin verschieben (Admin) ═══════════════════════════════ -->
+<div class="overlay" id="modal-talking-slot-edit">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title">Termin verschieben</div>
+    <div class="form-group">
+      <label class="form-label">Datum</label>
+      <input class="form-input" id="tsedit-datum" type="date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Uhrzeit / Stunde</label>
+      <input class="form-input" id="tsedit-uhrzeit" placeholder="z.B. 11:15 Uhr">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ort</label>
+      <input class="form-input" id="tsedit-ort" placeholder="z.B. Mathe-Fachbüro M3/M4">
+    </div>
+    <div id="tsedit-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:-8px;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talking-slot-edit')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="submitTalkingSlotEdit()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ State ════════════════════════════════════════════════════════════════════
 let me = null;
@@ -2718,7 +2742,10 @@ function renderTalkingAdmin() {
           <div>
             <strong>${fmtTalkingDatum(s.datum)}</strong> · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · <span class="pill pill-blue">${escHtml(s.halbjahr)}</span>
           </div>
-          ${booked ? '' : `<button class="btn-icon red" onclick="deleteTalkingSlot(${s.id})" title="Termin löschen">🗑</button>`}
+          <div style="display:flex;gap:6px;">
+            <button class="btn-icon" onclick="openTalkingSlotEditModal(${s.id})" title="Termin verschieben">✏️</button>
+            ${booked ? '' : `<button class="btn-icon red" onclick="deleteTalkingSlot(${s.id})" title="Termin löschen">🗑</button>`}
+          </div>
         </div>
         ${booked ? `
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -2802,6 +2829,35 @@ async function submitTalkingSlot() {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Anlegen.'); return; }
   closeModal('modal-talking-slot');
+  loadTalkingAdmin();
+}
+
+let _talkingEditSlotId = null;
+function openTalkingSlotEditModal(id) {
+  const s = talkingAdminSlots.find(sl => sl.id === id);
+  if (!s) return;
+  _talkingEditSlotId = id;
+  document.getElementById('tsedit-datum').value = new Date(s.datum).toISOString().slice(0, 10);
+  document.getElementById('tsedit-uhrzeit').value = s.uhrzeit || '';
+  document.getElementById('tsedit-ort').value = s.ort || '';
+  document.getElementById('tsedit-error').style.display = 'none';
+  openModal('modal-talking-slot-edit');
+}
+
+async function submitTalkingSlotEdit() {
+  const errEl = document.getElementById('tsedit-error');
+  errEl.style.display = 'none';
+  const datum = document.getElementById('tsedit-datum').value;
+  const uhrzeit = document.getElementById('tsedit-uhrzeit').value.trim();
+  const ort = document.getElementById('tsedit-ort').value.trim();
+  if (!datum) { alert('Bitte Datum angeben.'); return; }
+  const r = await fetch(`/api/admin/talking-slots/${_talkingEditSlotId}/reschedule`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ datum, uhrzeit, ort })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Verschieben.'; errEl.style.display = 'block'; return; }
+  closeModal('modal-talking-slot-edit');
   loadTalkingAdmin();
 }
 
