@@ -2600,15 +2600,19 @@ function computeTalkingOverview(slots) {
   return { byHalbjahr, halbjahre: [...new Set(halbjahrOrder)].sort().reverse() };
 }
 
+// Gibt { current, past } zurück: current = Übersicht für laufende/künftige Halbjahre (immer offen),
+// past = kollabierte <details>-Blöcke für Halbjahre, deren Termine alle schon stattgefunden haben
+// (gehört unter "Vergangene Termine" in renderTalkingAdmin(), nicht mit an die Spitze der Ansicht).
 function renderTalkingOverview(slots, roster) {
-  if (!slots.length || !roster.length) return '';
+  if (!slots.length || !roster.length) return { current: '', past: '' };
   const { byHalbjahr, halbjahre } = computeTalkingOverview(slots);
-  if (!halbjahre.length) return '';
+  if (!halbjahre.length) return { current: '', past: '' };
 
   const badge = (cls, style, text) => `<span class="gpill ${cls}" style="${style || ''}">${text}</span>`;
   const nothingStyle = 'background:#fef2f2;color:var(--md-error);';
+  const today = new Date(new Date().toDateString());
 
-  const sections = halbjahre.map(hj => {
+  const buildRows = (hj) => {
     const data = byHalbjahr[hj] || {};
     let nothingCount = 0;
     const rows = roster.map(stu => {
@@ -2650,26 +2654,55 @@ function renderTalkingOverview(slots, roster) {
         <td>${statusBadge}</td>
       </tr>`;
     }).join('');
+    return { rows, nothingCount };
+  };
 
-    return `
-      <div style="font-weight:700;font-size:13px;margin:16px 0 6px;">
-        Halbjahr ${escHtml(hj)}${nothingCount ? ` <span style="color:var(--md-error);font-weight:500;">– ${nothingCount} ohne jeden Fortschritt</span>` : ''}
-      </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Name</th><th>🎤 Präsentieren</th><th>👂 Zuhören</th><th>Status</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
+  const table = (rows) => `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>🎤 Präsentieren</th><th>👂 Zuhören</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  const hjLabel = (hj, nothingCount) =>
+    `Halbjahr ${escHtml(hj)}${nothingCount ? ` <span style="color:var(--md-error);font-weight:500;">– ${nothingCount} ohne jeden Fortschritt</span>` : ''}`;
+
+  // Ein Halbjahr gilt als "vergangen", wenn es Termine hat und KEINER davon noch in der Zukunft liegt.
+  const isPastHalbjahr = (hj) => {
+    const hjSlots = slots.filter(s => s.halbjahr === hj);
+    return hjSlots.length > 0 && !hjSlots.some(s => new Date(s.datum) >= today);
+  };
+
+  const currentHj = halbjahre.filter(hj => !isPastHalbjahr(hj));
+  const pastHj = halbjahre.filter(hj => isPastHalbjahr(hj));
+
+  const currentSections = currentHj.map(hj => {
+    const { rows, nothingCount } = buildRows(hj);
+    return `<div style="font-weight:700;font-size:13px;margin:16px 0 6px;">${hjLabel(hj, nothingCount)}</div>${table(rows)}`;
   }).join('');
 
-  return `
+  const pastSections = pastHj.map(hj => {
+    const { rows, nothingCount } = buildRows(hj);
+    return `<details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-weight:700;font-size:13px;padding:2px 0;">${hjLabel(hj, nothingCount)}</summary>
+      <div style="margin-top:8px;">${table(rows)}</div>
+    </details>`;
+  }).join('');
+
+  const current = currentSections ? `
     <div class="admin-top">
       <div class="admin-title" style="font-size:16px;">👥 Übersicht: Wer hat sein Soll erledigt?</div>
     </div>
     <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">Pflicht je Halbjahr: 🎤 1x präsentieren · 👂 mind. 2x zuhören</div>
-    ${sections}
-  `;
+    ${currentSections}
+  ` : '';
+
+  const past = pastSections ? `
+    <div style="font-weight:700;font-size:13px;margin:20px 0 6px;">Übersicht vergangener Halbjahre</div>
+    ${pastSections}
+  ` : '';
+
+  return { current, past };
 }
 
 // Detailauflistung für eine Schüler:in (Klick auf Zeile in renderTalkingOverview): alle Mathe-Talks
@@ -2777,9 +2810,10 @@ function renderTalkingAdmin() {
 
   const upcomingHtml = upcoming.map(renderSlotCard).join('');
   const pastHtml = past.map(renderSlotCard).join('');
+  const overview = renderTalkingOverview(talkingAdminSlots, talkingAdminRoster);
 
   el.innerHTML = `
-    ${renderTalkingOverview(talkingAdminSlots, talkingAdminRoster)}
+    ${overview.current}
     <div class="admin-top" style="margin-top:24px;">
       <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
       <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
@@ -2791,6 +2825,7 @@ function renderTalkingAdmin() {
       <div style="font-weight:700;font-size:13px;margin:20px 0 6px;">Vergangene Termine</div>
       ${pastHtml || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine vergangenen Termine.</div>'}
     `}
+    ${overview.past}
   `;
 }
 
