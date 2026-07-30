@@ -2343,18 +2343,113 @@ async function respondTalkingInvitation(id, accept) {
 
 // ── Admin ────────────────────────────────────────────────────────────────────
 let talkingAdminSlots = [];
+let talkingAdminRoster = [];
 
 async function loadTalkingAdmin() {
   const el = document.getElementById('talking-admin');
   el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
-    const r = await fetch('/api/admin/talking-slots');
-    talkingAdminSlots = r.ok ? await r.json() : [];
+    const [slotsRes, rosterRes] = await Promise.all([
+      fetch('/api/admin/talking-slots'), fetch('/api/classmates')
+    ]);
+    talkingAdminSlots = slotsRes.ok ? await slotsRes.json() : [];
+    talkingAdminRoster = rosterRes.ok ? await rosterRes.json() : [];
   } catch(e) {
     el.innerHTML = '<div style="padding:20px;color:var(--md-error);">Fehler beim Laden.</div>';
     return;
   }
   renderTalkingAdmin();
+}
+
+// Aggregiert Soll-Erfüllung je Halbjahr+Schüler:in aus den Slot-Daten (presenter/invitees per username,
+// da die Slot-API keine User-IDs für Presenter liefert - Usernamen sind je Klasse eindeutig).
+function computeTalkingOverview(slots) {
+  const byHalbjahr = {};
+  const halbjahrOrder = [];
+  const ensure = (hj, uname) => {
+    if (!byHalbjahr[hj]) { byHalbjahr[hj] = {}; halbjahrOrder.push(hj); }
+    if (!byHalbjahr[hj][uname]) byHalbjahr[hj][uname] = { presentDone: 0, presentReg: 0, listenDone: 0, listenReg: 0 };
+    return byHalbjahr[hj][uname];
+  };
+  slots.forEach(s => {
+    if (!byHalbjahr[s.halbjahr]) { byHalbjahr[s.halbjahr] = {}; halbjahrOrder.push(s.halbjahr); }
+    if (!s.session_id) return;
+    const pRow = ensure(s.halbjahr, s.presenter_username);
+    pRow.presentReg++;
+    if (s.presented_confirmed) pRow.presentDone++;
+    (s.invitees || []).forEach(iv => {
+      if (iv.status !== 'angenommen') return;
+      const lRow = ensure(s.halbjahr, iv.username);
+      lRow.listenReg++;
+      if (iv.attendedConfirmed) lRow.listenDone++;
+    });
+  });
+  return { byHalbjahr, halbjahre: [...new Set(halbjahrOrder)].sort().reverse() };
+}
+
+function renderTalkingOverview(slots, roster) {
+  if (!slots.length || !roster.length) return '';
+  const { byHalbjahr, halbjahre } = computeTalkingOverview(slots);
+  if (!halbjahre.length) return '';
+
+  const badge = (cls, style, text) => `<span class="gpill ${cls}" style="${style || ''}">${text}</span>`;
+  const nothingStyle = 'background:#fef2f2;color:var(--md-error);';
+
+  const sections = halbjahre.map(hj => {
+    const data = byHalbjahr[hj] || {};
+    let nothingCount = 0;
+    const rows = roster.map(stu => {
+      const d = data[stu.username] || { presentDone: 0, presentReg: 0, listenDone: 0, listenReg: 0 };
+      const nothing = d.presentReg === 0 && d.listenReg === 0;
+      if (nothing) nothingCount++;
+      const complete = d.presentDone >= 1 && d.listenDone >= 2;
+
+      const presentBadge = d.presentDone >= 1
+        ? badge('gpill-ok', '', `✓ erledigt${d.presentDone > 1 ? ' (+' + (d.presentDone - 1) + ' freiwillig)' : ''}`)
+        : d.presentReg >= 1
+          ? badge('gpill-partial', '', '📅 angemeldet')
+          : badge('gpill-none', nothingStyle, '– offen –');
+
+      const listenExtra = d.listenReg > d.listenDone ? ` (+${d.listenReg - d.listenDone} angemeldet)` : '';
+      const listenBadge = d.listenDone >= 2
+        ? badge('gpill-ok', '', `✓ ${d.listenDone}/2${listenExtra}`)
+        : d.listenReg >= 1
+          ? badge('gpill-partial', '', `${d.listenDone}/2${listenExtra}`)
+          : badge('gpill-none', nothingStyle, '0/2 – offen –');
+
+      const statusBadge = complete
+        ? badge('gpill-ok', '', '✅ Soll komplett')
+        : nothing
+          ? badge('gpill-none', nothingStyle, '⚠️ nichts los')
+          : badge('gpill-partial', '', '… in Arbeit');
+
+      return `<tr${nothing ? ' style="background:#fef2f2;"' : ''}>
+        <td>${escHtml(stu.username)}</td>
+        <td>${presentBadge}</td>
+        <td>${listenBadge}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div style="font-weight:700;font-size:13px;margin:16px 0 6px;">
+        Halbjahr ${escHtml(hj)}${nothingCount ? ` <span style="color:var(--md-error);font-weight:500;">– ${nothingCount} ohne jede Anmeldung</span>` : ''}
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>🎤 Präsentieren</th><th>👂 Zuhören</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="admin-top">
+      <div class="admin-title" style="font-size:16px;">👥 Übersicht: Wer hat sein Soll erledigt?</div>
+    </div>
+    <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">Pflicht je Halbjahr: 🎤 1x präsentieren · 👂 mind. 2x zuhören</div>
+    ${sections}
+  `;
 }
 
 function renderTalkingAdmin() {
@@ -2390,7 +2485,8 @@ function renderTalkingAdmin() {
   }).join('');
 
   el.innerHTML = `
-    <div class="admin-top">
+    ${renderTalkingOverview(talkingAdminSlots, talkingAdminRoster)}
+    <div class="admin-top" style="margin-top:24px;">
       <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
       <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
       <button class="btn-act btn-outline" onclick="loadTalkingAdmin()">↺ Laden</button>
