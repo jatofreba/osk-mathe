@@ -2332,17 +2332,28 @@ function renderTalkingStudent() {
       <div class="stat-lbl">🏆 Mathe-Talk-Pokale</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
+  const TALK_TIER_COLOR = { 1: '#9ca3af', 2: '#16a34a', 3: '#2563eb', 4: '#7c3aed' };
   const progressCards = groups.length ? groups.map(g => {
     const p = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(p, a);
     const banner = `<div class="lt-tier-banner t${tier}">${TALK_TIER_TEXT[tier]}</div>`;
+    const required = 3; // 1 Pflicht-Vortrag + 2 Pflicht-Zuhören
+    const done = Math.min(p, 1) + Math.min(a, 2);
+    const pct = Math.round(done / required * 100);
     return `
       <div class="stat-card tt-tier-${tier}">
         ${banner}
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
         <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Fortschritt Pflicht</div>
+        <div class="trophy-track" style="margin-top:10px;">
+          <div class="trophy-fill" style="width:${pct}%;background:${TALK_TIER_COLOR[tier]};"></div>
+        </div>
+        <div style="font-size:11px;color:var(--ink2);margin-top:6px;">${done}/${required} Pflichtteile · ${pct} %</div>
       </div>`;
   }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch kein Mathe-Talk</div></div>`;
 
