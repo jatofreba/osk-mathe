@@ -1310,12 +1310,12 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Termin verschieben (Datum/Uhrzeit/Ort) - egal ob schon gebucht oder nicht.
+// Termin verschieben (Datum/Uhrzeit/Ort/Halbjahr) - egal ob schon gebucht oder nicht.
 // Verhindert Terminkonflikte: kein zweiter Slot derselben Klasse am selben Datum+Uhrzeit.
 app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, res) => {
   try {
-    const { datum, uhrzeit, ort } = req.body;
-    if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const { datum, uhrzeit, ort, halbjahr } = req.body;
+    if (!datum || !halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
     const conflict = await pool.query(
       `SELECT id FROM talking_slots WHERE klasse=$1 AND datum=$2 AND uhrzeit=$3 AND id != $4`,
       [req.session.klasse, datum, uhrzeit || '', req.params.id]
@@ -1323,8 +1323,8 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
     if (conflict.rows.length)
       return res.status(409).json({ error: 'Terminkonflikt: An diesem Datum/dieser Uhrzeit existiert bereits ein anderer Termin.' });
     const r = await pool.query(
-      `UPDATE talking_slots SET datum=$1, uhrzeit=$2, ort=$3 WHERE id=$4 AND klasse=$5 RETURNING id`,
-      [datum, uhrzeit || '', ort || '', req.params.id, req.session.klasse]
+      `UPDATE talking_slots SET datum=$1, uhrzeit=$2, ort=$3, halbjahr=$4 WHERE id=$5 AND klasse=$6 RETURNING id`,
+      [datum, uhrzeit || '', ort || '', halbjahr, req.params.id, req.session.klasse]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
