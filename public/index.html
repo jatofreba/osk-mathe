@@ -193,6 +193,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .pill-purple{background:var(--md-surface-container);color:var(--md-on-surface-variant);}
 .pill-green{background:#dcfce7;color:#15803d;}
 .pill-yellow{background:#fef9c3;color:#854d0e;}
+.pill-red{background:#fef2f2;color:#b3261e;}
 .btn-sm{
   padding:5px 12px;
   border-radius:var(--md-r-sm);
@@ -549,6 +550,9 @@ textarea.form-input{
 .lt-card.lt-tier-2{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
 .lt-card.lt-tier-3{border:2px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);}
 .lt-card.lt-tier-4{border:2px solid #7c3aed;background:linear-gradient(135deg,#f5f3ff,#fff);}
+.stat-card.tt-tier-2{border:2px solid #16a34a;background:linear-gradient(135deg,#f0fdf4,#fff);}
+.stat-card.tt-tier-3{border:2px solid #2563eb;background:linear-gradient(135deg,#eff6ff,#fff);}
+.stat-card.tt-tier-4{border:2px solid #7c3aed;background:linear-gradient(135deg,#f5f3ff,#fff);}
 .lt-card.lt-locked{opacity:.55;pointer-events:none;filter:grayscale(.4);}
 .lt-slim-group{display:flex;flex-direction:column;gap:7px;}
 .lt-card-slim{background:var(--md-surface);border:1px solid var(--md-outline-variant);border-radius:var(--md-r);padding:10px 14px;display:flex;align-items:center;gap:10px;opacity:.5;filter:grayscale(.3);box-shadow:var(--md-elevation-1);}
@@ -944,9 +948,12 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="trate-modal-title">Bewerten</div>
     <div class="form-group">
-      <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
-        <input type="checkbox" id="trate-modal-confirmed" checked> Hat stattgefunden
-      </label>
+      <label class="form-label">Status</label>
+      <select class="form-input" id="trate-modal-status">
+        <option value="ausstehend">⏳ Ausstehend</option>
+        <option value="erledigt">✓ Hat stattgefunden</option>
+        <option value="nicht_erledigt" id="trate-modal-status-no">✗ Nicht teilgenommen</option>
+      </select>
     </div>
     <div class="form-group">
       <label class="form-label">Pokale</label>
@@ -2178,6 +2185,15 @@ function talkingGroupByHalbjahr(presenting, invitations) {
     listening: accepted.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
   }));
 }
+// Tier-System wie bei den Lerntheken-Karten (grau/grün/blau/lila = t1-t4, hier nur t2-t4 genutzt):
+// Pflicht erfüllt (1 Vortrag + 2 Zuhören erledigt) = grün, +1 Bonus-Talk = Rare (blau), +2 Bonus-Talks = Epic (lila).
+function talkTier(presentDone, listenDone) {
+  if (!(presentDone >= 1 && listenDone >= 2)) return 0;
+  const bonus = Math.max(0, presentDone - 1) + Math.max(0, listenDone - 2);
+  if (bonus >= 2) return 4;
+  if (bonus >= 1) return 3;
+  return 2;
+}
 
 // Übersicht im Lerntheken-Picker – bewusst am Papier-Arbeitsblatt "Let's Talk Sessions"
 // aus dem Englischunterricht orientiert (zwei Tabellen mit Schritte-Liste + Feldern
@@ -2188,9 +2204,9 @@ function buildTalkingPickerSummaryHtml(data) {
 
   const presentCell = (s, grey) => {
     if (!s) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
-    const quality = s.presented_confirmed
-      ? `${talkingPokalStr(s.pokale || 0, 3)}${s.quality_emoji ? ' ' + s.quality_emoji : ''}`
-      : '⏳ ausstehend';
+    const quality = s.presentedStatus === 'erledigt'
+      ? `${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}`
+      : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ ausstehend';
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Topic:</div>
       <div class="tsum-field-value">${escHtml(s.thema)}</div>
@@ -2200,10 +2216,10 @@ function buildTalkingPickerSummaryHtml(data) {
   };
   const listenCell = (i, grey) => {
     if (!i) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
-    const missed = !i.attended_confirmed && new Date(i.datum) < new Date(new Date().toDateString());
-    const quality = i.attended_confirmed
-      ? `${talkingPokalStr(i.pokale || 0, 2)}${i.quality_emoji ? ' ' + i.quality_emoji : ''}`
-      : (missed ? 'Verpasst?' : '⏳ ausstehend');
+    const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
+    const quality = i.attendedStatus === 'erledigt'
+      ? `${talkingPokalStr(i.pokale || 0, 2)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}`
+      : i.attendedStatus === 'nicht_erledigt' ? '✗ nicht teilgenommen' : (missed ? 'Verpasst?' : '⏳ ausstehend');
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Von:</div>
       <div class="tsum-field-value">${escHtml(i.presenter_username)}</div>
@@ -2216,12 +2232,17 @@ function buildTalkingPickerSummaryHtml(data) {
 
   const blocks = groups.map(g => {
     const presentCols = Math.max(3, g.presenting.length);
-    const listenCols = Math.max(2, g.listening.length);
+    const listenCols = Math.max(3, g.listening.length);
     const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(g.presenting[idx], idx === 0)).join('');
     const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(g.listening[idx], idx < 2)).join('');
+    const pDone = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
+    const aDone = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
+    const tier = talkTier(pDone, aDone);
+    const tierText = { 2: '✓ Pflicht erfüllt', 3: '⭐ Rare', 4: '💎 Epic' };
+    const tierBadge = tier ? ` <span class="lt-tier-banner t${tier}" style="margin-bottom:0;vertical-align:middle;">${tierText[tier]}</span>` : '';
     return `
-      <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>
-      <div class="tsum-block-title">🎤 Mein Mathe-Talk:</div>
+      <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}${tierBadge}</div>
+      <div class="tsum-block-title">🎤 Meine Mathe-Talks:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
         ${presentRow}
@@ -2298,10 +2319,14 @@ function renderTalkingStudent() {
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
   const progressCards = groups.length ? groups.map(g => {
-    const p = g.presenting.filter(s => s.presented_confirmed).length;
-    const a = g.listening.filter(i => i.attended_confirmed).length;
+    const p = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
+    const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
+    const tier = talkTier(p, a);
+    const tierText = { 2: '✓ Pflicht erfüllt', 3: '⭐ Rare', 4: '💎 Epic' };
+    const banner = tier ? `<div class="lt-tier-banner t${tier}">${tierText[tier]}</div>` : '';
     return `
-      <div class="stat-card">
+      <div class="stat-card${tier ? ' tt-tier-' + tier : ''}">
+        ${banner}
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
         <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
@@ -2325,10 +2350,12 @@ function renderTalkingStudent() {
     const invitees = s.invitees || [];
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
-      const rating = iv.attendedConfirmed ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : '';
+      const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : (iv.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
       return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}</span>`;
     }).join(' ');
-    const rating = s.presented_confirmed ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.quality_emoji ? ' ' + s.quality_emoji : ''}` : '';
+    const rating = s.presentedStatus === 'erledigt' ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}` : '';
+    const statusCls = s.presentedStatus === 'erledigt' ? 'pill-green' : s.presentedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
+    const statusTxt = s.presentedStatus === 'erledigt' ? '✓ bewertet' : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ ausstehend';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -2336,23 +2363,24 @@ function renderTalkingStudent() {
             <strong>${escHtml(s.thema)}</strong><br>
             <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · ${escHtml(s.halbjahr)}</span>
           </div>
-          <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}">${s.presented_confirmed ? '✓ bewertet' : '⏳ ausstehend'}${rating}</span>
+          <span class="pill ${statusCls}">${statusTxt}${rating}</span>
         </div>
         <div style="margin-top:8px;">${inviteeList || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
-        ${!s.presented_confirmed ? `<button class="btn-sm" style="margin-top:8px;" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
+        ${s.presentedStatus === 'ausstehend' ? `<button class="btn-sm" style="margin-top:8px;" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
       </div>`;
   }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein Mathe-Talk angemeldet.</div>`;
 
   const accepted = (talkingMine.invitations || []).filter(i => i.status === 'angenommen');
   const attendingHtml = accepted.length ? accepted.map(i => {
-    const missed = !i.attended_confirmed && new Date(i.datum) < new Date(new Date().toDateString());
-    const rating = i.attended_confirmed ? ` ${talkingPokalStr(i.pokale || 0, 2)}${i.quality_emoji ? ' ' + i.quality_emoji : ''}` : '';
+    const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
+    const rating = i.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(i.pokale || 0, 2)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}` : '';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <strong>${escHtml(i.presenter_username)}</strong> · ${escHtml(i.thema)}<br>
         <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</span>
         <div style="margin-top:6px;">
-          ${i.attended_confirmed ? `<span class="pill pill-green">👂 bewertet${rating}</span>` :
+          ${i.attendedStatus === 'erledigt' ? `<span class="pill pill-green">👂 bewertet${rating}</span>` :
+            i.attendedStatus === 'nicht_erledigt' ? '<span class="pill pill-red">✗ nicht teilgenommen</span>' :
             (missed ? '<span class="pill pill-yellow">Verpasst?</span>' : '<span class="pill pill-blue">Ausstehend</span>')}
         </div>
       </div>`;
@@ -2470,12 +2498,12 @@ function computeTalkingOverview(slots) {
     if (!s.session_id) return;
     const pRow = ensure(s.halbjahr, s.presenter_username);
     pRow.presentReg++;
-    if (s.presented_confirmed) pRow.presentDone++;
+    if (s.presentedStatus === 'erledigt') pRow.presentDone++;
     (s.invitees || []).forEach(iv => {
       if (iv.status !== 'angenommen') return;
       const lRow = ensure(s.halbjahr, iv.username);
       lRow.listenReg++;
-      if (iv.attendedConfirmed) lRow.listenDone++;
+      if (iv.attendedStatus === 'erledigt') lRow.listenDone++;
     });
   });
   return { byHalbjahr, halbjahre: [...new Set(halbjahrOrder)].sort().reverse() };
@@ -2553,12 +2581,15 @@ function renderTalkingAdmin() {
     const invitees = s.invitees || [];
     const inviteesHtml = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
-      const rating = iv.attendedConfirmed ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : '';
-      return `<span class="pill ${iv.attendedConfirmed ? 'pill-green' : 'pill-blue'}" style="cursor:pointer;" title="Teilnahme bewerten" onclick="openTalkingRateModal('attended', ${iv.id}, 2, ${iv.pokale || 0}, ${iv.qualityEmoji ? `'${iv.qualityEmoji}'` : 'null'}, ${!!iv.attendedConfirmed})">
+      const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : '';
+      const attCls = iv.attendedStatus === 'erledigt' ? 'pill-green' : iv.attendedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
+      return `<span class="pill ${attCls}" style="cursor:pointer;" title="Teilnahme bewerten" onclick="openTalkingRateModal('attended', ${iv.id}, 2, ${iv.pokale || 0}, ${iv.qualityEmoji ? `'${iv.qualityEmoji}'` : 'null'}, '${iv.attendedStatus || 'ausstehend'}')">
         ${escHtml(iv.username)} ${statusIcon}${rating}
       </span>`;
     }).join(' ');
-    const presentRating = s.presented_confirmed ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.quality_emoji ? ' ' + s.quality_emoji : ''}` : '';
+    const presentRating = s.presentedStatus === 'erledigt' ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}` : '';
+    const presentCls = s.presentedStatus === 'erledigt' ? 'pill-green' : s.presentedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
+    const presentTxt = s.presentedStatus === 'erledigt' ? '✓ bewertet' : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ Vortrag bewerten';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -2570,8 +2601,8 @@ function renderTalkingAdmin() {
         ${booked ? `
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             🎤 <strong>${escHtml(s.presenter_username)}</strong> · ${escHtml(s.thema)}
-            <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}" style="cursor:pointer;" title="Vortrag bewerten" onclick="openTalkingRateModal('presented', ${s.session_id}, 3, ${s.pokale || 0}, ${s.quality_emoji ? `'${s.quality_emoji}'` : 'null'}, ${!!s.presented_confirmed})">
-              ${s.presented_confirmed ? '✓ bewertet' : '⏳ Vortrag bewerten'}${presentRating}
+            <span class="pill ${presentCls}" style="cursor:pointer;" title="Vortrag bewerten" onclick="openTalkingRateModal('presented', ${s.session_id}, 3, ${s.pokale || 0}, ${s.qualityEmoji ? `'${s.qualityEmoji}'` : 'null'}, '${s.presentedStatus || 'ausstehend'}')">
+              ${presentTxt}${presentRating}
             </span>
             <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
           </div>
@@ -2658,10 +2689,11 @@ async function cancelTalkingSession(sessionId) {
 }
 
 let _talkingRateModal = {};
-function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentConfirmed) {
+function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentStatus) {
   _talkingRateModal = { type, id, pokale: currentPokale || 0, emoji: currentEmoji || null };
   document.getElementById('trate-modal-title').textContent = type === 'presented' ? '🎤 Vortrag bewerten' : '👂 Teilnahme bewerten';
-  document.getElementById('trate-modal-confirmed').checked = currentConfirmed !== false;
+  document.getElementById('trate-modal-status-no').textContent = type === 'presented' ? '✗ Nicht gehalten' : '✗ Nicht teilgenommen';
+  document.getElementById('trate-modal-status').value = currentStatus || 'ausstehend';
   document.getElementById('trate-modal-pokale').innerHTML = Array.from({ length: maxPokale + 1 }, (_, v) =>
     `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🏆</button>`
   ).join('');
@@ -2682,14 +2714,14 @@ function selectTalkingRateEmoji(e) {
 }
 
 async function saveTalkingRateModal() {
-  const confirmed = document.getElementById('trate-modal-confirmed').checked;
+  const status = document.getElementById('trate-modal-status').value;
   const { type, id, pokale, emoji } = _talkingRateModal;
   const url = type === 'presented'
     ? `/api/admin/talking-sessions/${id}/confirm-presented`
     : `/api/admin/talking-invitations/${id}/confirm-attended`;
   await fetch(url, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ confirmed, pokale, qualityEmoji: emoji })
+    body: JSON.stringify({ status, pokale, qualityEmoji: emoji })
   });
   closeModal('modal-talking-rate');
   loadTalkingAdmin();
