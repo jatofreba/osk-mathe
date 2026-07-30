@@ -1239,6 +1239,27 @@ app.post('/api/talking-sessions/:id/invite', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Presenter lädt eine bereits eingeladene Person wieder aus (solange noch nichts bewertet wurde).
+app.delete('/api/talking-invitations/:id', requireLogin, async (req, res) => {
+  try {
+    const inv = await pool.query(
+      `SELECT ti.id, ti.attended_status, ts.presented_status, ts.presenter_id
+       FROM talking_invitations ti JOIN talking_sessions ts ON ts.id = ti.session_id
+       WHERE ti.id=$1`,
+      [req.params.id]
+    );
+    if (!inv.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const row = inv.rows[0];
+    if (row.presenter_id !== req.session.userId) return res.status(403).json({ error: 'Kein Zugriff' });
+    if (row.presented_status !== 'ausstehend')
+      return res.status(409).json({ error: 'Vortrag bereits bewertet, Einladungen können nicht mehr geändert werden' });
+    if (row.attended_status !== 'ausstehend')
+      return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden' });
+    await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
     const { accept } = req.body;
