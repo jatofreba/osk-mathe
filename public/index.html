@@ -2383,6 +2383,7 @@ function renderTalkingStudent() {
   // Detail-Tabellen im selben Design wie der Picker/das PDF-Vorbild, nur mit vollem Detailgrad:
   // Datum/Ort, Thema, Zuschauer:innen bzw. Von, sowie Bewertung/Aktionen pro Feld.
   const presentDetailCell = (s, grey) => {
+    if (!s) return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei für einen freiwilligen Mathe-Talk –</span></div>`;
     const invitees = s.invitees || [];
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
@@ -2407,6 +2408,7 @@ function renderTalkingStudent() {
     </div>`;
   };
   const listenDetailCell = (i, grey) => {
+    if (!i) return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei zum freiwilligen Zuhören –</span></div>`;
     const pending = i.status === 'eingeladen';
     const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
     return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">
@@ -2430,13 +2432,14 @@ function renderTalkingStudent() {
   };
 
   const groupsFull = talkingGroupByHalbjahrFull(talkingMine.presenting, talkingMine.invitations);
-  const detailBlocks = groupsFull.length ? groupsFull.map(g => {
-    const presentRow = g.presenting.length
-      ? g.presenting.map((s, idx) => presentDetailCell(s, idx === 0)).join('')
-      : `<div class="tsum-cell white"><span class="tsum-empty">Noch kein Mathe-Talk angemeldet</span></div>`;
-    const listenRow = g.listening.length
-      ? g.listening.map((i, idx) => listenDetailCell(i, idx < 2)).join('')
-      : `<div class="tsum-cell white"><span class="tsum-empty">Keine Einladungen</span></div>`;
+  if (!groupsFull.length) groupsFull.push({ halbjahr: currentHalbjahrGuess(), presenting: [], listening: [] });
+  const detailBlocks = groupsFull.map(g => {
+    // Mind. 1 Pflicht-Spalte + 1 freiwillige Spalte immer sichtbar (auch als leerer Platzhalter),
+    // damit klar ist, dass noch ein weiterer freiwilliger Mathe-Talk/Zuhör-Termin möglich ist.
+    const presentCols = Math.max(2, g.presenting.length);
+    const listenCols = Math.max(3, g.listening.length);
+    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentDetailCell(g.presenting[idx], idx === 0)).join('');
+    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenDetailCell(g.listening[idx], idx < 2)).join('');
     return `
       <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>
       <div class="tsum-block-title">🎤 Meine Mathe-Talks:</div>
@@ -2449,7 +2452,7 @@ function renderTalkingStudent() {
         <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
         ${listenRow}
       </div>`;
-  }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein Mathe-Talk.</div>`;
+  }).join('');
 
   el.innerHTML = `
     <div class="stats-row">${trophyCard}${progressCards}</div>
