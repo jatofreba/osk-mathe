@@ -2436,9 +2436,9 @@ function renderTalkingStudent() {
   const groupsFull = talkingGroupByHalbjahrFull(talkingMine.presenting, talkingMine.invitations);
   if (!groupsFull.length) groupsFull.push({ halbjahr: currentHalbjahrGuess(), presenting: [], listening: [] });
   const detailBlocks = groupsFull.map(g => {
-    // Mind. 1 Pflicht-Spalte + 1 freiwillige Spalte immer sichtbar (auch als leerer Platzhalter),
-    // damit klar ist, dass noch ein weiterer freiwilliger Mathe-Talk/Zuhör-Termin möglich ist.
-    const presentCols = Math.max(2, g.presenting.length);
+    // Voreingestellt immer 3 Spalten sichtbar (Pflicht + freiwillige Platzhalter), genau wie
+    // auf der Picker-Karte - wächst erst dynamisch, wenn tatsächlich mehr als 3 belegt sind.
+    const presentCols = Math.max(3, g.presenting.length);
     const listenCols = Math.max(3, g.listening.length);
     const presentRow = Array.from({ length: presentCols }, (_, idx) => presentDetailCell(g.presenting[idx], idx === 0)).join('');
     const listenRow = Array.from({ length: listenCols }, (_, idx) => listenDetailCell(g.listening[idx], idx < 2)).join('');
