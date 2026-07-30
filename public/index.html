@@ -988,6 +988,10 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Termin verschieben</div>
     <div class="form-group">
+      <label class="form-label">Halbjahr</label>
+      <input class="form-input" id="tsedit-halbjahr" placeholder="z.B. 2627_1">
+    </div>
+    <div class="form-group">
       <label class="form-label">Datum</label>
       <input class="form-input" id="tsedit-datum" type="date">
     </div>
@@ -2849,6 +2853,7 @@ function openTalkingSlotEditModal(id) {
   const s = talkingAdminSlots.find(sl => sl.id === id);
   if (!s) return;
   _talkingEditSlotId = id;
+  document.getElementById('tsedit-halbjahr').value = s.halbjahr || '';
   document.getElementById('tsedit-datum').value = new Date(s.datum).toISOString().slice(0, 10);
   document.getElementById('tsedit-uhrzeit').value = s.uhrzeit || '';
   document.getElementById('tsedit-ort').value = s.ort || '';
@@ -2859,13 +2864,15 @@ function openTalkingSlotEditModal(id) {
 async function submitTalkingSlotEdit() {
   const errEl = document.getElementById('tsedit-error');
   errEl.style.display = 'none';
+  const halbjahr = document.getElementById('tsedit-halbjahr').value.trim();
   const datum = document.getElementById('tsedit-datum').value;
   const uhrzeit = document.getElementById('tsedit-uhrzeit').value.trim();
   const ort = document.getElementById('tsedit-ort').value.trim();
+  if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
   if (!datum) { alert('Bitte Datum angeben.'); return; }
   const r = await fetch(`/api/admin/talking-slots/${_talkingEditSlotId}/reschedule`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ datum, uhrzeit, ort })
+    body: JSON.stringify({ datum, uhrzeit, ort, halbjahr })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Verschieben.'; errEl.style.display = 'block'; return; }
