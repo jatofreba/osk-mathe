@@ -144,6 +144,26 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_talking_slots_klasse ON talking_slots(klasse, datum);
     CREATE INDEX IF NOT EXISTS idx_talking_sessions_presenter ON talking_sessions(presenter_id);
     CREATE INDEX IF NOT EXISTS idx_talking_invitations_listener ON talking_invitations(listener_id);
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_sessions' AND column_name='pokale') THEN
+        ALTER TABLE talking_sessions ADD COLUMN pokale INTEGER NOT NULL DEFAULT 0;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_sessions' AND column_name='quality_emoji') THEN
+        ALTER TABLE talking_sessions ADD COLUMN quality_emoji TEXT;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_invitations' AND column_name='pokale') THEN
+        ALTER TABLE talking_invitations ADD COLUMN pokale INTEGER NOT NULL DEFAULT 0;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_invitations' AND column_name='quality_emoji') THEN
+        ALTER TABLE talking_invitations ADD COLUMN quality_emoji TEXT;
+      END IF;
+    END $$;
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -264,6 +284,37 @@ const requireLogin = (req, res, next) =>
 
 const requireAdmin = (req, res, next) =>
   req.session.role === 'admin' ? next() : res.status(403).json({ error: 'Kein Zugriff' });
+
+// Vorgegebene Auswahl für die Qualitäts-Bewertung von Talking Sessions (Admin)
+const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
+
+// Pokale-Gesamtcount für Talking Sessions: Pflicht (1. Vortrag, erste 2 Zuhör-Termine
+// je Halbjahr) zählt immer zum Max, auch wenn noch nicht wahrgenommen. Zusatz/Bonus
+// zählt nur zum Max, wenn tatsächlich angemeldet. Von /api/talking-sessions/mine und
+// /api/leaderboard gemeinsam genutzt, damit "Meine Pokale" und die Rangliste nie auseinanderlaufen.
+function computeTalkingTrophies(halbjahre, presenting, listening) {
+  let earned = 0, max = 0;
+  halbjahre.forEach(hj => {
+    const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
+    const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
+    max += 3;
+    if (myPresenting[0] && myPresenting[0].presented_confirmed) earned += myPresenting[0].pokale || 0;
+    if (myPresenting[1]) {
+      max += 3;
+      if (myPresenting[1].presented_confirmed) earned += myPresenting[1].pokale || 0;
+    }
+    max += 4;
+    [0, 1].forEach(idx => {
+      const iv = myListening[idx];
+      if (iv && iv.attended_confirmed) earned += iv.pokale || 0;
+    });
+    myListening.slice(2).forEach(iv => {
+      max += 2;
+      if (iv.attended_confirmed) earned += iv.pokale || 0;
+    });
+  });
+  return { earned, max };
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
@@ -793,11 +844,23 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       return 1;
     }
 
-    const [usersRes, progRes, lzkRes, accessRes] = await Promise.all([
-      pool.query(`SELECT id, username, kurs FROM users WHERE role='student'`),
+    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes] = await Promise.all([
+      pool.query(`SELECT id, username, kurs, klasse FROM users WHERE role='student'`),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
       pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
       pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
+      pool.query(`
+        SELECT ts.presenter_id AS user_id, ts.presented_confirmed, ts.pokale, sl.halbjahr, sl.datum
+        FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+      `),
+      pool.query(`
+        SELECT ti.listener_id AS user_id, ti.attended_confirmed, ti.pokale, sl.halbjahr, sl.datum
+        FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        JOIN talking_slots sl ON sl.id = ts.slot_id
+        WHERE ti.status = 'angenommen'
+      `),
+      pool.query(`SELECT DISTINCT klasse, halbjahr FROM talking_slots`),
     ]);
 
     const progByUser = {};
@@ -816,6 +879,12 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       if (!accessByUser[row.user_id]) accessByUser[row.user_id] = {};
       accessByUser[row.user_id][row.lerntheke] = { gesperrt: row.gesperrt, kurs: row.kurs };
     });
+    const tsPresByUser = {};
+    tsPresRes.rows.forEach(row => { (tsPresByUser[row.user_id] ||= []).push(row); });
+    const tsListenByUser = {};
+    tsListenRes.rows.forEach(row => { (tsListenByUser[row.user_id] ||= []).push(row); });
+    const tsHalbjahreByKlasse = {};
+    tsHalbjahrRes.rows.forEach(row => { (tsHalbjahreByKlasse[row.klasse] ||= []).push(row.halbjahr); });
 
     const rows = usersRes.rows.map(u => {
       let pokale = 0, ownMax = 0;
@@ -842,6 +911,9 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
           if (lu.groups[lzk.typ]) ownMax += 3; // only count LZK max when entry exists (matches client)
         });
       });
+      const tsHalbjahre = tsHalbjahreByKlasse[u.klasse] || [];
+      const tsTrophies = computeTalkingTrophies(tsHalbjahre, tsPresByUser[u.id] || [], tsListenByUser[u.id] || []);
+      pokale += tsTrophies.earned; ownMax += tsTrophies.max;
       return { username: u.username, pokale, ownMax };
     });
 
@@ -1025,13 +1097,14 @@ app.get('/api/talking-slots/open', requireLogin, async (req, res) => {
 app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
   try {
     const uid = req.session.userId;
-    const [presenting, invitations, presentedCounts, attendedCounts] = await Promise.all([
+    const [presenting, invitations, slotHalbjahre] = await Promise.all([
       pool.query(`
-        SELECT ts.id, ts.thema, ts.presented_confirmed,
+        SELECT ts.id, ts.thema, ts.presented_confirmed, ts.pokale, ts.quality_emoji,
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
                COALESCE(json_agg(json_build_object(
                  'id', ti.id, 'listenerId', u.id, 'username', u.username,
-                 'status', ti.status, 'attendedConfirmed', ti.attended_confirmed
+                 'status', ti.status, 'attendedConfirmed', ti.attended_confirmed,
+                 'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
                )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
         FROM talking_sessions ts
         JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -1042,7 +1115,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid]),
       pool.query(`
-        SELECT ti.id, ti.status, ti.attended_confirmed,
+        SELECT ti.id, ti.status, ti.attended_confirmed, ti.pokale, ti.quality_emoji,
                ts.id AS session_id, ts.thema, ts.presented_confirmed,
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
                pu.username AS presenter_username
@@ -1053,24 +1126,16 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         WHERE ti.listener_id = $1
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid]),
-      pool.query(`
-        SELECT tsl.halbjahr, COUNT(*) FILTER (WHERE ts.presented_confirmed) AS presented_done
-        FROM talking_sessions ts JOIN talking_slots tsl ON tsl.id = ts.slot_id
-        WHERE ts.presenter_id = $1 GROUP BY tsl.halbjahr
-      `, [uid]),
-      pool.query(`
-        SELECT tsl.halbjahr, COUNT(*) FILTER (WHERE ti.attended_confirmed) AS attended_done
-        FROM talking_invitations ti
-        JOIN talking_sessions ts ON ts.id = ti.session_id
-        JOIN talking_slots tsl ON tsl.id = ts.slot_id
-        WHERE ti.listener_id = $1 GROUP BY tsl.halbjahr
-      `, [uid]),
+      pool.query('SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1', [req.session.klasse]),
     ]);
+
+    const accepted = invitations.rows.filter(i => i.status === 'angenommen');
+    const trophies = computeTalkingTrophies(slotHalbjahre.rows.map(r => r.halbjahr), presenting.rows, accepted);
+
     res.json({
       presenting: presenting.rows,
       invitations: invitations.rows,
-      presentedCounts: presentedCounts.rows,
-      attendedCounts: attendedCounts.rows
+      trophies
     });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1204,10 +1269,11 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr,
-             ts.id AS session_id, ts.thema, ts.presented_confirmed, pu.username AS presenter_username,
+             ts.id AS session_id, ts.thema, ts.presented_confirmed, ts.pokale, ts.quality_emoji, pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
-               'status', ti.status, 'attendedConfirmed', ti.attended_confirmed
+               'status', ti.status, 'attendedConfirmed', ti.attended_confirmed,
+               'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
              )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
       FROM talking_slots s
       LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
@@ -1237,13 +1303,16 @@ app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, async (req, res) => {
   try {
-    const { confirmed } = req.body;
+    const { confirmed, pokale, qualityEmoji } = req.body;
+    if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
+      return res.status(400).json({ error: 'Ungültiges Emoji' });
+    const pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
     const r = await pool.query(`
-      UPDATE talking_sessions ts SET presented_confirmed=$1, admin_id=$2, updated_at=NOW()
+      UPDATE talking_sessions ts SET presented_confirmed=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
       FROM talking_slots sl
-      WHERE ts.slot_id = sl.id AND ts.id=$3 AND sl.klasse=$4
+      WHERE ts.slot_id = sl.id AND ts.id=$5 AND sl.klasse=$6
       RETURNING ts.id
-    `, [!!confirmed, req.session.userId, req.params.id, req.session.klasse]);
+    `, [!!confirmed, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -1251,13 +1320,16 @@ app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, asyn
 
 app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, async (req, res) => {
   try {
-    const { confirmed } = req.body;
+    const { confirmed, pokale, qualityEmoji } = req.body;
+    if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
+      return res.status(400).json({ error: 'Ungültiges Emoji' });
+    const pk = Math.min(2, Math.max(0, parseInt(pokale) || 0));
     const r = await pool.query(`
-      UPDATE talking_invitations ti SET attended_confirmed=$1, admin_id=$2, updated_at=NOW()
+      UPDATE talking_invitations ti SET attended_confirmed=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
       FROM talking_sessions ts, talking_slots sl
-      WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$3 AND sl.klasse=$4
+      WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$5 AND sl.klasse=$6
       RETURNING ti.id
-    `, [!!confirmed, req.session.userId, req.params.id, req.session.klasse]);
+    `, [!!confirmed, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
