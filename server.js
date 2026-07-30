@@ -285,13 +285,14 @@ const requireLogin = (req, res, next) =>
 const requireAdmin = (req, res, next) =>
   req.session.role === 'admin' ? next() : res.status(403).json({ error: 'Kein Zugriff' });
 
-// Vorgegebene Auswahl für die Qualitäts-Bewertung von Talking Sessions (Admin)
+// Vorgegebene Auswahl für die Qualitäts-Bewertung von Mathe-Talks (Admin)
 const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
 
-// Pokale-Gesamtcount für Talking Sessions: Pflicht (1. Vortrag, erste 2 Zuhör-Termine
+// Pokale-Gesamtcount für Mathe-Talks: Pflicht (1. Vortrag, erste 2 Zuhör-Termine
 // je Halbjahr) zählt immer zum Max, auch wenn noch nicht wahrgenommen. Zusatz/Bonus
-// zählt nur zum Max, wenn tatsächlich angemeldet. Von /api/talking-sessions/mine und
-// /api/leaderboard gemeinsam genutzt, damit "Meine Pokale" und die Rangliste nie auseinanderlaufen.
+// (beliebig viele weitere Vorträge/Zuhör-Termine) zählt nur zum Max, wenn tatsächlich
+// angemeldet. Von /api/talking-sessions/mine und /api/leaderboard gemeinsam genutzt,
+// damit "Meine Pokale" und die Rangliste nie auseinanderlaufen.
 function computeTalkingTrophies(halbjahre, presenting, listening) {
   let earned = 0, max = 0;
   halbjahre.forEach(hj => {
@@ -299,10 +300,10 @@ function computeTalkingTrophies(halbjahre, presenting, listening) {
     const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     max += 3;
     if (myPresenting[0] && myPresenting[0].presented_confirmed) earned += myPresenting[0].pokale || 0;
-    if (myPresenting[1]) {
+    myPresenting.slice(1).forEach(s => { // beliebig viele Zusatz-Vorträge, nur wenn angemeldet
       max += 3;
-      if (myPresenting[1].presented_confirmed) earned += myPresenting[1].pokale || 0;
-    }
+      if (s.presented_confirmed) earned += s.pokale || 0;
+    });
     max += 4;
     [0, 1].forEach(idx => {
       const iv = myListening[idx];
@@ -1069,7 +1070,7 @@ app.post('/api/admin/set-kurs', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// ── Talking Sessions ───────────────────────────────────────────────────────────
+// ── Mathe-Talks ───────────────────────────────────────────────────────────────
 // Schüler/geteilt
 app.get('/api/classmates', requireLogin, async (req, res) => {
   try {
