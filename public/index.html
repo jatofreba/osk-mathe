@@ -583,21 +583,28 @@ textarea.form-input{
 .lb-mini-fill{height:100%;border-radius:99px;}
 
 /* ── Talking-Session-Übersicht im Picker (angelehnt an das Papier-Arbeitsblatt) ── */
-.tsum-hj-title{font-size:13px;font-weight:700;margin:14px 0 6px;color:var(--ink);}
-.tsum-hj-title:first-of-type{margin-top:4px;}
-.tsum-legend-swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:2px;vertical-align:-1px;border:1px solid var(--border);}
-.tsum-legend-swatch.grey{background:#e2e2e2;}
-.tsum-legend-swatch.white{background:var(--white);}
-.tsum-table{display:flex;flex-direction:column;gap:2px;overflow-x:auto;}
-.tsum-row{display:flex;gap:2px;min-width:min-content;}
-.tsum-label{flex:0 0 130px;font-size:11px;font-weight:600;color:var(--ink2);display:flex;align-items:center;padding:8px 10px;background:var(--md-surface-container-low);border-radius:8px;}
-.tsum-cell{flex:1 0 130px;min-width:130px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;}
-.tsum-cell.grey{background:#ececec;}
-.tsum-cell.white{background:var(--white);}
-.tsum-topic{font-weight:600;font-size:12px;color:var(--ink);margin-bottom:2px;}
-.tsum-status{font-size:11px;color:var(--ink2);}
+.tsum-header{background:linear-gradient(135deg,#fde4ef,#f6c9de);border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.tsum-header-title{font-size:15px;font-weight:800;color:#7c3f78;letter-spacing:.2px;}
+.tsum-header-legend{font-size:10px;color:#8a5a80;text-align:right;line-height:1.6;white-space:nowrap;}
+.tsum-hj-title{font-size:12px;font-weight:700;margin:16px 0 6px;color:var(--ink);}
+.tsum-hj-title:first-of-type{margin-top:0;}
+.tsum-block-title{font-size:11.5px;font-weight:700;color:#6d4a99;margin:8px 0 4px;}
+.tsum-legend-swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;vertical-align:-1px;border:1px solid rgba(0,0,0,.15);}
+.tsum-legend-swatch.grey{background:#c9c9c9;}
+.tsum-legend-swatch.white{background:#fff;}
+.tsum-table{display:flex;gap:0;overflow-x:auto;border:1px solid #cfc3e8;border-radius:8px;}
+.tsum-label{flex:0 0 130px;font-size:10px;font-weight:600;color:#4b3a6b;background:#e7e0fb;padding:8px 10px;border-right:1px solid #cfc3e8;line-height:1.45;}
+.tsum-label ol{margin:0;padding-left:14px;}
+.tsum-label li{margin-bottom:2px;}
+.tsum-cell{flex:1 0 130px;min-width:130px;padding:8px 10px;border-right:1px solid #cfc3e8;}
+.tsum-cell:last-child{border-right:none;}
+.tsum-cell.grey{background:#e2e2e2;}
+.tsum-cell.white{background:#fff;}
+.tsum-field-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b6b6b;}
+.tsum-field-value{font-size:12px;color:var(--ink);margin:0 0 6px;}
+.tsum-field-value:last-child{margin-bottom:0;}
 .tsum-empty{font-size:11px;color:#9ca3af;font-style:italic;}
-@media(max-width:600px){.tsum-label{flex-basis:100px;font-size:10px;}.tsum-cell{flex-basis:110px;min-width:110px;}}
+@media(max-width:600px){.tsum-label{flex-basis:100px;font-size:9px;}.tsum-cell{flex-basis:110px;min-width:110px;}}
 .lt-active-btn-UNUSED{
   width:100%;margin-top:8px;padding:6px 0;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
   border:1px solid var(--md-outline-variant);background:var(--md-surface);color:var(--md-on-surface-variant);cursor:pointer;
@@ -661,7 +668,6 @@ textarea.form-input{
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Lerntheken</h2>
       <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Lerntheke du arbeiten möchtest.</p>
-      <div id="picker-talking-summary" style="margin-bottom:24px;"></div>
       <div class="picker-grid" id="picker-cards"></div>
       <div id="picker-trophy-summary" style="margin-top:24px;"></div>
     </div>
@@ -922,6 +928,30 @@ textarea.form-input{
   </div>
 </div>
 
+<!-- ══ MODAL: Talking Session bewerten (Admin) ═══════════════════════════════════ -->
+<div class="overlay" id="modal-talking-rate">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title" id="trate-modal-title">Bewerten</div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+        <input type="checkbox" id="trate-modal-confirmed" checked> Hat stattgefunden
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pokale</label>
+      <div id="trate-modal-pokale" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bewertung (optional)</label>
+      <div id="trate-modal-emojis" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talking-rate')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="saveTalkingRateModal()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ State ════════════════════════════════════════════════════════════════════
 let me = null;
@@ -1122,9 +1152,8 @@ async function showPicker() {
   try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {} // writes module-level accessData
   activeLerntheke = localStorage.getItem('_lastLt') || null;
 
-  let talkingMineData = { presenting: [], invitations: [] };
+  let talkingMineData = { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
   try { const tr = await fetch('/api/talking-sessions/mine'); if (tr.ok) talkingMineData = await tr.json(); } catch {}
-  renderTalkingPickerSummary(talkingMineData);
 
   const container = document.getElementById('picker-cards');
   // Trophy helper (mirrors lerntheke.js trophyCount)
@@ -1167,6 +1196,8 @@ async function showPicker() {
       if (lzk) { totalEarned += lzk.pokale || 0; totalMax += 3; }
     });
   });
+  totalEarned += talkingMineData.trophies?.earned || 0;
+  totalMax += talkingMineData.trophies?.max || 0;
 
   // Footer: Meine Pokale + Ranglisten + gesperrte Lerntheken (alle in einer Zeile)
   const trophySummary = document.getElementById('picker-trophy-summary');
@@ -1209,16 +1240,19 @@ async function showPicker() {
 
     trophySummary.innerHTML = `<div class="trophy-section">
       ${lockedPanelHtml}
-      <div class="trophy-panel">
-        <div class="trophy-panel-title">Meine Pokale</div>
-        <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
-        <div class="trophy-track">
-          <div class="trophy-fill${pct>=100?' trophy-perfect':''}" style="width:${Math.min(100,pct)}%;background:${fillColor};"></div>
+      <div class="trophy-lb-col">
+        <div class="trophy-panel">
+          <div class="trophy-panel-title">Meine Pokale</div>
+          <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
+          <div class="trophy-track">
+            <div class="trophy-fill${pct>=100?' trophy-perfect':''}" style="width:${Math.min(100,pct)}%;background:${fillColor};"></div>
+          </div>
+          <div class="trophy-milestones">
+            <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
+          </div>
+          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
         </div>
-        <div class="trophy-milestones">
-          <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
-        </div>
-        <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
+        ${buildTalkingPickerSummaryHtml(talkingMineData)}
       </div>
       <div class="trophy-lb-col">
         <div class="trophy-panel">
@@ -2105,60 +2139,89 @@ async function saveLzkModal() {
 }
 
 // ── Talking Sessions ───────────────────────────────────────────────────────────
+// Muss mit TALKING_QUALITY_EMOJIS in server.js übereinstimmen.
+const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
+
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function fmtTalkingDatum(d) {
   return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
 }
+function talkingPokalStr(pokale, max) {
+  return Array.from({ length: max }, (_, i) => `<span style="opacity:${i < pokale ? 1 : .18}">🏆</span>`).join('');
+}
+// Gruppiert präsentierte/angenommene Sessions je Halbjahr, sortiert nach Datum
+// (1. präsentierte Session bzw. erste 2 angenommene Zuhör-Termine gelten als Pflicht).
+function talkingGroupByHalbjahr(presenting, invitations) {
+  const accepted = (invitations || []).filter(i => i.status === 'angenommen');
+  const halbjahre = [...new Set([...(presenting || []).map(s => s.halbjahr), ...accepted.map(i => i.halbjahr)])].sort();
+  return halbjahre.map(hj => ({
+    halbjahr: hj,
+    presenting: (presenting || []).filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
+    listening: accepted.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum)),
+  }));
+}
 
-// Übersicht im Lerntheken-Picker – angelehnt an das Papier-Arbeitsblatt aus dem Englischunterricht
-// (Tabelle mit Feldern pro Session, grau = Pflicht, weiß = Zusatz/Bonus)
-function renderTalkingPickerSummary(data) {
-  const el = document.getElementById('picker-talking-summary');
-  if (!el) return;
-  const presenting = data.presenting || [];
-  const listening = (data.invitations || []).filter(i => i.status === 'angenommen');
-  const halbjahre = [...new Set([...presenting.map(s => s.halbjahr), ...listening.map(i => i.halbjahr)])].sort();
-  if (!halbjahre.length) halbjahre.push(currentHalbjahrGuess());
+// Übersicht im Lerntheken-Picker – bewusst am Papier-Arbeitsblatt "Let's Talk Sessions"
+// aus dem Englischunterricht orientiert (zwei Tabellen mit Schritte-Liste + Feldern
+// pro Session, graues Feld = Pflicht, weißes Feld = Zusatz/Bonus) für Wiedererkennungswert.
+function buildTalkingPickerSummaryHtml(data) {
+  const groups = talkingGroupByHalbjahr(data.presenting, data.invitations);
+  if (!groups.length) groups.push({ halbjahr: currentHalbjahrGuess(), presenting: [], listening: [] });
 
   const presentCell = (s, grey) => {
     if (!s) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
+    const quality = s.presented_confirmed
+      ? `${talkingPokalStr(s.pokale || 0, 3)}${s.quality_emoji ? ' ' + s.quality_emoji : ''}`
+      : '⏳ ausstehend';
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
-      <div class="tsum-topic">${escHtml(s.thema)}</div>
-      <div class="tsum-status">${s.presented_confirmed ? '✓ bestätigt' : '⏳ ausstehend'}</div>
+      <div class="tsum-field-label">Topic:</div>
+      <div class="tsum-field-value">${escHtml(s.thema)}</div>
+      <div class="tsum-field-label">Quality:</div>
+      <div class="tsum-field-value">${quality}</div>
     </div>`;
   };
   const listenCell = (i, grey) => {
     if (!i) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
     const missed = !i.attended_confirmed && new Date(i.datum) < new Date(new Date().toDateString());
-    const status = i.attended_confirmed ? '✓ angehört' : (missed ? 'Verpasst?' : '⏳ ausstehend');
+    const quality = i.attended_confirmed
+      ? `${talkingPokalStr(i.pokale || 0, 2)}${i.quality_emoji ? ' ' + i.quality_emoji : ''}`
+      : (missed ? 'Verpasst?' : '⏳ ausstehend');
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
-      <div class="tsum-topic">${escHtml(i.presenter_username)}: ${escHtml(i.thema)}</div>
-      <div class="tsum-status">${status}</div>
+      <div class="tsum-field-label">Von:</div>
+      <div class="tsum-field-value">${escHtml(i.presenter_username)}</div>
+      <div class="tsum-field-label">Topic:</div>
+      <div class="tsum-field-value">${escHtml(i.thema)}</div>
+      <div class="tsum-field-label">Quality:</div>
+      <div class="tsum-field-value">${quality}</div>
     </div>`;
   };
 
-  const blocks = halbjahre.map(hj => {
-    const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
-    const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
-    const presentCols = Math.max(2, myPresenting.length);
-    const listenCols = Math.max(2, myListening.length);
-    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(myPresenting[idx], idx === 0)).join('');
-    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(myListening[idx], idx < 2)).join('');
+  const blocks = groups.map(g => {
+    const presentCols = Math.max(2, g.presenting.length);
+    const listenCols = Math.max(2, g.listening.length);
+    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(g.presenting[idx], idx === 0)).join('');
+    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(g.listening[idx], idx < 2)).join('');
     return `
-      <div class="tsum-hj-title">Halbjahr ${escHtml(hj)}</div>
+      <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>
+      <div class="tsum-block-title">🎤 Meine Talking Session:</div>
       <div class="tsum-table">
-        <div class="tsum-row"><div class="tsum-label">🎤 Ich präsentiere</div>${presentRow}</div>
-        <div class="tsum-row"><div class="tsum-label">👂 Ich höre zu</div>${listenRow}</div>
+        <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
+        ${presentRow}
+      </div>
+      <div class="tsum-block-title">👂 Talking Sessions anderer:</div>
+      <div class="tsum-table">
+        <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
+        ${listenRow}
       </div>`;
   }).join('');
 
-  el.innerHTML = `
+  return `
     <div class="trophy-panel">
-      <div class="trophy-panel-title">🗣️ Talking Sessions</div>
-      <div style="font-size:11px;color:var(--ink2);margin-bottom:2px;">
-        <span class="tsum-legend-swatch grey"></span> Pflicht &nbsp; <span class="tsum-legend-swatch white"></span> Zusatz / Bonus
+      <div class="tsum-header">
+        <div class="tsum-header-title">🗣️ Let's Talk Sessions</div>
+        <div class="tsum-header-legend"><span class="tsum-legend-swatch grey"></span> graues Feld: Pflicht<br><span class="tsum-legend-swatch white"></span> weißes Feld: Zusatz-Punkte</div>
       </div>
       ${blocks}
       <button class="btn-sm" style="margin-top:12px;" onclick="showView('talking')">→ Zu den Talking Sessions</button>
@@ -2182,7 +2245,7 @@ async function loadTalkingSessions() {
 // ── Student ──────────────────────────────────────────────────────────────────
 let talkingClassmates = [];
 let talkingOpenSlots = [];
-let talkingMine = { presenting: [], invitations: [], presentedCounts: [], attendedCounts: [] };
+let talkingMine = { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
 
 async function loadTalkingStudent() {
   const el = document.getElementById('talking-student');
@@ -2193,7 +2256,7 @@ async function loadTalkingStudent() {
     ]);
     talkingClassmates = cmRes.ok ? await cmRes.json() : [];
     talkingOpenSlots = slotsRes.ok ? await slotsRes.json() : [];
-    talkingMine = mineRes.ok ? await mineRes.json() : { presenting: [], invitations: [], presentedCounts: [], attendedCounts: [] };
+    talkingMine = mineRes.ok ? await mineRes.json() : { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
   } catch(e) {
     el.innerHTML = '<div style="padding:20px;color:var(--md-error);">Fehler beim Laden.</div>';
     return;
@@ -2203,15 +2266,18 @@ async function loadTalkingStudent() {
 
 function renderTalkingStudent() {
   const el = document.getElementById('talking-student');
-  const pCounts = talkingMine.presentedCounts || [];
-  const aCounts = talkingMine.attendedCounts || [];
-  const halbjahre = [...new Set([...pCounts.map(c => c.halbjahr), ...aCounts.map(c => c.halbjahr)])].sort();
-  const progressCards = halbjahre.length ? halbjahre.map(hj => {
-    const p = parseInt(pCounts.find(c => c.halbjahr === hj)?.presented_done) || 0;
-    const a = parseInt(aCounts.find(c => c.halbjahr === hj)?.attended_done) || 0;
+  const groups = talkingGroupByHalbjahr(talkingMine.presenting, talkingMine.invitations);
+  const trophyCard = `
+    <div class="stat-card">
+      <div class="stat-lbl">🏆 Talking-Session-Pokale</div>
+      <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
+    </div>`;
+  const progressCards = groups.length ? groups.map(g => {
+    const p = g.presenting.filter(s => s.presented_confirmed).length;
+    const a = g.listening.filter(i => i.attended_confirmed).length;
     return `
       <div class="stat-card">
-        <div class="stat-lbl">Halbjahr ${escHtml(hj)}</div>
+        <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
         <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
       </div>`;
@@ -2234,8 +2300,10 @@ function renderTalkingStudent() {
     const invitees = s.invitees || [];
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
-      return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${iv.attendedConfirmed ? ' 👂✓' : ''}</span>`;
+      const rating = iv.attendedConfirmed ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : '';
+      return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}</span>`;
     }).join(' ');
+    const rating = s.presented_confirmed ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.quality_emoji ? ' ' + s.quality_emoji : ''}` : '';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -2243,7 +2311,7 @@ function renderTalkingStudent() {
             <strong>${escHtml(s.thema)}</strong><br>
             <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · ${escHtml(s.halbjahr)}</span>
           </div>
-          <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}">${s.presented_confirmed ? '✓ bestätigt' : '⏳ ausstehend'}</span>
+          <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}">${s.presented_confirmed ? '✓ bewertet' : '⏳ ausstehend'}${rating}</span>
         </div>
         <div style="margin-top:8px;">${inviteeList || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
         ${!s.presented_confirmed ? `<button class="btn-sm" style="margin-top:8px;" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
@@ -2253,19 +2321,20 @@ function renderTalkingStudent() {
   const accepted = (talkingMine.invitations || []).filter(i => i.status === 'angenommen');
   const attendingHtml = accepted.length ? accepted.map(i => {
     const missed = !i.attended_confirmed && new Date(i.datum) < new Date(new Date().toDateString());
+    const rating = i.attended_confirmed ? ` ${talkingPokalStr(i.pokale || 0, 2)}${i.quality_emoji ? ' ' + i.quality_emoji : ''}` : '';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <strong>${escHtml(i.presenter_username)}</strong> · ${escHtml(i.thema)}<br>
         <span style="color:var(--md-on-surface-variant);font-size:13px;">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</span>
         <div style="margin-top:6px;">
-          ${i.attended_confirmed ? '<span class="pill pill-green">👂 Teilnahme bestätigt</span>' :
+          ${i.attended_confirmed ? `<span class="pill pill-green">👂 bewertet${rating}</span>` :
             (missed ? '<span class="pill pill-yellow">Verpasst?</span>' : '<span class="pill pill-blue">Ausstehend</span>')}
         </div>
       </div>`;
   }).join('') : `<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine angenommenen Einladungen.</div>`;
 
   el.innerHTML = `
-    <div class="stats-row">${progressCards}</div>
+    <div class="stats-row">${trophyCard}${progressCards}</div>
     <div class="admin-top" style="margin-top:8px;"><div class="admin-title" style="font-size:16px;">📬 Meine Einladungen</div></div>
     ${invitesHtml}
     <div class="admin-top" style="margin-top:24px;">
@@ -2459,10 +2528,12 @@ function renderTalkingAdmin() {
     const invitees = s.invitees || [];
     const inviteesHtml = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
-      return `<span class="pill ${iv.attendedConfirmed ? 'pill-green' : 'pill-blue'}" style="cursor:pointer;" title="Teilnahme bestätigen/zurücksetzen" onclick="toggleTalkingAttended(${iv.id}, ${!iv.attendedConfirmed})">
-        ${escHtml(iv.username)} ${statusIcon}${iv.attendedConfirmed ? ' 👂✓' : ''}
+      const rating = iv.attendedConfirmed ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : '';
+      return `<span class="pill ${iv.attendedConfirmed ? 'pill-green' : 'pill-blue'}" style="cursor:pointer;" title="Teilnahme bewerten" onclick="openTalkingRateModal('attended', ${iv.id}, 2, ${iv.pokale || 0}, ${iv.qualityEmoji ? `'${iv.qualityEmoji}'` : 'null'}, ${!!iv.attendedConfirmed})">
+        ${escHtml(iv.username)} ${statusIcon}${rating}
       </span>`;
     }).join(' ');
+    const presentRating = s.presented_confirmed ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.quality_emoji ? ' ' + s.quality_emoji : ''}` : '';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -2474,8 +2545,8 @@ function renderTalkingAdmin() {
         ${booked ? `
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             🎤 <strong>${escHtml(s.presenter_username)}</strong> · ${escHtml(s.thema)}
-            <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}" style="cursor:pointer;" title="Vortrag bestätigen/zurücksetzen" onclick="toggleTalkingPresented(${s.session_id}, ${!s.presented_confirmed})">
-              ${s.presented_confirmed ? '✓ Vortrag bestätigt' : '⏳ Vortrag bestätigen'}
+            <span class="pill ${s.presented_confirmed ? 'pill-green' : 'pill-yellow'}" style="cursor:pointer;" title="Vortrag bewerten" onclick="openTalkingRateModal('presented', ${s.session_id}, 3, ${s.pokale || 0}, ${s.quality_emoji ? `'${s.quality_emoji}'` : 'null'}, ${!!s.presented_confirmed})">
+              ${s.presented_confirmed ? '✓ bewertet' : '⏳ Vortrag bewerten'}${presentRating}
             </span>
             <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
           </div>
@@ -2561,17 +2632,41 @@ async function cancelTalkingSession(sessionId) {
   loadTalkingAdmin();
 }
 
-async function toggleTalkingPresented(sessionId, confirmed) {
-  await fetch(`/api/admin/talking-sessions/${sessionId}/confirm-presented`, {
-    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ confirmed })
-  });
-  loadTalkingAdmin();
+let _talkingRateModal = {};
+function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentConfirmed) {
+  _talkingRateModal = { type, id, pokale: currentPokale || 0, emoji: currentEmoji || null };
+  document.getElementById('trate-modal-title').textContent = type === 'presented' ? '🎤 Vortrag bewerten' : '👂 Teilnahme bewerten';
+  document.getElementById('trate-modal-confirmed').checked = currentConfirmed !== false;
+  document.getElementById('trate-modal-pokale').innerHTML = Array.from({ length: maxPokale + 1 }, (_, v) =>
+    `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🏆</button>`
+  ).join('');
+  document.getElementById('trate-modal-emojis').innerHTML = TALKING_QUALITY_EMOJIS.map(e =>
+    `<button class="lzk-pokal-btn ${e === currentEmoji ? 'active' : ''}" data-e="${e}" onclick="selectTalkingRateEmoji('${e}')" style="font-size:16px;">${e}</button>`
+  ).join('');
+  openModal('modal-talking-rate');
 }
 
-async function toggleTalkingAttended(invitationId, confirmed) {
-  await fetch(`/api/admin/talking-invitations/${invitationId}/confirm-attended`, {
-    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ confirmed })
+function selectTalkingRatePokal(v) {
+  _talkingRateModal.pokale = v;
+  document.querySelectorAll('#trate-modal-pokale .lzk-pokal-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.v) === v));
+}
+
+function selectTalkingRateEmoji(e) {
+  _talkingRateModal.emoji = (_talkingRateModal.emoji === e) ? null : e;
+  document.querySelectorAll('#trate-modal-emojis .lzk-pokal-btn').forEach(b => b.classList.toggle('active', b.dataset.e === _talkingRateModal.emoji));
+}
+
+async function saveTalkingRateModal() {
+  const confirmed = document.getElementById('trate-modal-confirmed').checked;
+  const { type, id, pokale, emoji } = _talkingRateModal;
+  const url = type === 'presented'
+    ? `/api/admin/talking-sessions/${id}/confirm-presented`
+    : `/api/admin/talking-invitations/${id}/confirm-attended`;
+  await fetch(url, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ confirmed, pokale, qualityEmoji: emoji })
   });
+  closeModal('modal-talking-rate');
   loadTalkingAdmin();
 }
 
