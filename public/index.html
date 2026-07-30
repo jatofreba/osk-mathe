@@ -581,6 +581,23 @@ textarea.form-input{
 .lb-val{font-size:12px;color:var(--ink2);flex-shrink:0;}
 .lb-mini-bar{width:60px;height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden;flex-shrink:0;}
 .lb-mini-fill{height:100%;border-radius:99px;}
+
+/* ── Talking-Session-Übersicht im Picker (angelehnt an das Papier-Arbeitsblatt) ── */
+.tsum-hj-title{font-size:13px;font-weight:700;margin:14px 0 6px;color:var(--ink);}
+.tsum-hj-title:first-of-type{margin-top:4px;}
+.tsum-legend-swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:2px;vertical-align:-1px;border:1px solid var(--border);}
+.tsum-legend-swatch.grey{background:#e2e2e2;}
+.tsum-legend-swatch.white{background:var(--white);}
+.tsum-table{display:flex;flex-direction:column;gap:2px;overflow-x:auto;}
+.tsum-row{display:flex;gap:2px;min-width:min-content;}
+.tsum-label{flex:0 0 130px;font-size:11px;font-weight:600;color:var(--ink2);display:flex;align-items:center;padding:8px 10px;background:var(--md-surface-container-low);border-radius:8px;}
+.tsum-cell{flex:1 0 130px;min-width:130px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;}
+.tsum-cell.grey{background:#ececec;}
+.tsum-cell.white{background:var(--white);}
+.tsum-topic{font-weight:600;font-size:12px;color:var(--ink);margin-bottom:2px;}
+.tsum-status{font-size:11px;color:var(--ink2);}
+.tsum-empty{font-size:11px;color:#9ca3af;font-style:italic;}
+@media(max-width:600px){.tsum-label{flex-basis:100px;font-size:10px;}.tsum-cell{flex-basis:110px;min-width:110px;}}
 .lt-active-btn-UNUSED{
   width:100%;margin-top:8px;padding:6px 0;border-radius:var(--md-r-sm);font-size:12px;font-weight:500;
   border:1px solid var(--md-outline-variant);background:var(--md-surface);color:var(--md-on-surface-variant);cursor:pointer;
@@ -649,6 +666,7 @@ textarea.form-input{
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Lerntheken</h2>
       <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Lerntheke du arbeiten möchtest.</p>
+      <div id="picker-talking-summary" style="margin-bottom:24px;"></div>
       <div class="picker-grid" id="picker-cards"></div>
       <div id="picker-trophy-summary" style="margin-top:24px;"></div>
     </div>
@@ -859,11 +877,11 @@ textarea.form-input{
     </div>
     <div class="form-group">
       <label class="form-label">Uhrzeit / Stunde</label>
-      <input class="form-input" id="tslot-uhrzeit" placeholder="z.B. 5. Stunde">
+      <input class="form-input" id="tslot-uhrzeit" placeholder="z.B. 11:15 Uhr">
     </div>
     <div class="form-group">
       <label class="form-label">Ort</label>
-      <input class="form-input" id="tslot-ort" placeholder="z.B. Raum 204">
+      <input class="form-input" id="tslot-ort" placeholder="z.B. Mathe-Fachbüro M3/M4">
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-slot')">Abbrechen</button>
@@ -1108,6 +1126,10 @@ async function showPicker() {
   try { const lr = await fetch('/api/lzk');               if (lr.ok) lzkRows = await lr.json(); } catch {}
   try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {} // writes module-level accessData
   activeLerntheke = localStorage.getItem('_lastLt') || null;
+
+  let talkingMineData = { presenting: [], invitations: [] };
+  try { const tr = await fetch('/api/talking-sessions/mine'); if (tr.ok) talkingMineData = await tr.json(); } catch {}
+  renderTalkingPickerSummary(talkingMineData);
 
   const container = document.getElementById('picker-cards');
   // Trophy helper (mirrors lerntheke.js trophyCount)
@@ -2091,6 +2113,59 @@ function escHtml(s) {
 }
 function fmtTalkingDatum(d) {
   return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
+}
+
+// Übersicht im Lerntheken-Picker – angelehnt an das Papier-Arbeitsblatt aus dem Englischunterricht
+// (Tabelle mit Feldern pro Session, grau = Pflicht, weiß = Zusatz/Bonus)
+function renderTalkingPickerSummary(data) {
+  const el = document.getElementById('picker-talking-summary');
+  if (!el) return;
+  const presenting = data.presenting || [];
+  const listening = (data.invitations || []).filter(i => i.status === 'angenommen');
+  const halbjahre = [...new Set([...presenting.map(s => s.halbjahr), ...listening.map(i => i.halbjahr)])].sort();
+  if (!halbjahre.length) halbjahre.push(currentHalbjahrGuess());
+
+  const presentCell = (s, grey) => {
+    if (!s) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
+    return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
+      <div class="tsum-topic">${escHtml(s.thema)}</div>
+      <div class="tsum-status">${s.presented_confirmed ? '✓ bestätigt' : '⏳ ausstehend'}</div>
+    </div>`;
+  };
+  const listenCell = (i, grey) => {
+    if (!i) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
+    const missed = !i.attended_confirmed && new Date(i.datum) < new Date(new Date().toDateString());
+    const status = i.attended_confirmed ? '✓ angehört' : (missed ? 'Verpasst?' : '⏳ ausstehend');
+    return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
+      <div class="tsum-topic">${escHtml(i.presenter_username)}: ${escHtml(i.thema)}</div>
+      <div class="tsum-status">${status}</div>
+    </div>`;
+  };
+
+  const blocks = halbjahre.map(hj => {
+    const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
+    const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
+    const presentCols = Math.max(2, myPresenting.length);
+    const listenCols = Math.max(2, myListening.length);
+    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(myPresenting[idx], idx === 0)).join('');
+    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(myListening[idx], idx < 2)).join('');
+    return `
+      <div class="tsum-hj-title">Halbjahr ${escHtml(hj)}</div>
+      <div class="tsum-table">
+        <div class="tsum-row"><div class="tsum-label">🎤 Ich präsentiere</div>${presentRow}</div>
+        <div class="tsum-row"><div class="tsum-label">👂 Ich höre zu</div>${listenRow}</div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="trophy-panel">
+      <div class="trophy-panel-title">🗣️ Talking Sessions</div>
+      <div style="font-size:11px;color:var(--ink2);margin-bottom:2px;">
+        <span class="tsum-legend-swatch grey"></span> Pflicht &nbsp; <span class="tsum-legend-swatch white"></span> Zusatz / Bonus
+      </div>
+      ${blocks}
+      <button class="btn-sm" style="margin-top:12px;" onclick="showView('talking')">→ Zu den Talking Sessions</button>
+    </div>`;
 }
 
 async function loadTalkingSessions() {
