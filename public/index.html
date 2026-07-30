@@ -2257,6 +2257,7 @@ const TALK_TIER_TEXT = { 1: '⏳ In Arbeit', 2: '✓ Pflicht erfüllt', 3: '⭐ 
 function buildTalkingPickerSummaryHtml(data) {
   const groups = talkingGroupByHalbjahr(data.presenting, data.invitations);
   if (!groups.length) groups.push({ halbjahr: currentHalbjahrGuess(), presenting: [], listening: [] });
+  const pendingCount = (data.invitations || []).filter(i => i.status === 'eingeladen').length;
 
   const presentCell = (s, grey) => {
     if (!s) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
@@ -2323,6 +2324,11 @@ function buildTalkingPickerSummaryHtml(data) {
         </div>
         <div class="tsum-header-legend"><span class="tsum-legend-swatch grey"></span> graues Feld: Pflicht<br><span class="tsum-legend-swatch white"></span> weißes Feld: Zusatz-Punkte</div>
       </div>
+      ${pendingCount ? `<div style="margin-bottom:12px;">
+        <span class="pill pill-yellow" style="font-size:12.5px;padding:5px 12px;font-weight:700;cursor:pointer;" onclick="showView('talking')">
+          📬 ${pendingCount} ausstehende Einladung${pendingCount > 1 ? 'en' : ''}
+        </span>
+      </div>` : ''}
       ${blocks}
       <button class="btn-sm" style="margin-top:12px;" onclick="showView('talking')">→ Zu den Mathe-Talks</button>
     </div>`;
