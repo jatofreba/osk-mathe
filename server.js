@@ -1260,15 +1260,20 @@ app.delete('/api/talking-invitations/:id', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Annehmen/Ablehnen geht nur, solange die TS des Presenters noch nicht bewertet wurde (presented_status
+// 'ausstehend'). Danach entscheidet ausschließlich die Zuhören-Bewertung der Lehrkraft (attended_status),
+// ob die Person teilgenommen hat - das nachträgliche Ablehnen einer bereits stattgefundenen TS ergibt keinen Sinn.
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
     const { accept } = req.body;
     const status = accept ? 'angenommen' : 'abgelehnt';
-    const r = await pool.query(
-      'UPDATE talking_invitations SET status=$1, updated_at=NOW() WHERE id=$2 AND listener_id=$3 RETURNING id',
-      [status, req.params.id, req.session.userId]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const r = await pool.query(`
+      UPDATE talking_invitations ti SET status=$1, updated_at=NOW()
+      FROM talking_sessions ts
+      WHERE ti.session_id = ts.id AND ti.id=$2 AND ti.listener_id=$3 AND ts.presented_status='ausstehend'
+      RETURNING ti.id
+    `, [status, req.params.id, req.session.userId]);
+    if (!r.rows.length) return res.status(409).json({ error: 'Dieser Mathe-Talk wurde bereits bewertet - Einladung kann nicht mehr beantwortet werden.' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
