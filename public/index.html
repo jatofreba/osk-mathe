@@ -2375,7 +2375,9 @@ function renderTalkingStudent() {
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
       const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : (iv.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
-      return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}</span>`;
+      const canRemove = s.presentedStatus === 'ausstehend' && iv.attendedStatus === 'ausstehend';
+      const removeBtn = canRemove ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${iv.id})">✕</span>` : '';
+      return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}${removeBtn}</span>`;
     }).join(' ');
     const rating = s.presentedStatus === 'erledigt' ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}` : '';
     const statusCls = s.presentedStatus === 'erledigt' ? 'pill-green' : s.presentedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
@@ -2524,7 +2526,9 @@ function computeTalkingOverview(slots) {
     pRow.presentReg++;
     if (s.presentedStatus === 'erledigt') pRow.presentDone++;
     (s.invitees || []).forEach(iv => {
-      if (iv.status !== 'angenommen') return;
+      // "registriert" = Einladung angenommen ODER Admin hat trotzdem schon ein Ergebnis eingetragen
+      // (z.B. "nicht teilgenommen" direkt gesetzt, ohne dass die Einladung formal angenommen wurde).
+      if (iv.status !== 'angenommen' && iv.attendedStatus === 'ausstehend') return;
       const lRow = ensure(s.halbjahr, iv.username);
       lRow.listenReg++;
       if (iv.attendedStatus === 'erledigt') lRow.listenDone++;
@@ -2608,7 +2612,9 @@ function openTalkingStudentDetail(username) {
   const listening = [];
   talkingAdminSlots.forEach(s => {
     (s.invitees || []).forEach(iv => {
-      if (iv.username === username && iv.status === 'angenommen') listening.push({ ...iv, slot: s });
+      // Wie in computeTalkingOverview(): auch zeigen, wenn Admin schon ein Ergebnis eingetragen hat,
+      // selbst wenn die Einladung formal nie "angenommen" wurde.
+      if (iv.username === username && (iv.status === 'angenommen' || iv.attendedStatus !== 'ausstehend')) listening.push({ ...iv, slot: s });
     });
   });
   listening.sort((a, b) => new Date(b.slot.datum) - new Date(a.slot.datum));
