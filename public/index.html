@@ -2372,13 +2372,23 @@ async function loadTalkingStudent() {
 
 function renderTalkingStudent() {
   const el = document.getElementById('talking-student');
-  const groups = talkingGroupByHalbjahr(talkingMine.presenting, talkingMine.invitations);
+  // Eine Gruppierung für Kacheln UND Detail-Tabellen (jedes Halbjahr mit Beteiligung -
+  // Vortrag oder Einladung, auch noch unbeantwortet - bekommt beides). Aktuelles Halbjahr
+  // zuerst, ältere danach; nur Halbjahre mit echter Beteiligung tauchen überhaupt auf.
+  const currentHj = currentHalbjahrGuess();
+  const groupsFull = talkingGroupByHalbjahrFull(talkingMine.presenting, talkingMine.invitations);
+  groupsFull.sort((a, b) => {
+    if (a.halbjahr === currentHj) return -1;
+    if (b.halbjahr === currentHj) return 1;
+    return b.halbjahr.localeCompare(a.halbjahr);
+  });
+
   const trophyCard = `
     <div class="stat-card">
       <div class="stat-lbl">🏆 Mathe-Talk-Pokale</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
-  const progressCards = groups.length ? groups.map(g => {
+  const progressCards = groupsFull.length ? groupsFull.map(g => {
     const p = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(p, a);
@@ -2443,17 +2453,14 @@ function renderTalkingStudent() {
     </div>`;
   };
 
-  const groupsFull = talkingGroupByHalbjahrFull(talkingMine.presenting, talkingMine.invitations);
-  if (!groupsFull.length) groupsFull.push({ halbjahr: currentHalbjahrGuess(), presenting: [], listening: [] });
-  const detailBlocks = groupsFull.map(g => {
+  const detailBlocks = groupsFull.map((g, idx) => {
     // Voreingestellt immer 3 Spalten sichtbar (Pflicht + freiwillige Platzhalter), genau wie
     // auf der Picker-Karte - wächst erst dynamisch, wenn tatsächlich mehr als 3 belegt sind.
     const presentCols = Math.max(3, g.presenting.length);
     const listenCols = Math.max(3, g.listening.length);
     const presentRow = Array.from({ length: presentCols }, (_, idx) => presentDetailCell(g.presenting[idx], idx === 0)).join('');
     const listenRow = Array.from({ length: listenCols }, (_, idx) => listenDetailCell(g.listening[idx], idx < 2)).join('');
-    return `
-      <div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>
+    const body = `
       <div class="tsum-block-title">🎤 Meine Mathe-Talks:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
@@ -2464,6 +2471,15 @@ function renderTalkingStudent() {
         <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
         ${listenRow}
       </div>`;
+    // Nur das aktuelle Halbjahr (Index 0 nach der Sortierung) offen anzeigen,
+    // alle anderen (vergangene) kollabiert per <details>.
+    if (idx === 0) {
+      return `<div class="tsum-hj-title">Halbjahr ${escHtml(g.halbjahr)}</div>${body}`;
+    }
+    return `<details style="margin-top:16px;">
+      <summary class="tsum-hj-title" style="cursor:pointer;display:list-item;margin:0;">Halbjahr ${escHtml(g.halbjahr)}</summary>
+      <div style="margin-top:8px;">${body}</div>
+    </details>`;
   }).join('');
 
   el.innerHTML = `
@@ -2472,7 +2488,7 @@ function renderTalkingStudent() {
       <div class="admin-title" style="font-size:16px;">🗣️ Meine Mathe-Talks im Detail</div>
       <button class="btn-act btn-green" onclick="openBookSessionModal()" ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ Mathe-Talk anmelden</button>
     </div>
-    ${detailBlocks}
+    ${detailBlocks || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein Mathe-Talk.</div>'}
   `;
 }
 
