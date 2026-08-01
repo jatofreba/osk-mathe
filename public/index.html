@@ -1313,16 +1313,20 @@ async function showPicker() {
             <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
           </div>
           <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${[
               ['📚', 'Lerntheken-Arbeit', stationsEarned, stationsMax],
               ['🎓', 'LZK', lzkEarned, lzkMax],
               ['🗣️', 'Mathe-Talks', talkEarned, talkMax],
-            ].map(([icon, label, earned, max]) => `
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
-                <span>${icon} ${label}</span>
-                <span style="color:var(--ink2);">${earned}/${max} <strong style="color:var(--ink);">(${max ? Math.round(earned / max * 100) : 0} %)</strong></span>
-              </div>`).join('')}
+            ].map(([icon, label, earned, max]) => {
+              const subPct = max ? Math.round(earned / max * 100) : 0;
+              return `
+              <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                <span style="flex-shrink:0;">${icon} ${label}</span>
+                <div class="lb-mini-bar" style="width:auto;flex:1;height:4px;"><div class="lb-mini-fill" style="width:${subPct}%;background:${tierColor(subPct)};"></div></div>
+                <span style="color:var(--ink2);flex-shrink:0;white-space:nowrap;">${earned}/${max} <strong style="color:var(--ink);">(${subPct} %)</strong></span>
+              </div>`;
+            }).join('')}
           </div>
         </div>
         ${buildTalkingPickerSummaryHtml(talkingMineData)}
