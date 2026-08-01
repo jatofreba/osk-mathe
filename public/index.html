@@ -1236,7 +1236,9 @@ async function showPicker() {
   const lockedMeta   = sortedMeta.filter(lt => accessData[lt.key] !== false);
 
   // Compute total trophies — only for unlocked lerntheken, respecting kurs
-  let totalEarned = 0, totalMax = 0;
+  // Getrennt nach Quelle (Lerntheken-Stationen / LZK / Mathe-Talks) für die Detailaufschlüsselung.
+  let stationsEarned = 0, stationsMax = 0;
+  let lzkEarned = 0, lzkMax = 0;
   ltMeta.forEach(lt => {
     if (accessData[lt.key] !== false) return;
     const kurs = effectiveKurs(lt.key);
@@ -1245,18 +1247,20 @@ async function showPicker() {
     Object.entries(lt.groups || {}).forEach(([g, grp]) => {
       if (kurs === 'G' && g === 'Aufbau') return;
       if (grp.total <= 0) return;
-      totalEarned += _tc((groups[g] || {done:0}).done, grp.required, grp.total);
-      totalMax += 3;
+      stationsEarned += _tc((groups[g] || {done:0}).done, grp.required, grp.total);
+      stationsMax += 3;
     });
     ['Basis','Aufbau'].forEach(typ => {
       if (!lt.groups || !lt.groups[typ]) return;
       if (kurs === 'G' && typ === 'Aufbau') return;
       const lzk = lzkRows.find(l => l.lerntheke === lt.key && l.typ === typ);
-      if (lzk) { totalEarned += lzk.pokale || 0; totalMax += 3; }
+      if (lzk) { lzkEarned += lzk.pokale || 0; lzkMax += 3; }
     });
   });
-  totalEarned += talkingMineData.trophies?.earned || 0;
-  totalMax += talkingMineData.trophies?.max || 0;
+  const talkEarned = talkingMineData.trophies?.earned || 0;
+  const talkMax = talkingMineData.trophies?.max || 0;
+  const totalEarned = stationsEarned + lzkEarned + talkEarned;
+  const totalMax = stationsMax + lzkMax + talkMax;
 
   // Footer: Meine Pokale + Ranglisten + gesperrte Lerntheken (alle in einer Zeile)
   const trophySummary = document.getElementById('picker-trophy-summary');
@@ -1309,6 +1313,17 @@ async function showPicker() {
             <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
           </div>
           <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+            ${[
+              ['📚', 'Lerntheken-Arbeit', stationsEarned, stationsMax],
+              ['🎓', 'LZK', lzkEarned, lzkMax],
+              ['🗣️', 'Mathe-Talks', talkEarned, talkMax],
+            ].map(([icon, label, earned, max]) => `
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                <span>${icon} ${label}</span>
+                <span style="color:var(--ink2);">${earned}/${max} <strong style="color:var(--ink);">(${max ? Math.round(earned / max * 100) : 0} %)</strong></span>
+              </div>`).join('')}
+          </div>
         </div>
         ${buildTalkingPickerSummaryHtml(talkingMineData)}
         ${lockedPanelHtml}
