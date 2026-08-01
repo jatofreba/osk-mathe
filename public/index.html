@@ -258,7 +258,8 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .cal-cell.cal-sel{background:#eff6ff;border-color:#2563eb;}
 .cal-daynum{font-size:12px;font-weight:700;align-self:flex-end;color:var(--md-on-surface-variant);}
 .cal-cell.cal-today .cal-daynum{color:#1d4ed8;}
-.cal-ev{font-size:10px;font-weight:600;line-height:1.25;padding:2px 5px;border-radius:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cal-ev{font-size:10px;font-weight:600;line-height:1.25;padding:2px 5px;border-radius:5px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cal-ev.cal-ev-open{background:#fff;color:#2563eb;border:1px solid #93c5fd;}
 .cal-ev.cal-ev-mine{background:#2563eb;color:#fff;border-color:#1d4ed8;}
 .cal-ev.cal-ev-deadline{background:#fff;color:#1d4ed8;border-style:dashed;}
 .cal-more{font-size:10px;color:var(--md-on-surface-variant);padding-left:4px;}
@@ -777,7 +778,8 @@ textarea.form-input{
       <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
       <div class="cal-legend">
         <span><i style="background:#2563eb;"></i> Meine Termine</span>
-        <span><i style="background:#eff6ff;border:1px solid #bfdbfe;"></i> Angebote</span>
+        <span><i style="background:#fff;border:1px solid #93c5fd;"></i> Offen (buchbar)</span>
+        <span><i style="background:#dbeafe;border:1px solid #93c5fd;"></i> Gebucht</span>
         <span><i style="background:#fff;border:1px dashed #1d4ed8;"></i> Deadline</span>
         <span>🎤 Talk · 📘 Input</span>
       </div>
@@ -1099,7 +1101,25 @@ textarea.form-input{
 <div class="overlay" id="modal-input-slot">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Input-Termin freischalten</div>
-    <div class="form-group"><label class="form-label">Datum</label><input class="form-input" id="islot-datum" type="date"></div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+        <input type="checkbox" id="islot-recurring" onchange="toggleInputRecurring()"> Wöchentlich wiederkehrend
+      </label>
+    </div>
+    <div id="islot-single-fields">
+      <div class="form-group"><label class="form-label">Datum</label><input class="form-input" id="islot-datum" type="date"></div>
+    </div>
+    <div id="islot-recurring-fields" style="display:none;">
+      <div class="form-group"><label class="form-label">Wochentag</label>
+        <select class="form-input" id="islot-weekday">
+          <option value="1">Montag</option><option value="2">Dienstag</option><option value="3">Mittwoch</option><option value="4">Donnerstag</option><option value="5">Freitag</option><option value="6">Samstag</option><option value="0">Sonntag</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;gap:10px;">
+        <div style="flex:1;"><label class="form-label">Von</label><input class="form-input" id="islot-von" type="date"></div>
+        <div style="flex:1;"><label class="form-label">Bis</label><input class="form-input" id="islot-bis" type="date"></div>
+      </div>
+    </div>
     <div class="form-group"><label class="form-label">Uhrzeit</label><input class="form-input" id="islot-uhrzeit" type="time"></div>
     <div class="form-group"><label class="form-label">Dauer (Minuten)</label><input class="form-input" id="islot-dauer" type="number" min="5" max="600" value="45"></div>
     <div class="form-group"><label class="form-label">Ort</label><input class="form-input" id="islot-ort" placeholder="z.B. Mathe-Fachbüro"></div>
@@ -2567,7 +2587,9 @@ function renderCalendar() {
       if (it.kind === 'deadline') return `<div class="cal-ev cal-ev-deadline" title="${escHtml(it.titel)}">⏰ ${escHtml(it.titel)}</div>`;
       const mine = it.mineAsPresenter || it.mineAsListener;
       const icon = it.typ === 'input' ? '📘' : '🎤';
-      return `<div class="cal-ev ${mine ? 'cal-ev-mine' : ''}" title="${escHtml((it.uhrzeit||'') + ' ' + (it.typ==='input'?'Input':'Talk'))}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'Input':'Talk'))}</div>`;
+      const cls = mine ? 'cal-ev-mine' : (it.booked ? '' : 'cal-ev-open');
+      const st = mine ? 'meine Buchung' : (it.booked ? 'gebucht' : 'offen – buchbar');
+      return `<div class="cal-ev ${cls}" title="${escHtml((it.uhrzeit||'') + ' ' + (it.typ==='input'?'Input':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'Input':'Talk'))}</div>`;
     }).join('');
     const more = items.length > 3 ? `<div class="cal-more">+${items.length - 3} mehr</div>` : '';
     const cls = ['cal-cell'];
@@ -2617,7 +2639,7 @@ function renderCalDetail() {
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid #2563eb;">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
         <div>
-          <div>${icon} <strong>${typLabel}</strong></div>
+          <div>${icon} <strong>${typLabel}</strong> ${it.booked ? '<span class="pill pill-green" style="font-size:10px;">✓ gebucht</span>' : '<span class="pill pill-yellow" style="font-size:10px;">○ offen</span>'}</div>
           <div style="color:var(--md-on-surface-variant);font-size:12px;">${meta}</div>
           <div style="margin-top:4px;">${body}</div>
         </div>
@@ -2680,24 +2702,46 @@ async function submitCalBook() {
 }
 
 // Admin: Input-Termin freischalten
+function toggleInputRecurring() {
+  const c = document.getElementById('islot-recurring').checked;
+  document.getElementById('islot-recurring-fields').style.display = c ? 'block' : 'none';
+  document.getElementById('islot-single-fields').style.display = c ? 'none' : 'block';
+}
 function openInputSlotModal(presetDate) {
   document.getElementById('islot-datum').value = presetDate || calSelected || calDateStr(new Date());
   document.getElementById('islot-uhrzeit').value = '';
   document.getElementById('islot-dauer').value = '45';
   document.getElementById('islot-ort').value = '';
+  document.getElementById('islot-recurring').checked = false;
+  document.getElementById('islot-recurring-fields').style.display = 'none';
+  document.getElementById('islot-single-fields').style.display = 'block';
+  document.getElementById('islot-von').value = '';
+  document.getElementById('islot-bis').value = '';
+  document.getElementById('islot-weekday').value = '1';
   document.getElementById('islot-error').style.display = 'none';
   openModal('modal-input-slot');
 }
 async function submitInputSlot() {
   const errEl = document.getElementById('islot-error'); errEl.style.display = 'none';
-  const datum = document.getElementById('islot-datum').value;
   const uhrzeit = document.getElementById('islot-uhrzeit').value.trim();
   const dauer = parseInt(document.getElementById('islot-dauer').value) || 45;
   const ort = document.getElementById('islot-ort').value.trim();
-  if (!datum) { errEl.textContent = 'Bitte Datum angeben.'; errEl.style.display = 'block'; return; }
+  const recurring = document.getElementById('islot-recurring').checked;
+  let body;
+  if (recurring) {
+    const weekday = document.getElementById('islot-weekday').value;
+    const von = document.getElementById('islot-von').value;
+    const bis = document.getElementById('islot-bis').value;
+    if (!von || !bis) { errEl.textContent = 'Bitte Zeitraum (Von/Bis) angeben.'; errEl.style.display = 'block'; return; }
+    body = { typ:'input', uhrzeit, dauer, ort, recurring: { weekday, von, bis } };
+  } else {
+    const datum = document.getElementById('islot-datum').value;
+    if (!datum) { errEl.textContent = 'Bitte Datum angeben.'; errEl.style.display = 'block'; return; }
+    body = { typ:'input', datum, uhrzeit, dauer, ort };
+  }
   const r = await fetch('/api/admin/talking-slots', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ typ:'input', datum, uhrzeit, dauer, ort })
+    body: JSON.stringify(body)
   });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler.'; errEl.style.display = 'block'; return; }
