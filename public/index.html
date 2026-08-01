@@ -2255,8 +2255,11 @@ const TALK_TIER_TEXT = { 1: '⏳ In Arbeit', 2: '✓ Pflicht erfüllt', 3: '⭐ 
 // aus dem Englischunterricht orientiert (zwei Tabellen mit Schritte-Liste + Feldern
 // pro Session, graues Feld = Pflicht, weißes Feld = Zusatz/Bonus) für Wiedererkennungswert.
 function buildTalkingPickerSummaryHtml(data) {
-  const groups = talkingGroupByHalbjahr(data.presenting, data.invitations);
-  if (!groups.length) groups.push({ halbjahr: currentHalbjahrGuess(), presenting: [], listening: [] });
+  // Picker-Karte ist eine kompakte Übersicht - zeigt bewusst nur das aktuelle Halbjahr,
+  // nicht die volle Historie (die gibt es im Mathe-Talks-Tab, aktuelles Halbjahr + Rest kollabiert).
+  const currentHj = currentHalbjahrGuess();
+  const allGroups = talkingGroupByHalbjahr(data.presenting, data.invitations);
+  const groups = [allGroups.find(g => g.halbjahr === currentHj) || { halbjahr: currentHj, presenting: [], listening: [] }];
   const pendingCount = (data.invitations || []).filter(i => i.status === 'eingeladen').length;
 
   const presentCell = (s, grey) => {
