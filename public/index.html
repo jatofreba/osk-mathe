@@ -2791,6 +2791,11 @@ function renderTalkingAdmin() {
   const past = talkingAdminSlots
     .filter(s => new Date(s.datum) < today)
     .sort((a, b) => new Date(b.datum) - new Date(a.datum) || (b.uhrzeit || '').localeCompare(a.uhrzeit || ''));
+  // Vergangene Termine der letzten 6 Monate offen anzeigen, ältere kollabiert (lange Liste sonst unübersichtlich).
+  const sixMonthsAgo = new Date(today);
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const recentPast = past.filter(s => new Date(s.datum) >= sixMonthsAgo);
+  const olderPast = past.filter(s => new Date(s.datum) < sixMonthsAgo);
 
   const renderSlotCard = (s) => {
     const booked = !!s.session_id;
@@ -2831,7 +2836,8 @@ function renderTalkingAdmin() {
   };
 
   const upcomingHtml = upcoming.map(renderSlotCard).join('');
-  const pastHtml = past.map(renderSlotCard).join('');
+  const recentPastHtml = recentPast.map(renderSlotCard).join('');
+  const olderPastHtml = olderPast.map(renderSlotCard).join('');
   const overview = renderTalkingOverview(talkingAdminSlots, talkingAdminRoster);
 
   el.innerHTML = `
@@ -2845,7 +2851,12 @@ function renderTalkingAdmin() {
       <div style="font-weight:700;font-size:13px;margin:12px 0 6px;">Anstehende Termine</div>
       ${upcomingHtml || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine anstehenden Termine.</div>'}
       <div style="font-weight:700;font-size:13px;margin:20px 0 6px;">Vergangene Termine</div>
-      ${pastHtml || '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine vergangenen Termine.</div>'}
+      ${past.length === 0 ? '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine vergangenen Termine.</div>' : ''}
+      ${recentPastHtml}
+      ${olderPast.length ? `<details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:13px;padding:2px 0;">Ältere Termine (vor mehr als 6 Monaten) – ${olderPast.length}</summary>
+        <div style="margin-top:8px;">${olderPastHtml}</div>
+      </details>` : ''}
     `}
     ${overview.past}
   `;
