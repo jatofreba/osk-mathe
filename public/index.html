@@ -774,6 +774,7 @@ textarea.form-input{
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
+      <div id="cal-invites"></div>
       <div class="cal-grid" id="cal-dow-row"></div>
       <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
       <div class="cal-legend">
@@ -2548,7 +2549,7 @@ async function loadCalendar() {
   } catch(e) { calData = { slots: [], deadlines: [] }; }
   const adminActions = document.getElementById('cal-admin-actions');
   if (adminActions) adminActions.style.display = (me && me.role === 'admin') ? 'flex' : 'none';
-  renderCalendar(); renderCalDetail();
+  renderCalendar(); renderCalDetail(); renderCalInvites();
 }
 
 function calItemsByDay() {
@@ -2627,7 +2628,7 @@ function renderCalDetail() {
       if (!isAdmin) actions = `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'Input buchen':'Talk anmelden'}</button>`;
     } else {
       const who = it.mineAsPresenter ? 'Du' : escHtml(it.presenterUsername || '?');
-      body = `<div><strong>${who}</strong> · ${escHtml(it.thema || '')}</div>`;
+      body = `<div><strong>${who}</strong> · ${escHtml(it.thema || '')}</div>` + calInviteeListHtml(it);
       if (!isAdmin && it.mineAsListener && it.myInvitationStatus === 'eingeladen' && it.presentedStatus === 'ausstehend') {
         actions = `<button class="btn-act btn-green" onclick="calRespondInvite(${it.myInvitationId}, true)">Annehmen</button>
                    <button class="btn-cancel" onclick="calRespondInvite(${it.myInvitationId}, false)">Ablehnen</button>`;
@@ -2635,6 +2636,11 @@ function renderCalDetail() {
         const s = it.myInvitationStatus === 'angenommen' ? '✓ zugesagt' : it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt' : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`;
       }
+    }
+    if (isAdmin) {
+      actions = it.booked
+        ? `<button class="btn-act btn-red" onclick="calCancelSession(${it.session_id})">Stornieren</button>`
+        : `<button class="btn-act btn-red" onclick="calDeleteSlot(${it.id})">Löschen</button>`;
     }
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid #2563eb;">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -2776,6 +2782,59 @@ async function deleteDeadline(id) {
   if (!r.ok) { alert('Fehler beim Löschen.'); return; }
   loadCalendar();
 }
+
+// Eingeladene Personen eines gebuchten Slots (für Admin + Presenter sichtbar) mit Status.
+function calInviteeListHtml(it) {
+  const inv = it.invitees || [];
+  if (!inv.length) return it.typ === 'input' ? '' : '<div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:3px;">Niemand eingeladen</div>';
+  const pills = inv.map(iv => {
+    const s = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
+    const att = iv.attendedStatus === 'erledigt' ? ' 👂' : iv.attendedStatus === 'nicht_erledigt' ? ' 🚫' : '';
+    return `<span class="pill pill-blue" style="font-size:10px;">${escHtml(iv.username)} ${s}${att}</span>`;
+  }).join(' ');
+  return `<div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;"><span style="font-size:11px;color:var(--md-on-surface-variant);">Eingeladen:</span> ${pills}</div>`;
+}
+
+// Prominente Liste aller offenen Einladungen (monatsunabhängig), damit Eingeladene sie nicht verpassen.
+function renderCalInvites() {
+  const el = document.getElementById('cal-invites');
+  if (!el) return;
+  if (me && me.role === 'admin') { el.innerHTML = ''; return; }
+  const pending = (calData.slots || [])
+    .filter(s => s.mineAsListener && s.myInvitationStatus === 'eingeladen' && s.presentedStatus === 'ausstehend')
+    .sort((a,b) => ((a.datum||'') + (a.uhrzeit||'')).localeCompare((b.datum||'') + (b.uhrzeit||'')));
+  if (!pending.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">📬 Deine offenen Einladungen (${pending.length})</div>
+    ${pending.map(s => {
+      const icon = s.typ === 'input' ? '📘' : '🎤';
+      const dl = new Date(s.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
+      return `<div class="stat-card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div>${icon} <strong>${escHtml(s.presenterUsername || '?')}</strong> · ${escHtml(s.thema || '')}<br>
+            <span style="color:var(--md-on-surface-variant);font-size:12px;">${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</span></div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-act btn-green" onclick="calRespondInvite(${s.myInvitationId}, true)">Annehmen</button>
+            <button class="btn-cancel" onclick="calRespondInvite(${s.myInvitationId}, false)">Ablehnen</button>
+          </div>
+        </div></div>`;
+    }).join('')}
+  </div>`;
+}
+
+// Admin: Buchung stornieren (Slot wird wieder frei) bzw. unbebuchten Slot löschen - refresht den Kalender.
+async function calCancelSession(sessionId) {
+  if (!confirm('Buchung wirklich stornieren? Der Termin wird wieder frei.')) return;
+  await fetch(`/api/admin/talking-sessions/${sessionId}`, { method:'DELETE' });
+  loadCalendar();
+}
+async function calDeleteSlot(slotId) {
+  if (!confirm('Termin wirklich löschen?')) return;
+  const r = await fetch(`/api/admin/talking-slots/${slotId}`, { method:'DELETE' });
+  if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
+  loadCalendar();
+}
+
 
 
 // ── Student ──────────────────────────────────────────────────────────────────

@@ -1552,11 +1552,16 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
                ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
                pu.username AS "presenterUsername",
                (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
-               (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus"
+               (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
+               COALESCE(json_agg(json_build_object('username', lu.username, 'status', inv.status, 'attendedStatus', inv.attended_status))
+                 FILTER (WHERE inv.id IS NOT NULL), '[]') AS invitees
         FROM talking_slots s
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
         LEFT JOIN users pu ON pu.id = ts.presenter_id
+        LEFT JOIN talking_invitations inv ON inv.session_id = ts.id
+        LEFT JOIN users lu ON lu.id = inv.listener_id
         WHERE s.klasse = $1
+        GROUP BY s.id, ts.id, pu.username
         ORDER BY s.datum, s.uhrzeit
       `, [req.session.klasse, uid]),
       pool.query(
