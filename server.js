@@ -180,6 +180,29 @@ async function initDB() {
         ALTER TABLE talking_invitations DROP COLUMN attended_confirmed;
       END IF;
     END $$;
+    -- Mathe-Input (2026-08-01): talking_slots dienen jetzt auch als Input-Termine (typ='input').
+    -- typ='talk' = Schüler-Vortrag (mit Pokalen), typ='input' = Lehrkraft-Input, Solo-buchbar, ohne Pokale.
+    -- dauer (Minuten) für Überschneidungsschutz; uhrzeit bleibt Text, wird als HH:MM interpretiert.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='typ') THEN
+        ALTER TABLE talking_slots ADD COLUMN typ TEXT NOT NULL DEFAULT 'talk';
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='dauer') THEN
+        ALTER TABLE talking_slots ADD COLUMN dauer INTEGER NOT NULL DEFAULT 45;
+      END IF;
+    END $$;
+    -- Deadlines/Termine der Lehrkräfte (klassenweit sichtbar im Kalender, alles Mathe = blau).
+    CREATE TABLE IF NOT EXISTS math_deadlines (
+      id         SERIAL PRIMARY KEY,
+      klasse     TEXT NOT NULL,
+      datum      DATE NOT NULL,
+      titel      TEXT NOT NULL,
+      admin_id   INTEGER REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_math_deadlines_klasse ON math_deadlines(klasse, datum);
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -337,6 +360,51 @@ function computeTalkingTrophies(halbjahre, presenting, listening) {
     earned += hjEarned; max += hjMax;
   });
   return { earned, max, byHalbjahr };
+}
+
+// ── Überschneidungsschutz für Mathe-Termine (Talks + Input) ────────────────────
+// uhrzeit wird als "HH:MM" interpretiert. Nicht parsebare Zeiten (alte Freitext-Slots)
+// werden vom Konflikt-Check ausgenommen (Zeit unbekannt -> nicht blockieren).
+function parseUhrzeitMin(uhrzeit) {
+  const m = String(uhrzeit || '').match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10), min = parseInt(m[2], 10);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+// Alle Zeitfenster, die eine Person schon belegt: eigene Buchungen (Talk halten / Input)
+// + zugesagte Zuhör-Termine. datum als YYYY-MM-DD-Text (to_char) gegen Zeitzonen-Verschiebung.
+async function studentOccupiedIntervals(uid, excludeSlotId) {
+  const r = await pool.query(`
+    SELECT sl.id AS slot_id, to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.uhrzeit, sl.dauer
+    FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+    WHERE ts.presenter_id = $1
+    UNION
+    SELECT sl.id AS slot_id, to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.uhrzeit, sl.dauer
+    FROM talking_invitations ti
+    JOIN talking_sessions ts ON ts.id = ti.session_id
+    JOIN talking_slots sl ON sl.id = ts.slot_id
+    WHERE ti.listener_id = $1 AND ti.status = 'angenommen'
+  `, [uid]);
+  return r.rows
+    .filter(row => row.slot_id !== excludeSlotId)
+    .map(row => ({ datum: row.datum, start: parseUhrzeitMin(row.uhrzeit), dauer: row.dauer || 45 }))
+    .filter(row => row.start !== null);
+}
+
+// true, wenn der Slot mit einem bereits belegten Zeitfenster der Person kollidiert.
+// Slots ohne parsebare Uhrzeit lösen nie einen Konflikt aus.
+async function hasScheduleConflict(uid, slotId) {
+  const t = await pool.query(
+    `SELECT to_char(datum,'YYYY-MM-DD') AS datum, uhrzeit, dauer FROM talking_slots WHERE id=$1`, [slotId]);
+  if (!t.rows.length) return false;
+  const start = parseUhrzeitMin(t.rows[0].uhrzeit);
+  if (start === null) return false;
+  const dauer = t.rows[0].dauer || 45;
+  const datum = t.rows[0].datum;
+  const occ = await studentOccupiedIntervals(uid, slotId);
+  return occ.some(o => o.datum === datum && start < o.start + o.dauer && o.start < start + dauer);
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -875,15 +943,16 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       pool.query(`
         SELECT ts.presenter_id AS user_id, ts.presented_status AS "presentedStatus", ts.pokale, sl.halbjahr, sl.datum
         FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+        WHERE sl.typ = 'talk'
       `),
       pool.query(`
         SELECT ti.listener_id AS user_id, ti.attended_status AS "attendedStatus", ti.pokale, sl.halbjahr, sl.datum
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE ti.status = 'angenommen'
+        WHERE ti.status = 'angenommen' AND sl.typ = 'talk'
       `),
-      pool.query(`SELECT DISTINCT klasse, halbjahr FROM talking_slots`),
+      pool.query(`SELECT DISTINCT klasse, halbjahr FROM talking_slots WHERE typ='talk'`),
     ]);
 
     const progByUser = {};
@@ -1106,13 +1175,14 @@ app.get('/api/classmates', requireLogin, async (req, res) => {
 
 app.get('/api/talking-slots/open', requireLogin, async (req, res) => {
   try {
+    const typ = req.query.typ === 'input' ? 'input' : 'talk';
     const r = await pool.query(`
-      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr
+      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer
       FROM talking_slots s
-      WHERE s.klasse=$1 AND s.datum >= CURRENT_DATE
+      WHERE s.klasse=$1 AND s.typ=$2 AND s.datum >= CURRENT_DATE
         AND NOT EXISTS (SELECT 1 FROM talking_sessions ts WHERE ts.slot_id=s.id)
       ORDER BY s.datum, s.uhrzeit
-    `, [req.session.klasse]);
+    `, [req.session.klasse, typ]);
     res.json(r.rows);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1133,7 +1203,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         JOIN talking_slots sl ON sl.id = ts.slot_id
         LEFT JOIN talking_invitations ti ON ti.session_id = ts.id
         LEFT JOIN users u ON u.id = ti.listener_id
-        WHERE ts.presenter_id = $1
+        WHERE ts.presenter_id = $1 AND sl.typ = 'talk'
         GROUP BY ts.id, sl.id
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid]),
@@ -1146,10 +1216,10 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
         JOIN users pu ON pu.id = ts.presenter_id
-        WHERE ti.listener_id = $1
+        WHERE ti.listener_id = $1 AND sl.typ = 'talk'
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid]),
-      pool.query('SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1', [req.session.klasse]),
+      pool.query(`SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1 AND typ='talk'`, [req.session.klasse]),
     ]);
 
     const accepted = invitations.rows.filter(i => i.status === 'angenommen');
@@ -1167,29 +1237,40 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
 // damit nie eine Session ohne eingeladene Personen übrig bleibt (einzige Transaktion im Projekt).
 app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   const { slotId, thema, inviteeIds } = req.body;
-  if (!slotId || !thema || !Array.isArray(inviteeIds) || !inviteeIds.length)
+  if (!slotId || !thema)
     return res.status(400).json({ error: 'Fehlende Angaben' });
-  const ids = [...new Set(inviteeIds.map(Number))].filter(id => id && id !== req.session.userId);
-  if (!ids.length) return res.status(400).json({ error: 'Mindestens eine eingeladene Person nötig' });
+  const ids = [...new Set((Array.isArray(inviteeIds) ? inviteeIds : []).map(Number))].filter(id => id && id !== req.session.userId);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const slotCheck = await client.query(
-      'SELECT id FROM talking_slots WHERE id=$1 AND klasse=$2',
+      'SELECT id, typ FROM talking_slots WHERE id=$1 AND klasse=$2',
       [slotId, req.session.klasse]
     );
     if (!slotCheck.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Termin nicht gefunden' });
     }
-    const validInvitees = await client.query(
-      'SELECT id FROM users WHERE id = ANY($1) AND role=$2 AND klasse=$3',
-      [ids, 'student', req.session.klasse]
-    );
-    if (validInvitees.rows.length !== ids.length) {
+    // Talks brauchen mind. 1 eingeladene Person; Input ist Solo-buchbar (0 Eingeladene erlaubt).
+    if ((slotCheck.rows[0].typ || 'talk') === 'talk' && !ids.length) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Ungültige eingeladene Person' });
+      return res.status(400).json({ error: 'Mindestens eine eingeladene Person nötig' });
+    }
+    // Überschneidungsschutz: der/die Buchende darf zu dieser Zeit nicht schon belegt sein.
+    if (await hasScheduleConflict(req.session.userId, slotId)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen Mathe-Termin.' });
+    }
+    if (ids.length) {
+      const validInvitees = await client.query(
+        'SELECT id FROM users WHERE id = ANY($1) AND role=$2 AND klasse=$3',
+        [ids, 'student', req.session.klasse]
+      );
+      if (validInvitees.rows.length !== ids.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Ungültige eingeladene Person' });
+      }
     }
     const sessionResult = await client.query(
       'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,$2,$3) RETURNING id',
@@ -1270,6 +1351,16 @@ app.delete('/api/talking-invitations/:id', requireLogin, async (req, res) => {
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
     const { accept } = req.body;
+    // Zusagen nur ohne Zeitkonflikt: die Person darf zur Slot-Zeit nicht schon belegt sein.
+    if (accept) {
+      const slot = await pool.query(`
+        SELECT ts.slot_id FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        WHERE ti.id=$1 AND ti.listener_id=$2 AND ts.presented_status='ausstehend'
+      `, [req.params.id, req.session.userId]);
+      if (slot.rows.length && await hasScheduleConflict(req.session.userId, slot.rows[0].slot_id))
+        return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen Mathe-Termin.' });
+    }
     const status = accept ? 'angenommen' : 'abgelehnt';
     const r = await pool.query(`
       UPDATE talking_invitations ti SET status=$1, updated_at=NOW()
@@ -1282,11 +1373,14 @@ app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) 
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Lehrkraft
+// Lehrkraft. typ='talk' (default) oder 'input'; dauer in Minuten (Default 45).
 app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
-    const { datum, uhrzeit, ort, halbjahr, recurring } = req.body;
-    if (!halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const { datum, uhrzeit, ort, halbjahr, recurring, typ, dauer } = req.body;
+    const slotTyp = typ === 'input' ? 'input' : 'talk';
+    // Input-Slots brauchen kein Halbjahr (nicht in die Pokale-Zählung eingebunden).
+    if (slotTyp === 'talk' && !halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const slotDauer = Math.min(600, Math.max(5, parseInt(dauer) || 45));
     const dates = [];
     if (recurring) {
       const { weekday, von, bis } = recurring;
@@ -1306,9 +1400,9 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     }
     for (const d of dates) {
       await pool.query(`
-        INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id)
-        VALUES ($1,$2,$3,$4,$5,$6)
-      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr, req.session.userId]);
+        INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', req.session.userId, slotTyp, slotDauer]);
     }
     res.json({ ok: true, count: dates.length });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -1318,17 +1412,18 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
 // Verhindert Terminkonflikte: kein zweiter Slot derselben Klasse am selben Datum+Uhrzeit.
 app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, res) => {
   try {
-    const { datum, uhrzeit, ort, halbjahr } = req.body;
-    if (!datum || !halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const { datum, uhrzeit, ort, halbjahr, dauer } = req.body;
+    if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
     const conflict = await pool.query(
       `SELECT id FROM talking_slots WHERE klasse=$1 AND datum=$2 AND uhrzeit=$3 AND id != $4`,
       [req.session.klasse, datum, uhrzeit || '', req.params.id]
     );
     if (conflict.rows.length)
       return res.status(409).json({ error: 'Terminkonflikt: An diesem Datum/dieser Uhrzeit existiert bereits ein anderer Termin.' });
+    const slotDauer = Math.min(600, Math.max(5, parseInt(dauer) || 45));
     const r = await pool.query(
-      `UPDATE talking_slots SET datum=$1, uhrzeit=$2, ort=$3, halbjahr=$4 WHERE id=$5 AND klasse=$6 RETURNING id`,
-      [datum, uhrzeit || '', ort || '', halbjahr, req.params.id, req.session.klasse]
+      `UPDATE talking_slots SET datum=$1, uhrzeit=$2, ort=$3, halbjahr=$4, dauer=$5 WHERE id=$6 AND klasse=$7 RETURNING id`,
+      [datum, uhrzeit || '', ort || '', halbjahr || '', slotDauer, req.params.id, req.session.klasse]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
@@ -1337,8 +1432,10 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
 
 app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
+    // Default 'talk' -> bestehende Mathe-Talks-Admin-Ansicht sieht weiterhin nur Talks (Input-Slots kommen über ?typ=input).
+    const typ = req.query.typ === 'input' ? 'input' : 'talk';
     const r = await pool.query(`
-      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr,
+      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer,
              ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji", pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
@@ -1350,10 +1447,10 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       LEFT JOIN users pu ON pu.id = ts.presenter_id
       LEFT JOIN talking_invitations ti ON ti.session_id = ts.id
       LEFT JOIN users lu ON lu.id = ti.listener_id
-      WHERE s.klasse=$1
+      WHERE s.klasse=$1 AND s.typ=$2
       GROUP BY s.id, ts.id, pu.username
       ORDER BY s.datum DESC, s.uhrzeit
-    `, [req.session.klasse]);
+    `, [req.session.klasse, typ]);
     res.json(r.rows);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1416,6 +1513,64 @@ app.delete('/api/admin/talking-sessions/:id', requireAdmin, async (req, res) => 
     `, [req.params.id, req.session.klasse]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Deadlines (Lehrkraft-Termine, klassenweit) ─────────────────────────────────
+app.post('/api/admin/deadlines', requireAdmin, async (req, res) => {
+  try {
+    const { datum, titel } = req.body;
+    if (!datum || !titel || !titel.trim()) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const r = await pool.query(
+      'INSERT INTO math_deadlines (klasse, datum, titel, admin_id) VALUES ($1,$2,$3,$4) RETURNING id',
+      [req.session.klasse, datum, titel.trim(), req.session.userId]
+    );
+    res.json({ ok: true, id: r.rows[0].id });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.delete('/api/admin/deadlines/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'DELETE FROM math_deadlines WHERE id=$1 AND klasse=$2 RETURNING id',
+      [req.params.id, req.session.klasse]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Kalender: alle Mathe-Termine der Klasse (Talks + Input + Deadlines) ─────────
+// Klassenweit sichtbar (Lehrkraft A sieht Slots von Lehrkraft B). Pro Slot markiert,
+// in welcher Rolle der/die anfragende User beteiligt ist (für Buchungs-/Antwort-Aktionen).
+app.get('/api/calendar', requireLogin, async (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const [slots, deadlines] = await Promise.all([
+      pool.query(`
+        SELECT s.id, s.typ, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
+               ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
+               pu.username AS "presenterUsername",
+               (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
+               (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus"
+        FROM talking_slots s
+        LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+        LEFT JOIN users pu ON pu.id = ts.presenter_id
+        WHERE s.klasse = $1
+        ORDER BY s.datum, s.uhrzeit
+      `, [req.session.klasse, uid]),
+      pool.query(
+        `SELECT id, to_char(datum,'YYYY-MM-DD') AS datum, titel FROM math_deadlines WHERE klasse=$1 ORDER BY datum`,
+        [req.session.klasse]
+      ),
+    ]);
+    const rows = slots.rows.map(s => ({
+      ...s,
+      booked: !!s.session_id,
+      mineAsPresenter: s.presenterId === uid,
+      mineAsListener: !!s.myInvitationId,
+    }));
+    res.json({ slots: rows, deadlines: deadlines.rows });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
