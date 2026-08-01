@@ -2395,11 +2395,14 @@ function renderTalkingStudent() {
     const p = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(p, a);
+    const hjTrophies = talkingMine.trophies?.byHalbjahr?.[g.halbjahr];
+    const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🏆 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
     return `
       <div class="stat-card tt-tier-${tier}" title="${TALK_TIER_TEXT[tier]}">
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
         <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
+        ${trophyLine}
       </div>`;
   }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch kein Mathe-Talk</div></div>`;
 

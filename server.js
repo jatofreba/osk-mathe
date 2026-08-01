@@ -313,26 +313,30 @@ const TALKING_STATUS_VALUES = ['ausstehend', 'erledigt', 'nicht_erledigt'];
 // damit "Meine Pokale" und die Rangliste nie auseinanderlaufen.
 function computeTalkingTrophies(halbjahre, presenting, listening) {
   let earned = 0, max = 0;
+  const byHalbjahr = {};
   halbjahre.forEach(hj => {
+    let hjEarned = 0, hjMax = 0;
     const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
-    max += 3;
-    if (myPresenting[0] && myPresenting[0].presentedStatus === 'erledigt') earned += myPresenting[0].pokale || 0;
+    hjMax += 3;
+    if (myPresenting[0] && myPresenting[0].presentedStatus === 'erledigt') hjEarned += myPresenting[0].pokale || 0;
     myPresenting.slice(1).forEach(s => { // beliebig viele Zusatz-Vorträge, nur wenn angemeldet
-      max += 3;
-      if (s.presentedStatus === 'erledigt') earned += s.pokale || 0;
+      hjMax += 3;
+      if (s.presentedStatus === 'erledigt') hjEarned += s.pokale || 0;
     });
-    max += 4;
+    hjMax += 4;
     [0, 1].forEach(idx => {
       const iv = myListening[idx];
-      if (iv && iv.attendedStatus === 'erledigt') earned += iv.pokale || 0;
+      if (iv && iv.attendedStatus === 'erledigt') hjEarned += iv.pokale || 0;
     });
     myListening.slice(2).forEach(iv => {
-      max += 2;
-      if (iv.attendedStatus === 'erledigt') earned += iv.pokale || 0;
+      hjMax += 2;
+      if (iv.attendedStatus === 'erledigt') hjEarned += iv.pokale || 0;
     });
+    byHalbjahr[hj] = { earned: hjEarned, max: hjMax };
+    earned += hjEarned; max += hjMax;
   });
-  return { earned, max };
+  return { earned, max, byHalbjahr };
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
