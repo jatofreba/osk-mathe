@@ -894,8 +894,12 @@ textarea.form-input{
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Uhrzeit / Stunde</label>
-      <input class="form-input" id="tslot-uhrzeit" placeholder="z.B. 11:15 Uhr">
+      <label class="form-label">Uhrzeit</label>
+      <input class="form-input" id="tslot-uhrzeit" type="time">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dauer (Minuten)</label>
+      <input class="form-input" id="tslot-dauer" type="number" min="5" max="600" value="45">
     </div>
     <div class="form-group">
       <label class="form-label">Ort</label>
@@ -996,8 +1000,12 @@ textarea.form-input{
       <input class="form-input" id="tsedit-datum" type="date">
     </div>
     <div class="form-group">
-      <label class="form-label">Uhrzeit / Stunde</label>
-      <input class="form-input" id="tsedit-uhrzeit" placeholder="z.B. 11:15 Uhr">
+      <label class="form-label">Uhrzeit</label>
+      <input class="form-input" id="tsedit-uhrzeit" type="time">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dauer (Minuten)</label>
+      <input class="form-input" id="tsedit-dauer" type="number" min="5" max="600" value="45">
     </div>
     <div class="form-group">
       <label class="form-label">Ort</label>
@@ -2894,10 +2902,12 @@ function currentHalbjahrGuess() {
   return `${code}_${sem}`;
 }
 
+function toTimeInputValue(u) { const m = String(u || '').match(/(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2,'0') + ':' + m[2] : ''; }
 function openTalkingSlotModal() {
   document.getElementById('tslot-halbjahr').value = currentHalbjahrGuess();
   document.getElementById('tslot-datum').value = '';
   document.getElementById('tslot-uhrzeit').value = '';
+  document.getElementById('tslot-dauer').value = '45';
   document.getElementById('tslot-ort').value = '';
   document.getElementById('tslot-recurring').checked = false;
   document.getElementById('tslot-recurring-fields').style.display = 'none';
@@ -2917,6 +2927,7 @@ function toggleTalkingRecurring() {
 async function submitTalkingSlot() {
   const halbjahr = document.getElementById('tslot-halbjahr').value.trim();
   const uhrzeit = document.getElementById('tslot-uhrzeit').value.trim();
+  const dauer = parseInt(document.getElementById('tslot-dauer').value) || 45;
   const ort = document.getElementById('tslot-ort').value.trim();
   if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
   const recurring = document.getElementById('tslot-recurring').checked;
@@ -2926,11 +2937,11 @@ async function submitTalkingSlot() {
     const von = document.getElementById('tslot-von').value;
     const bis = document.getElementById('tslot-bis').value;
     if (!von || !bis) { alert('Bitte Zeitraum angeben.'); return; }
-    body = { halbjahr, uhrzeit, ort, recurring: { weekday, von, bis } };
+    body = { halbjahr, uhrzeit, dauer, ort, recurring: { weekday, von, bis } };
   } else {
     const datum = document.getElementById('tslot-datum').value;
     if (!datum) { alert('Bitte Datum angeben.'); return; }
-    body = { halbjahr, uhrzeit, ort, datum };
+    body = { halbjahr, uhrzeit, dauer, ort, datum };
   }
   const r = await fetch('/api/admin/talking-slots', {
     method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
@@ -2948,7 +2959,8 @@ function openTalkingSlotEditModal(id) {
   _talkingEditSlotId = id;
   document.getElementById('tsedit-halbjahr').value = s.halbjahr || '';
   document.getElementById('tsedit-datum').value = new Date(s.datum).toISOString().slice(0, 10);
-  document.getElementById('tsedit-uhrzeit').value = s.uhrzeit || '';
+  document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
+  document.getElementById('tsedit-dauer').value = s.dauer || 45;
   document.getElementById('tsedit-ort').value = s.ort || '';
   document.getElementById('tsedit-error').style.display = 'none';
   openModal('modal-talking-slot-edit');
@@ -2960,12 +2972,13 @@ async function submitTalkingSlotEdit() {
   const halbjahr = document.getElementById('tsedit-halbjahr').value.trim();
   const datum = document.getElementById('tsedit-datum').value;
   const uhrzeit = document.getElementById('tsedit-uhrzeit').value.trim();
+  const dauer = parseInt(document.getElementById('tsedit-dauer').value) || 45;
   const ort = document.getElementById('tsedit-ort').value.trim();
   if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
   if (!datum) { alert('Bitte Datum angeben.'); return; }
   const r = await fetch(`/api/admin/talking-slots/${_talkingEditSlotId}/reschedule`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ datum, uhrzeit, ort, halbjahr })
+    body: JSON.stringify({ datum, uhrzeit, dauer, ort, halbjahr })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Verschieben.'; errEl.style.display = 'block'; return; }
