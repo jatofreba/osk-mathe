@@ -655,27 +655,27 @@ textarea.form-input{
   </div>
 
   <div class="tabs" id="app-tabs">
-    <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Lerntheke</div>
+    <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Mathe-Lerntheken</div>
     <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Klassen-Übersicht</div>
   </div>
 
   <div id="view-lerntheke" style="width:100%;">
     <div id="picker-back-bar">
-      <button class="back-btn" onclick="showPicker()">← Alle Lerntheken</button>
+      <button class="back-btn" onclick="showPicker()">← Alle Mathe-Lerntheken</button>
       <span class="lt-name" id="picker-back-lt-name"></span>
     </div>
     <div id="lt-picker" style="display:none;padding:8px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-shrink:0;">
-    <label style="font-size:13px;font-weight:600;color:#374151;margin-right:8px;">Lerntheke:</label>
+    <label style="font-size:13px;font-weight:600;color:#374151;margin-right:8px;">Mathe-Lerntheke:</label>
     <select id="lt-select" onchange="switchLerntheke(this.value)" style="padding:6px 10px;border-radius:7px;border:1.5px solid #e2e8f0;font-size:14px;background:white;"></select>
   </div>
-    <iframe id="lerntheke-frame" src="" title="Lerntheke" style="border:none;display:block;width:100%;flex:1;min-height:0;"></iframe>
+    <iframe id="lerntheke-frame" src="" title="Mathe-Lerntheke" style="border:none;display:block;width:100%;flex:1;min-height:0;"></iframe>
   </div>
 
   <div id="view-picker" style="display:none;">
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
-      <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Lerntheken</h2>
-      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Lerntheke du arbeiten möchtest.</p>
+      <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Mathe-Lerntheken</h2>
+      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Mathe-Lerntheke du arbeiten möchtest.</p>
       <div class="picker-grid" id="picker-cards"></div>
       <div id="picker-trophy-summary" style="margin-top:24px;"></div>
     </div>
@@ -1315,7 +1315,7 @@ async function showPicker() {
           <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${[
-              ['📚', 'Lerntheken-Arbeit', stationsEarned, stationsMax],
+              ['📚', 'Mathe-Lerntheken-Arbeit', stationsEarned, stationsMax],
               ['🎓', 'LZK', lzkEarned, lzkMax],
               ['🗣️', 'Mathe-Talks', talkEarned, talkMax],
             ].map(([icon, label, earned, max]) => {
@@ -1833,7 +1833,7 @@ function renderTable(students) {
   if (thead && lt) {
     const groupHeaders = Object.entries(lt.groups)
       .map(([g, info]) => `<th>${info.emoji} ${g}</th>`).join('');
-    const ltHeader = multiLt ? '<th>Lerntheke</th>' : '';
+    const ltHeader = multiLt ? '<th>Mathe-Lerntheke</th>' : '';
     thead.innerHTML = `<th>Name</th>${groupHeaders}<th>Abgaben</th><th>Korrektur</th><th>LZK</th>${ltHeader}<th>Zuletzt aktiv</th><th></th>`;
   }
 
@@ -1917,7 +1917,7 @@ function renderTable(students) {
       const overrideStyle = accessEntry?.kurs ? '' : 'opacity:.4;';
       const kursBtnHtml = !gesperrt
         ? `<button class="kurs-lt-btn ${overrideClass}" style="${overrideStyle}"
-            title="Kurs für diese Lerntheke (überschreibt globalen Kurs)"
+            title="Kurs für diese Mathe-Lerntheke (überschreibt globalen Kurs)"
             onclick="setKursLt(event,${s.id},'${lti.key}','${ltKurs==='G'?'E':'G'}',this,'${globalKurs}')">${ltKurs}</button>`
         : '';
       return `<span style="display:inline-flex;align-items:center;gap:2px;">
@@ -1983,7 +1983,7 @@ function openStudentSummary(userId, username) {
       <div class="summary-pct">${pct}% der Anforderungen</div>
     </div>`;
   }).join('');
-  document.getElementById('summary-content').innerHTML = content || '<p style="color:var(--ink2);">Keine Lerntheken gefunden.</p>';
+  document.getElementById('summary-content').innerHTML = content || '<p style="color:var(--ink2);">Keine Mathe-Lerntheken gefunden.</p>';
   openModal('modal-summary');
 }
 
@@ -2170,7 +2170,7 @@ function lzkCellHtml(studentLzk, s, lt) {
     const pokalStr = e.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
     const stCls = e.status==='bestanden'?'lzk-st-ok':e.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
     const stTxt = e.status==='bestanden'?'✓':e.status==='nicht_bestanden'?'✗':'⏳';
-    const warning = fallback ? `<span title="Unter anderer Lerntheke gespeichert – beim Bearbeiten wird korrigiert" style="color:#d97706;font-size:10px;">⚠</span>` : '';
+    const warning = fallback ? `<span title="Unter anderer Mathe-Lerntheke gespeichert – beim Bearbeiten wird korrigiert" style="color:#d97706;font-size:10px;">⚠</span>` : '';
     return `<div class="lzk-admin-row">
       <span class="lzk-admin-typ">${typ}</span>
       <span class="lzk-admin-date">${d}</span>
