@@ -1301,7 +1301,7 @@ async function showPicker() {
 
     const lockedPanelHtml = lockedMeta.length > 0 ? `
       <div class="trophy-panel">
-        <div class="trophy-panel-title">Noch nicht freigeschaltet</div>
+        <div class="trophy-panel-title">Aktuell nicht freigeschaltet</div>
         <div style="display:flex;flex-direction:column;gap:7px;margin-top:4px;">
           ${lockedMeta.map(lt =>
             `<div class="lt-card-slim"><span class="lt-slim-lock">🔒</span><span class="lt-slim-name">${lt.title}</span></div>`
@@ -1323,7 +1323,7 @@ async function showPicker() {
           <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${[
-              ['📚', 'Mathe-Lerntheken-Arbeit', stationsEarned, stationsMax],
+              ['📚', 'Mathe-Lerntheken', stationsEarned, stationsMax],
               ['🎓', 'LZK', lzkEarned, lzkMax],
               ['🗣️', 'Mathe-Talks', talkEarned, talkMax],
             ].map(([icon, label, earned, max]) => {
