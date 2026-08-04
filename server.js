@@ -203,22 +203,29 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_math_deadlines_klasse ON math_deadlines(klasse, datum);
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='must_change_password') THEN
+        ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
+      END IF;
+    END $$;
   `);
 
   // Seed admin accounts (only if they don't exist)
   const admins = [
-    { username: 'admin_m1m2', klasse: 'M1M2' },
-    { username: 'admin_m3m4', klasse: 'M3M4' },
-    { username: 'admin_m5m6', klasse: 'M5M6' },
-    { username: 'admin_m7m8', klasse: 'M7M8' },
+    { username: 'admin_m1m2', klasse: 'M1M2', password: 'admin123', mustChange: false },
+    { username: 'admin_m3m4', klasse: 'M3M4', password: 'admin123', mustChange: false },
+    { username: 'admin_m5m6', klasse: 'M5M6', password: 'admin123', mustChange: false },
+    { username: 'admin_m7m8', klasse: 'M7M8', password: 'admin123', mustChange: false },
+    { username: 'koek', klasse: 'M3M4', password: 'test', mustChange: true },
+    { username: 'herf', klasse: 'M3M4', password: 'test', mustChange: true },
   ];
   for (const a of admins) {
-    const hash = await bcrypt.hash('admin123', 10);
+    const hash = await bcrypt.hash(a.password, 10);
     await pool.query(`
-      INSERT INTO users (username, password_hash, klasse, role)
-      VALUES ($1, $2, $3, 'admin')
+      INSERT INTO users (username, password_hash, klasse, role, must_change_password)
+      VALUES ($1, $2, $3, 'admin', $4)
       ON CONFLICT (username) DO NOTHING
-    `, [a.username, hash, a.klasse]);
+    `, [a.username, hash, a.klasse, a.mustChange]);
   }
   console.log('✓ Datenbank bereit');
 
@@ -419,7 +426,7 @@ app.post('/api/login', async (req, res) => {
       userId: user.id, username: user.username,
       klasse: user.klasse, role: user.role
     });
-    res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role });
+    res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -446,7 +453,7 @@ app.post('/api/change-password', requireLogin, async (req, res) => {
     const user = r.rows[0];
     if (!await bcrypt.compare(oldPassword||'', user.password_hash))
       return res.status(401).json({ error: 'Altes Passwort falsch' });
-    await pool.query('UPDATE users SET password_hash=$1 WHERE id=$2',
+    await pool.query('UPDATE users SET password_hash=$1, must_change_password=FALSE WHERE id=$2',
       [await bcrypt.hash(newPassword, 10), req.session.userId]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -814,6 +821,30 @@ app.post('/api/admin/reset-password', requireAdmin, async (req, res) => {
     const r = await pool.query(
       'UPDATE users SET password_hash=$1 WHERE id=$2 AND klasse=$3 AND role=$4',
       [await bcrypt.hash(newPassword, 10), userId, req.session.klasse, 'student']
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.get('/api/admin/peers', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id, username FROM users WHERE klasse=$1 AND role=$2 AND id != $3 ORDER BY username',
+      [req.session.klasse, 'admin', req.session.userId]
+    );
+    res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/reset-admin-password', requireAdmin, async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4)
+      return res.status(400).json({ error: 'Passwort mind. 4 Zeichen' });
+    const r = await pool.query(
+      'UPDATE users SET password_hash=$1, must_change_password=TRUE WHERE id=$2 AND klasse=$3 AND role=$4 AND id != $5',
+      [await bcrypt.hash(newPassword, 10), userId, req.session.klasse, 'admin', req.session.userId]
     );
     if (!r.rowCount) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
