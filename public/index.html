@@ -780,6 +780,7 @@ textarea.form-input{
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
+      <div id="cal-myhj"></div>
       <div id="cal-invites"></div>
       <div class="cal-grid" id="cal-dow-row"></div>
       <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
@@ -2618,16 +2619,18 @@ async function loadCalendar() {
   const grid = document.getElementById('cal-grid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
-    const [cr, cmr] = await Promise.all([
+    const [cr, cmr, hr] = await Promise.all([
       fetch('/api/calendar'),
-      (me && me.role !== 'admin') ? fetch('/api/classmates') : Promise.resolve(null)
+      (me && me.role !== 'admin') ? fetch('/api/classmates') : Promise.resolve(null),
+      (me && me.role !== 'admin') ? fetch('/api/my-halbjahr') : Promise.resolve(null)
     ]);
     calData = cr.ok ? await cr.json() : { slots: [], deadlines: [] };
     calClassmates = (cmr && cmr.ok) ? await cmr.json() : [];
+    myHjData = (hr && hr.ok) ? await hr.json() : { halbjahre: [], byHalbjahr: {} };
   } catch(e) { calData = { slots: [], deadlines: [] }; }
   const adminActions = document.getElementById('cal-admin-actions');
   if (adminActions) adminActions.style.display = (me && me.role === 'admin') ? 'flex' : 'none';
-  renderCalendar(); renderCalDetail(); renderCalInvites();
+  renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
 }
 
 function calItemsByDay() {
@@ -2911,6 +2914,27 @@ async function calDeleteSlot(slotId) {
   const r = await fetch(`/api/admin/talking-slots/${slotId}`, { method:'DELETE' });
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   loadCalendar();
+}
+
+// Kompakte "Mein Halbjahr"-Karte für Schüler:innen im Kalender (laufendes Halbjahr).
+let myHjData = { halbjahre: [], byHalbjahr: {} };
+function renderMyHalbjahr() {
+  const el = document.getElementById('cal-myhj');
+  if (!el) return;
+  if (me && me.role === 'admin') { el.innerHTML = ''; return; }
+  const hj = currentHalbjahrGuess();
+  const b = (myHjData.byHalbjahr || {})[hj] || { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], stationsCompleted:0 };
+  const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🏆 ${escHtml(l.typ)}-LZK</span>`).join(' ');
+  el.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">🎓 Mein Halbjahr ${escHtml(hj)}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <span class="pill pill-blue">🎤 ${b.talksPresented} gehalten</span>
+      <span class="pill pill-blue">👂 ${b.talksListened} zugehört</span>
+      <span class="pill pill-blue">📘 ${b.inputParticipated} Input-Teilnahmen</span>
+      <span class="pill pill-blue">📚 ${b.stationsCompleted} Stationen</span>
+      ${lzkB}
+    </div>
+  </div>`;
 }
 
 // ── Schüler:innen-Übersicht nach Halbjahr (Admin) ─────────────────────────────
