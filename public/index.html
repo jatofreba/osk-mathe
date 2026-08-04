@@ -243,6 +243,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 #view-admin{display:none;padding:24px;}
 #view-talking{display:none;padding:24px;}
 #view-calendar{display:none;padding:24px;}
+#view-halbjahr{display:none;padding:24px;}
 /* ── Mein Kalender (alles Mathe = blau) ────────────────────────────────────── */
 .cal-wrap{max-width:940px;margin:0 auto;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
@@ -686,6 +687,7 @@ textarea.form-input{
     <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
     <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Klassen-Übersicht</div>
+    <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
   </div>
 
   <div id="view-lerntheke" style="width:100%;">
@@ -712,10 +714,6 @@ textarea.form-input{
   <div id="view-admin">
     <div class="admin-top">
       <div class="admin-title" id="admin-title">Klasse</div>
-    </div>
-    <div id="admin-peers-panel" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;">
-      <div style="font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:8px;">🔑 Mit-Administratoren dieser Klasse</div>
-      <div id="admin-peers-list" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
     <div class="stats-row" id="stats-row"></div>
     <div class="toolbar">
@@ -792,10 +790,23 @@ textarea.form-input{
     </div>
   </div>
 
+  <div id="view-halbjahr">
+    <div style="max-width:1000px;margin:0 auto;">
+      <div class="admin-top">
+        <div class="admin-title" style="font-size:18px;">🎓 Schüler:innen-Übersicht nach Halbjahr</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:13px;font-weight:600;">Halbjahr:</label>
+          <select class="form-input" id="hj-select" style="width:auto;" onchange="renderHalbjahr()"></select>
+          <button class="btn-act btn-outline" onclick="loadHalbjahr()">↺ Laden</button>
+        </div>
+      </div>
+      <div id="hj-content"></div>
+    </div>
+  </div>
+
   <div id="view-changepw">
     <div class="changepw-card">
       <div style="font-size:17px;font-weight:800;margin-bottom:18px;">🔑 Passwort ändern</div>
-      <div id="cpw-forced-msg" style="display:none;font-size:13px;color:var(--ink2);margin-bottom:14px;padding:10px 12px;background:#fef3c7;border-radius:8px;">Bitte lege jetzt ein eigenes Passwort fest, bevor du fortfährst.</div>
       <div class="form-group">
         <label class="form-label">Altes Passwort</label>
         <input class="form-input" id="cpw-old" type="password">
@@ -810,7 +821,7 @@ textarea.form-input{
       </div>
       <div id="cpw-msg"></div>
       <div style="display:flex;gap:10px;margin-top:16px;">
-        <button class="btn-cancel" id="cpw-cancel-btn" onclick="showView('lerntheke')">Abbrechen</button>
+        <button class="btn-cancel" onclick="showView('lerntheke')">Abbrechen</button>
         <button class="btn-act btn-blue" onclick="doChangePw()">Speichern</button>
       </div>
     </div>
@@ -1156,8 +1167,6 @@ textarea.form-input{
 let me = null;
 let allStudents = [];
 let resetId = null;
-let resetIsAdmin = false;
-let forcePasswordChange = false;
 
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
@@ -1698,17 +1707,11 @@ async function showApp() {
     const tabLerntheke = document.getElementById('tab-lerntheke');
     if (barRole) barRole.style.display = '';
     if (tabAdmin) tabAdmin.style.display = '';
+    const tabHalbjahr = document.getElementById('tab-halbjahr');
+    if (tabHalbjahr) tabHalbjahr.style.display = '';
     // Kein eigenständiger Lerntheke-Tab für Admins: die Vorschau einer Lerntheke
     // läuft ausschließlich über den 👁-Button (viewStudent()) in der Klassen-Übersicht.
     if (tabLerntheke) tabLerntheke.style.display = 'none';
-  }
-
-  if (me.mustChangePassword) {
-    forcePasswordChange = true;
-    const tabs = document.getElementById('app-tabs');
-    if (tabs) tabs.style.display = 'none';
-    showView('changepw');
-    return;
   }
 
   if (me.role === 'admin') {
@@ -1812,13 +1815,13 @@ function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','picker','admin','talking','calendar','changepw'].forEach(id => {
+  ['lerntheke','picker','admin','talking','calendar','halbjahr','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar') {
+    } else if (id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -1841,7 +1844,6 @@ function showView(v) {
   }
   if (v === 'admin') {
     loadStudents();
-    loadAdminPeers();
     clearInterval(adminRefreshTimer);
     adminRefreshTimer = setInterval(loadStudents, 30000);
   } else {
@@ -1849,12 +1851,7 @@ function showView(v) {
   }
   if (v === 'talking') loadTalkingSessions();
   if (v === 'calendar') loadCalendar();
-  if (v === 'changepw') {
-    const forcedMsg = document.getElementById('cpw-forced-msg');
-    const cancelBtn = document.getElementById('cpw-cancel-btn');
-    if (forcedMsg) forcedMsg.style.display = forcePasswordChange ? '' : 'none';
-    if (cancelBtn) cancelBtn.style.display = forcePasswordChange ? 'none' : '';
-  }
+  if (v === 'halbjahr') loadHalbjahr();
 }
 
 // Auto-migrate LZK entries stored under wrong lerntheke key (from old bug)
@@ -2202,16 +2199,6 @@ async function doSingle() {
 
 function openReset(id, name) {
   resetId = id;
-  resetIsAdmin = false;
-  document.getElementById('reset-name').textContent = name;
-  document.getElementById('reset-pw').value = '';
-  document.getElementById('reset-msg').innerHTML = '';
-  openModal('modal-reset');
-}
-
-function openResetAdmin(id, name) {
-  resetId = id;
-  resetIsAdmin = true;
   document.getElementById('reset-name').textContent = name;
   document.getElementById('reset-pw').value = '';
   document.getElementById('reset-msg').innerHTML = '';
@@ -2220,7 +2207,7 @@ function openResetAdmin(id, name) {
 
 async function doReset() {
   const newPassword = document.getElementById('reset-pw').value;
-  const r = await fetch(resetIsAdmin ? '/api/admin/reset-admin-password' : '/api/admin/reset-password', {
+  const r = await fetch('/api/admin/reset-password', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ userId: resetId, newPassword })
   });
@@ -2228,25 +2215,6 @@ async function doReset() {
   if (!r.ok) { showMsg('reset-msg', d.error, 'err'); return; }
   showMsg('reset-msg', '✓ Passwort geändert.', 'ok');
   setTimeout(() => closeModal('modal-reset'), 1200);
-}
-
-async function loadAdminPeers() {
-  const panel = document.getElementById('admin-peers-panel');
-  const list = document.getElementById('admin-peers-list');
-  if (!panel || !list) return;
-  try {
-    const r = await fetch('/api/admin/peers');
-    if (!r.ok) return;
-    const peers = await r.json();
-    if (!peers.length) { panel.style.display = 'none'; return; }
-    list.innerHTML = peers.map(p => `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <span>${p.username}</span>
-        <button class="btn-icon" onclick="openResetAdmin(${p.id},'${p.username}')" title="Passwort zurücksetzen">🔑</button>
-      </div>
-    `).join('');
-    panel.style.display = '';
-  } catch {}
 }
 
 async function deleteStudent(id, name) {
@@ -2270,15 +2238,7 @@ async function doChangePw() {
   const d = await r.json();
   if (!r.ok) { showMsg('cpw-msg', d.error, 'err'); return; }
   showMsg('cpw-msg','✓ Passwort geändert!','ok');
-  me.mustChangePassword = false;
-  if (forcePasswordChange) {
-    forcePasswordChange = false;
-    const tabs = document.getElementById('app-tabs');
-    if (tabs) tabs.style.display = '';
-    setTimeout(() => showApp(), 1500);
-  } else {
-    setTimeout(() => showView('lerntheke'), 1500);
-  }
+  setTimeout(() => showView('lerntheke'), 1500);
 }
 
 // ══ CSV Export ════════════════════════════════════════════════════════════════
@@ -2893,6 +2853,66 @@ async function calDeleteSlot(slotId) {
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   loadCalendar();
 }
+
+// ── Schüler:innen-Übersicht nach Halbjahr (Admin) ─────────────────────────────
+let hjData = { halbjahre: [], students: [] };
+let hjSelected = null;
+
+async function loadHalbjahr() {
+  const el = document.getElementById('hj-content');
+  if (el) el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
+  try {
+    if (!ltMeta.length) { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); }
+    const r = await fetch('/api/admin/halbjahr-uebersicht');
+    hjData = r.ok ? await r.json() : { halbjahre: [], students: [] };
+  } catch { hjData = { halbjahre: [], students: [] }; }
+  const sel = document.getElementById('hj-select');
+  if (sel) {
+    sel.innerHTML = hjData.halbjahre.length ? hjData.halbjahre.map(h => `<option value="${h}">${h}</option>`).join('') : '<option value="">–</option>';
+    if (!hjSelected || !hjData.halbjahre.includes(hjSelected)) hjSelected = hjData.halbjahre[0] || null;
+    if (hjSelected) sel.value = hjSelected;
+  }
+  renderHalbjahr();
+}
+
+function renderHalbjahr() {
+  const el = document.getElementById('hj-content');
+  if (!el) return;
+  const sel = document.getElementById('hj-select');
+  if (sel && sel.value) hjSelected = sel.value;
+  if (!hjData.students.length) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen.</div>'; return; }
+  if (!hjSelected) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten in irgendeinem Halbjahr erfasst.</div>'; return; }
+
+  const bucketOf = (s) => (s.byHalbjahr || {})[hjSelected] || { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], stationsCompleted:0 };
+  const isNothing = (b) => !b.talksPresented && !b.talksListened && !b.inputParticipated && !b.stationsCompleted && !(b.lzk||[]).filter(l=>l.status==='bestanden').length;
+
+  const rows = hjData.students.map(s => {
+    const b = bucketOf(s);
+    const nothing = isNothing(b);
+    const lzkBadges = (b.lzk||[]).filter(l => l.status==='bestanden')
+      .map(l => `<span class="pill pill-green" style="font-size:10px;">${escHtml(l.typ)} ✓${l.pokale ? ' ' + '🏆'.repeat(l.pokale) : ''}</span>`).join(' ') || '–';
+    return `<tr${nothing ? ' style="background:#fef2f2;"' : ''}>
+      <td>${escHtml(s.username)}</td>
+      <td>${b.talksPresented ? '🎤 ' + b.talksPresented : '<span style="color:var(--md-on-surface-variant);">–</span>'}</td>
+      <td>${b.talksListened ? '👂 ' + b.talksListened : '<span style="color:var(--md-on-surface-variant);">–</span>'}</td>
+      <td>${b.inputParticipated ? '📘 ' + b.inputParticipated : '<span style="color:var(--md-on-surface-variant);">–</span>'}</td>
+      <td>${lzkBadges}</td>
+      <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted : '<span style="color:var(--md-on-surface-variant);">–</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  const nothingCount = hjData.students.filter(s => isNothing(bucketOf(s))).length;
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:8px;">
+      Talks/Input/LZK sind halbjahr-genau (nach Datum). 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand) — der volle Lerntheke-Stand steht in der Klassen-Übersicht.
+      ${nothingCount ? ` · <span style="color:var(--md-error);font-weight:600;">${nothingCount} ohne Aktivität in ${escHtml(hjSelected)}</span> (rot)` : ''}
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Name</th><th>🎤 Gehalten</th><th>👂 Zugehört</th><th>📘 Input</th><th>🏆 LZK</th><th>📚 Stationen</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
 
 
 
