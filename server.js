@@ -1629,6 +1629,93 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// ── Halbjahr-Übersicht (Aktivitäten/Erfolge je Schüler:in und Halbjahr) ────────
+// Bucketet Talks/Input (nach Slot-Datum), LZK (nach lzk.datum) und Stationsabschlüsse
+// (nach station_events.completed_at) ins Halbjahr. Stationen erst ab Einführung des
+// Loggings vorhanden (kein Altbestand). Lerntheke-Gesamtstand kommt separat aus /api/admin/students.
+async function halbjahrOverview(klasse, onlyUid) {
+  const uidFilter = onlyUid ? ' AND u.id = $2' : '';
+  const params = onlyUid ? [klasse, onlyUid] : [klasse];
+  const [students, presented, attended, lzkRows, stationRows] = await Promise.all([
+    pool.query(`SELECT id, username FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    pool.query(`
+      SELECT ts.presenter_id AS uid, sl.typ, to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status
+      FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+      JOIN users u ON u.id = ts.presenter_id
+      WHERE u.klasse = $1${uidFilter}
+    `, params),
+    pool.query(`
+      SELECT ti.listener_id AS uid, sl.typ, to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status
+      FROM talking_invitations ti
+      JOIN talking_sessions ts ON ts.id = ti.session_id
+      JOIN talking_slots sl ON sl.id = ts.slot_id
+      JOIN users u ON u.id = ti.listener_id
+      WHERE u.klasse = $1${uidFilter}
+    `, params),
+    pool.query(`
+      SELECT l.user_id AS uid, l.lerntheke, l.typ, l.status, l.pokale, to_char(l.datum,'YYYY-MM-DD') AS datum
+      FROM lzk l JOIN users u ON u.id = l.user_id
+      WHERE u.klasse = $1 AND l.datum IS NOT NULL${uidFilter}
+    `, params),
+    pool.query(`
+      SELECT se.user_id AS uid, se.progress_key, to_char(se.completed_at,'YYYY-MM-DD') AS datum
+      FROM station_events se JOIN users u ON u.id = se.user_id
+      WHERE u.klasse = $1${uidFilter}
+    `, params),
+  ]);
+
+  const byUser = {};
+  const ensure = (uid, hj) => {
+    if (!byUser[uid]) byUser[uid] = {};
+    if (!byUser[uid][hj]) byUser[uid][hj] = { talksPresented: 0, talksListened: 0, inputParticipated: 0, lzk: [], stationsCompleted: 0 };
+    return byUser[uid][hj];
+  };
+  const halbjahre = new Set();
+
+  presented.rows.forEach(r => {
+    if (r.status !== 'erledigt') return;
+    const hj = halbjahrForDate(r.datum); if (!hj) return;
+    halbjahre.add(hj);
+    const b = ensure(r.uid, hj);
+    if (r.typ === 'input') b.inputParticipated++; else b.talksPresented++;
+  });
+  attended.rows.forEach(r => {
+    if (r.status !== 'erledigt') return;
+    const hj = halbjahrForDate(r.datum); if (!hj) return;
+    halbjahre.add(hj);
+    const b = ensure(r.uid, hj);
+    if (r.typ === 'input') b.inputParticipated++; else b.talksListened++;
+  });
+  lzkRows.rows.forEach(r => {
+    const hj = halbjahrForDate(r.datum); if (!hj) return;
+    halbjahre.add(hj);
+    ensure(r.uid, hj).lzk.push({ lerntheke: r.lerntheke, typ: r.typ, status: r.status, pokale: r.pokale });
+  });
+  stationRows.rows.forEach(r => {
+    const hj = halbjahrForDate(r.datum); if (!hj) return;
+    halbjahre.add(hj);
+    ensure(r.uid, hj).stationsCompleted++;
+  });
+
+  return {
+    halbjahre: [...halbjahre].sort().reverse(),
+    students: students.rows.map(s => ({ id: s.id, username: s.username, byHalbjahr: byUser[s.id] || {} })),
+  };
+}
+
+app.get('/api/admin/halbjahr-uebersicht', requireAdmin, async (req, res) => {
+  try { res.json(await halbjahrOverview(req.session.klasse)); }
+  catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.get('/api/my-halbjahr', requireLogin, async (req, res) => {
+  try {
+    const data = await halbjahrOverview(req.session.klasse, req.session.userId);
+    const meRow = data.students[0] || { byHalbjahr: {} };
+    res.json({ halbjahre: data.halbjahre, byHalbjahr: meRow.byHalbjahr });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 // ── Catch-all ─────────────────────────────────────────────────────────────────
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
