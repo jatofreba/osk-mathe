@@ -203,6 +203,17 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_math_deadlines_klasse ON math_deadlines(klasse, datum);
+    -- Stations-Abschluss-Ereignisse (2026-08-04): pro erledigter Station ein Zeitstempel,
+    -- damit Abschlüsse einem Halbjahr zugeordnet werden können (nur ab jetzt, kein Altbestand).
+    CREATE TABLE IF NOT EXISTS station_events (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      progress_key TEXT NOT NULL,
+      station_id   INTEGER NOT NULL,
+      completed_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, progress_key, station_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_station_events_user ON station_events(user_id, progress_key);
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -407,6 +418,19 @@ async function hasScheduleConflict(uid, slotId) {
   return occ.some(o => o.datum === datum && start < o.start + o.dauer && o.start < start + dauer);
 }
 
+// Schuljahr 01.08.-31.07., Format "<StartJJ><EndJJ>_<1|2>" (Aug-Jan -> _1, Feb-Jul -> _2).
+// Server-Pendant zu currentHalbjahrGuess() im Frontend. Argument: Date oder 'YYYY-MM-DD'.
+function halbjahrForDate(d) {
+  const dt = (d instanceof Date) ? d : new Date(String(d) + 'T00:00:00');
+  if (isNaN(dt)) return null;
+  const m = dt.getMonth() + 1, y = dt.getFullYear();
+  let startYear, sem;
+  if (m >= 8) { startYear = y; sem = 1; }
+  else if (m === 1) { startYear = y - 1; sem = 1; }
+  else { startYear = y - 1; sem = 2; }
+  return String(startYear).slice(-2) + String(startYear + 1).slice(-2) + '_' + sem;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
   try {
@@ -466,12 +490,38 @@ app.post('/api/progress', requireLogin, async (req, res) => {
   try {
     const { key, value } = req.body;
     if (!key) return res.status(400).json({ error: 'key fehlt' });
+    const uid = req.session.userId;
+    // Nur echte Stations-Done-Sets tracken: Wert ist ein Array, kein _abgabe_- und kein _iN-Key
+    // (spiegelt den Filter aus /api/leaderboard).
+    const isDoneSet = /^\[/.test(String(value).trim()) && !key.includes('_abgabe_') && !/_i\d+$/.test(key);
+    let oldIds = [];
+    if (isDoneSet) {
+      const prev = await pool.query('SELECT value FROM progress WHERE user_id=$1 AND key=$2', [uid, key]);
+      if (prev.rows.length) { try { const a = JSON.parse(prev.rows[0].value); if (Array.isArray(a)) oldIds = a; } catch {} }
+    }
     await pool.query(`
       INSERT INTO progress (user_id, key, value, updated_at)
       VALUES ($1, $2, $3, NOW())
       ON CONFLICT (user_id, key) DO UPDATE
       SET value=$3, updated_at=NOW()
-    `, [req.session.userId, key, String(value)]);
+    `, [uid, key, String(value)]);
+    // Neu hinzugekommene Stationen mit Zeitstempel protokollieren (best-effort - darf das
+    // Speichern nie blockieren). Halbjahr wird bei der Auswertung aus completed_at abgeleitet.
+    if (isDoneSet) {
+      try {
+        let newIds = [];
+        try { const a = JSON.parse(String(value)); if (Array.isArray(a)) newIds = a; } catch {}
+        const oldSet = new Set(oldIds.map(Number));
+        const added = [...new Set(newIds.map(Number))].filter(id => Number.isFinite(id) && !oldSet.has(id));
+        for (const sid of added) {
+          await pool.query(
+            `INSERT INTO station_events (user_id, progress_key, station_id) VALUES ($1,$2,$3)
+             ON CONFLICT (user_id, progress_key, station_id) DO NOTHING`,
+            [uid, key, sid]
+          );
+        }
+      } catch(e) { /* Logging-Fehler bewusst ignorieren - Fortschritt ist gespeichert */ }
+    }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
