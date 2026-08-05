@@ -1670,13 +1670,13 @@ async function halbjahrOverview(klasse, onlyUid) {
   const [students, presented, attended, lzkRows, stationRows] = await Promise.all([
     pool.query(`SELECT id, username FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
-      SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema
+      SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
       JOIN users u ON u.id = ts.presenter_id
       WHERE u.klasse = $1${uidFilter}
     `, params),
     pool.query(`
-      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter
+      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter, ti.pokale
       FROM talking_invitations ti
       JOIN talking_sessions ts ON ts.id = ti.session_id
       JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -1705,7 +1705,7 @@ async function halbjahrOverview(klasse, onlyUid) {
   const ensure = (uid, hj) => {
     if (!byUser[uid]) byUser[uid] = {};
     if (!byUser[uid][hj]) byUser[uid][hj] = {
-      talksPresented: 0, talksListened: 0, inputParticipated: 0, stationsCompleted: 0,
+      talksPresented: 0, talksListened: 0, inputParticipated: 0, stationsCompleted: 0, pokalePresented: 0, pokaleListened: 0,
       lzk: [], talkDetails: [], inputDetails: [], stationDetails: [],
       lastTalk: null, lastInput: null, lastLzk: null, lastStation: null, lastActivity: null
     };
@@ -1719,7 +1719,7 @@ async function halbjahrOverview(klasse, onlyUid) {
     halbjahre.add(hj);
     const b = ensure(r.uid, hj);
     if (r.typ === 'input') { b.inputParticipated++; b.inputDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema }); b.lastInput = maxD(b.lastInput, r.datum); }
-    else { b.talksPresented++; b.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema }); b.lastTalk = maxD(b.lastTalk, r.datum); }
+    else { b.talksPresented++; b.pokalePresented += r.pokale || 0; b.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale }); b.lastTalk = maxD(b.lastTalk, r.datum); }
   });
   attended.rows.forEach(r => {
     if (r.status !== 'erledigt') return;
@@ -1727,7 +1727,7 @@ async function halbjahrOverview(klasse, onlyUid) {
     halbjahre.add(hj);
     const b = ensure(r.uid, hj);
     if (r.typ === 'input') { b.inputParticipated++; b.inputDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter }); b.lastInput = maxD(b.lastInput, r.datum); }
-    else { b.talksListened++; b.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter }); b.lastTalk = maxD(b.lastTalk, r.datum); }
+    else { b.talksListened++; b.pokaleListened += r.pokale || 0; b.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter, pokale: r.pokale }); b.lastTalk = maxD(b.lastTalk, r.datum); }
   });
   lzkRows.rows.forEach(r => {
     const hj = halbjahrForDate(r.datum); if (!hj) return;

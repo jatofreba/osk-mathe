@@ -2980,7 +2980,7 @@ function renderHalbjahr() {
   if (!hjData.students.length) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen.</div>'; return; }
   if (!hjSelected) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten in irgendeinem Halbjahr erfasst.</div>'; return; }
 
-  const emptyB = { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], talkDetails:[], inputDetails:[], stationDetails:[], stationsCompleted:0, lastTalk:null, lastInput:null, lastLzk:null, lastStation:null, lastActivity:null };
+  const emptyB = { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], talkDetails:[], inputDetails:[], stationDetails:[], stationsCompleted:0, pokalePresented:0, pokaleListened:0, lastTalk:null, lastInput:null, lastLzk:null, lastStation:null, lastActivity:null };
   const bucketOf = (s) => (s.byHalbjahr || {})[hjSelected] || emptyB;
   const isNothing = (b) => !b.talksPresented && !b.talksListened && !b.inputParticipated && !b.stationsCompleted && !(b.lzk||[]).filter(l=>l.status==='bestanden').length;
   const dash = '<span style="color:var(--md-on-surface-variant);">–</span>';
@@ -2994,8 +2994,8 @@ function renderHalbjahr() {
       .map(l => `<span class="pill pill-green" style="font-size:10px;">${escHtml(l.typ)} ✓${l.pokale ? ' ' + '🏆'.repeat(l.pokale) : ''}</span>`).join(' ') || dash;
     return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id})" title="Details anzeigen">
       <td><strong>${escHtml(s.username)}</strong>${b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
-      <td>${b.talksPresented ? '🎤 ' + b.talksPresented + sub(lastRole(b.talkDetails,'gehalten')) : dash}</td>
-      <td>${b.talksListened ? '👂 ' + b.talksListened + sub(lastRole(b.talkDetails,'zugehört')) : dash}</td>
+      <td>${b.talksPresented ? '🎤 ' + b.talksPresented + (b.pokalePresented ? ' 🏆' + b.pokalePresented : '') + sub(lastRole(b.talkDetails,'gehalten')) : dash}</td>
+      <td>${b.talksListened ? '👂 ' + b.talksListened + (b.pokaleListened ? ' 🏆' + b.pokaleListened : '') + sub(lastRole(b.talkDetails,'zugehört')) : dash}</td>
       <td>${b.inputParticipated ? '📘 ' + b.inputParticipated + sub(b.lastInput) : dash}</td>
       <td>${lzkBadges}${(b.lzk||[]).length ? sub(b.lastLzk) : ''}</td>
       <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>
@@ -3020,7 +3020,7 @@ function openHjDetail(userId) {
   if (!s) return;
   const b = (s.byHalbjahr || {})[hjSelected] || {};
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
-  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
+  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🏆'.repeat(t.pokale):''}</span></div>`;
   const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🏆 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🏆'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
