@@ -686,7 +686,8 @@ textarea.form-input{
     <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Mathe-Lerntheken</div>
     <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
     <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
-    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Klassen-Übersicht</div>
+    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
+    <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Klassen-Übersicht</div>
     <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
   </div>
 
@@ -715,15 +716,9 @@ textarea.form-input{
     <div class="admin-top">
       <div class="admin-title" id="admin-title">Klasse</div>
     </div>
-    <div id="admin-peers-panel" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;">
-      <div style="font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:8px;">🔑 Mit-Administratoren dieser Klasse</div>
-      <div id="admin-peers-list" style="display:flex;flex-direction:column;gap:6px;"></div>
-    </div>
     <div class="stats-row" id="stats-row"></div>
     <div class="toolbar">
       <input class="search" id="search-inp" placeholder="🔍 Suche nach Name…" oninput="filterTable()">
-      <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
-      <button class="btn-act btn-outline" onclick="openSingle()">+ Einzeln anlegen</button>
       <button class="btn-act btn-outline" id="btn-view-toggle" onclick="toggleAdminView()">📊 Baustein-Übersicht</button>
 <button class="btn-act btn-outline" onclick="exportCSV()">↓ CSV</button>
       <button class="btn-act btn-outline" onclick="loadStudents()">↺ Laden</button>
@@ -743,6 +738,25 @@ textarea.form-input{
           </tr>
         </thead>
         <tbody id="stbl"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="view-klasse">
+    <div class="admin-top">
+      <div class="admin-title">👥 Klassen-Übersicht</div>
+      <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
+      <button class="btn-act btn-outline" onclick="openSingle()">+ Einzeln anlegen</button>
+      <button class="btn-act btn-outline" onclick="loadKlasse()">↺ Laden</button>
+    </div>
+    <div id="admin-peers-panel" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;">
+      <div style="font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:8px;">🔑 Mit-Administratoren dieser Klasse</div>
+      <div id="admin-peers-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Kurs</th><th></th></tr></thead>
+        <tbody id="klasse-tbl"></tbody>
       </table>
     </div>
   </div>
@@ -1728,8 +1742,10 @@ async function showApp() {
     if (tabAdmin) tabAdmin.style.display = '';
     const tabHalbjahr = document.getElementById('tab-halbjahr');
     if (tabHalbjahr) tabHalbjahr.style.display = '';
+    const tabKlasse = document.getElementById('tab-klasse');
+    if (tabKlasse) tabKlasse.style.display = '';
     // Kein eigenständiger Lerntheke-Tab für Admins: die Vorschau einer Lerntheke
-    // läuft ausschließlich über den 👁-Button (viewStudent()) in der Klassen-Übersicht.
+    // läuft ausschließlich über den 👁-Button (viewStudent()) in der Lerntheken-Übersicht.
     if (tabLerntheke) tabLerntheke.style.display = 'none';
   }
 
@@ -1842,13 +1858,13 @@ function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','picker','admin','talking','calendar','halbjahr','changepw'].forEach(id => {
+  ['lerntheke','picker','admin','talking','calendar','halbjahr','klasse','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr') {
+    } else if (id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr' || id === 'klasse') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -1871,7 +1887,6 @@ function showView(v) {
   }
   if (v === 'admin') {
     loadStudents();
-    loadAdminPeers();
     clearInterval(adminRefreshTimer);
     adminRefreshTimer = setInterval(loadStudents, 30000);
   } else {
@@ -1880,6 +1895,7 @@ function showView(v) {
   if (v === 'talking') loadTalkingSessions();
   if (v === 'calendar') loadCalendar();
   if (v === 'halbjahr') loadHalbjahr();
+  if (v === 'klasse') loadKlasse();
   if (v === 'changepw') {
     const forcedMsg = document.getElementById('cpw-forced-msg');
     const cancelBtn = document.getElementById('cpw-cancel-btn');
@@ -2006,8 +2022,6 @@ function renderTable(students) {
         <td style="color:var(--ink2);">${lastDate}</td>
         <td><div class="action-btns">
           <button class="btn-icon" onclick="viewStudent(${s.id},'${s.username}')">👁</button>
-          <button class="btn-icon" onclick="openReset(${s.id},'${s.username}')">🔑</button>
-          <button class="btn-icon red" onclick="deleteStudent(${s.id},'${s.username}')">🗑</button>
         </div></td>
       </tr>`;
     }).join('');
@@ -2132,8 +2146,6 @@ function renderTable(students) {
       <td>
         <div class="action-btns">
           <button class="btn-icon" onclick="viewStudent(${s.id},'${s.username}')">👁</button>
-          <button class="btn-icon" onclick="openReset(${s.id},'${s.username}')">🔑</button>
-          <button class="btn-icon red" onclick="deleteStudent(${s.id},'${s.username}')">🗑</button>
         </div>
         <div class="access-toggle">${accessToggles}</div>
       </td>
@@ -2280,10 +2292,53 @@ async function loadAdminPeers() {
   } catch {}
 }
 
+
+// ── Klassen-Übersicht (Account-/Nutzerverwaltung, getrennt von der Lerntheken-Übersicht) ──
+async function loadKlasse() {
+  loadAdminPeers();
+  try {
+    if (!allStudents.length) {
+      const r = await fetch('/api/admin/students');
+      if (r.ok) allStudents = await r.json();
+    }
+  } catch(e) { console.error('loadKlasse error:', e); }
+  renderKlasseTable();
+}
+
+function renderKlasseTable() {
+  const tbody = document.getElementById('klasse-tbl');
+  if (!tbody) return;
+  if (!allStudents.length) {
+    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
+    return;
+  }
+  const sorted = [...allStudents].sort((a, b) => a.username.localeCompare(b.username));
+  tbody.innerHTML = sorted.map(s => {
+    const globalKurs = s.kurs || 'E';
+    return `<tr data-name="${s.username}">
+      <td style="font-weight:600;">${s.username}</td>
+      <td>
+        <button class="kurs-btn ${globalKurs === 'G' ? 'kurs-g' : 'kurs-e'}"
+          title="Globaler Kurs – klicken zum Wechseln"
+          onclick="setKurs(event,${s.id},'${globalKurs === 'G' ? 'E' : 'G'}',this)">${globalKurs}-Kurs</button>
+      </td>
+      <td>
+        <div class="action-btns">
+          <button class="btn-icon" onclick="openReset(${s.id},'${s.username}')">🔑</button>
+          <button class="btn-icon red" onclick="deleteStudent(${s.id},'${s.username}')">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
 async function deleteStudent(id, name) {
   if (!confirm(`${name} wirklich löschen? Alle Fortschrittsdaten gehen verloren.`)) return;
   const r = await fetch(`/api/admin/student/${id}`, { method:'DELETE' });
-  if (r.ok) loadStudents();
+  if (!r.ok) return;
+  allStudents = allStudents.filter(s => s.id !== id);
+  if (document.getElementById('stbl')) renderTable(allStudents);
+  if (document.getElementById('klasse-tbl')) renderKlasseTable();
 }
 
 // ══ Change own password ════════════════════════════════════════════════════════
@@ -3707,42 +3762,43 @@ async function viewStudent(userId, username) {
     const r = await fetch('/api/admin/student-progress/' + userId);
     if (!r.ok) return;
     const data = await r.json();
-
-    // Show lerntheke tab with student's data
     viewingStudent = { userId, username, progress: data.progress };
 
-    // Inject progress into iframe localStorage and load
+    // Bugfix (2026-08-06): vorher wurde nur in das GERADE geladene iframe injiziert, ohne
+    // sicherzustellen, dass dort auch die richtige (zuletzt von dieser Person bearbeitete)
+    // Mathe-Lerntheke läuft, und ohne auf ein zuverlässiges Lade-Event zu warten - dadurch
+    // "funktionierte" die Vorschau nur zufällig, wenn gerade schon die passende Lerntheke lief.
+    const s = allStudents.find(st => st.id === userId);
+    const lai = s && s.last_active_info;
+    const lastLt = lai ? ltMeta.find(l => lai.key && lai.key.startsWith(l.key.split('_v')[0])) : null;
+    const targetLt = lastLt || ltMeta[0];
+    if (!targetLt) return;
+
     const frame = document.getElementById('lerntheke-frame');
     showView('lerntheke');
 
-    // Wait for frame to be visible, then inject data
-    setTimeout(async () => {
+    frame.onload = async () => {
+      await new Promise(res => setTimeout(res, 100));
       if (!frame.contentWindow) return;
-      // Clear existing lerntheke keys
       Object.keys(frame.contentWindow.localStorage)
         .filter(k => k.startsWith('lerntheke_'))
         .forEach(k => frame.contentWindow.localStorage.removeItem(k));
-      // Inject student data
-      Object.entries(data.progress).forEach(([k,v]) => {
+      Object.entries(data.progress).forEach(([k, v]) => {
         frame.contentWindow.localStorage.setItem(k, v);
       });
       frame.contentWindow.postMessage({ type: 'RELOAD_PROGRESS' }, '*');
 
-      // Inject student's korrektur so the lerntheke preview shows correct badges
       try {
-        const frameSrc = frame.src || '';
-        const activeLt = ltMeta.find(l => frameSrc.includes(l.url.replace(/\?.*$/, '')));
-        const ltParam = activeLt ? '?lerntheke=' + encodeURIComponent(activeLt.key) : '';
-        const kr = await fetch('/api/admin/korrektur/' + userId + ltParam);
+        const kr = await fetch('/api/admin/korrektur/' + userId + '?lerntheke=' + encodeURIComponent(targetLt.key));
         if (kr.ok) {
           const korrData = await kr.json();
           frame.contentWindow.postMessage({ type: 'RELOAD_KORREKTUR', data: korrData }, '*');
         }
       } catch {}
 
-      // Show banner
       showStudentBanner(username);
-    }, 200);
+    };
+    frame.src = targetLt.url + '?v=' + Date.now();
   } catch(e) { console.error('viewStudent error:', e); }
 }
 
