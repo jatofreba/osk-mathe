@@ -683,12 +683,12 @@ textarea.form-input{
   </div>
 
   <div class="tabs" id="app-tabs">
-    <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Mathe-Lerntheken</div>
-    <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
-    <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
-    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
-    <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Klassen-Übersicht</div>
     <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
+    <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
+    <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Mathe-Lerntheken</div>
+    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
+    <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
+    <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Klassen-Übersicht</div>
   </div>
 
   <div id="view-lerntheke" style="width:100%;">
@@ -3045,14 +3045,13 @@ function renderHalbjahr() {
   const rows = hjData.students.map(s => {
     const b = bucketOf(s);
     const nothing = isNothing(b);
-    const lzkBadges = (b.lzk||[]).filter(l => l.status==='bestanden')
-      .map(l => `<span class="pill pill-green" style="font-size:10px;">${escHtml(l.typ)} ✓${l.pokale ? ' ' + '🏆'.repeat(l.pokale) : ''}</span>`).join(' ') || dash;
+    const lzkBestandenCount = (b.lzk||[]).filter(l => l.status==='bestanden').length;
     return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id})" title="Details anzeigen">
       <td><strong>${escHtml(s.username)}</strong>${b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
       <td>${b.talksPresented ? '🎤 ' + b.talksPresented + sub(lastRole(b.talkDetails,'gehalten')) : dash}</td>
       <td>${b.talksListened ? '👂 ' + b.talksListened + sub(lastRole(b.talkDetails,'zugehört')) : dash}</td>
       <td>${b.inputParticipated ? '📘 ' + b.inputParticipated + sub(b.lastInput) : dash}</td>
-      <td>${lzkBadges}${(b.lzk||[]).length ? sub(b.lastLzk) : ''}</td>
+      <td>${lzkBestandenCount ? '🏆 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
       <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>
     </tr>`;
   }).join('');
