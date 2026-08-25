@@ -687,7 +687,9 @@ textarea.form-input{
     <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
     <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Mathe-Lerntheken</div>
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
-    <div class="tab" id="tab-talking" onclick="showView('talking')">🗣️ Mathe-Talks</div>
+    <div class="tab" id="tab-talking-mathe" onclick="showSubjectTalking('mathe')">🗣️ Mathe-Talks</div>
+    <div class="tab" id="tab-talking-englisch" onclick="showSubjectTalking('englisch')">🗣️ Englisch-Talks</div>
+    <div class="tab" id="tab-talking-deutsch" onclick="showSubjectTalking('deutsch')">🗣️ Deutsch-Talks</div>
     <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Klassen-Übersicht</div>
   </div>
 
@@ -762,7 +764,7 @@ textarea.form-input{
   </div>
 
   <div id="view-talking">
-    <div class="tsum-header" style="margin-bottom:16px;">
+    <div class="tsum-header" id="talking-header" style="margin-bottom:16px;">
       <div class="tsum-header-title" style="font-size:19px;">
         <svg width="34" height="34" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0;">
           <path d="M6 8c0-2.2 1.8-4 4-4h20c2.2 0 4 1.8 4 4v14c0 2.2-1.8 4-4 4H16l-7 6v-6H10c-2.2 0-4-1.8-4-4V8z" fill="#f4a6c9" stroke="#7c3f78" stroke-width="1.6" stroke-linejoin="round"/>
@@ -771,7 +773,7 @@ textarea.form-input{
           <circle cx="26" cy="15" r="1.8" fill="#7c3f78"/>
           <path d="M31 3l1.1 2.7L35 7l-2.9 1.1L31 11l-1.1-2.9L27 7l2.9-1.3z" fill="#f6c945" stroke="#c99a1f" stroke-width="0.6" stroke-linejoin="round"/>
         </svg>
-        Mathe-Talks
+        <span id="talking-header-text">Mathe-Talks</span>
       </div>
     </div>
     <div id="talking-student" style="display:none;"></div>
@@ -1201,6 +1203,18 @@ let resetId = null;
 let resetIsAdmin = false;
 let forcePasswordChange = false;
 
+// Fächer (2026-08-06): Mathe/Englisch/Deutsch, je mit eigenem Talks/Input-Bereich.
+// subjectsMeta wird einmal in showApp() geladen; activeSubject merkt sich, welcher
+// Fach-Talks-Tab gerade offen ist (Default 'mathe' für Rückwärtskompatibilität).
+let subjectsMeta = [];
+let activeSubject = 'mathe';
+async function loadSubjectsMeta() {
+  if (subjectsMeta.length) return subjectsMeta;
+  try { const r = await fetch('/api/subjects'); if (r.ok) subjectsMeta = await r.json(); } catch {}
+  return subjectsMeta;
+}
+function subjectByKey(key) { return subjectsMeta.find(s => s.key === key) || { key, name: key, color: '#2563eb', colorBg: '#eff6ff', defaultOrt: '', defaultDauer: 45 }; }
+
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
 let adminViewMode = 'groups'; // 'groups' | 'matrix'
@@ -1395,8 +1409,17 @@ async function showPicker() {
   try { const ar = await fetch('/api/access');            if (ar.ok) accessData = await ar.json(); } catch {} // writes module-level accessData
   activeLerntheke = localStorage.getItem('_lastLt') || null;
 
-  let talkingMineData = { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
-  try { const tr = await fetch('/api/talking-sessions/mine'); if (tr.ok) talkingMineData = await tr.json(); } catch {}
+  // "mine" je Fach laden (Mathe/Englisch/Deutsch) - jedes Fach bekommt unten seine eigene Übersichtskarte.
+  await loadSubjectsMeta();
+  const talkingMineBySubject = {};
+  await Promise.all(subjectsMeta.map(async subj => {
+    talkingMineBySubject[subj.key] = { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
+    try {
+      const tr = await fetch('/api/talking-sessions/mine?subject=' + encodeURIComponent(subj.key));
+      if (tr.ok) talkingMineBySubject[subj.key] = await tr.json();
+    } catch {}
+  }));
+  const talkingMineData = talkingMineBySubject.mathe || { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
 
   const container = document.getElementById('picker-cards');
   // Trophy helper (mirrors lerntheke.js trophyCount)
@@ -1441,8 +1464,8 @@ async function showPicker() {
       if (lzk) { lzkEarned += lzk.pokale || 0; lzkMax += 3; }
     });
   });
-  const talkEarned = talkingMineData.trophies?.earned || 0;
-  const talkMax = talkingMineData.trophies?.max || 0;
+  const talkEarned = Object.values(talkingMineBySubject).reduce((sum, d) => sum + (d.trophies?.earned || 0), 0);
+  const talkMax = Object.values(talkingMineBySubject).reduce((sum, d) => sum + (d.trophies?.max || 0), 0);
   const totalEarned = stationsEarned + lzkEarned + talkEarned;
   const totalMax = stationsMax + lzkMax + talkMax;
 
@@ -1513,7 +1536,7 @@ async function showPicker() {
             }).join('')}
           </div>
         </div>
-        ${buildTalkingPickerSummaryHtml(talkingMineData)}
+        ${subjectsMeta.map(subj => buildTalkingPickerSummaryHtml(talkingMineBySubject[subj.key] || { presenting: [], invitations: [] }, subj)).join('')}
         ${lockedPanelHtml}
       </div>
       <div class="trophy-lb-col rank-col">
@@ -1724,6 +1747,7 @@ async function showApp() {
 
   document.getElementById('bar-user').textContent = me.username;
   document.getElementById('bar-klasse').textContent = 'Klasse ' + me.klasse;
+  await loadSubjectsMeta();
 
   if (me.role === 'student' && me.kurs) {
     const barKurs = document.getElementById('bar-kurs');
@@ -1871,6 +1895,7 @@ function showView(v) {
       el.style.display = isActive ? 'flex' : 'none';
       el.style.flex = isActive ? '1' : '';
     }
+    if (id === 'talking') return; // eigene Aktiv-Markierung über showSubjectTalking() (3 Fach-Tabs, 1 View)
     const tab = document.getElementById('tab-' + id);
     if (tab) tab.classList.toggle('active', isActive);
   });
@@ -2554,7 +2579,8 @@ const TALK_TIER_TEXT = { 1: '⏳ In Arbeit', 2: '✓ Pflicht erfüllt', 3: '⭐ 
 // Übersicht im Lerntheken-Picker – bewusst am Papier-Arbeitsblatt "Let's Talk Sessions"
 // aus dem Englischunterricht orientiert (zwei Tabellen mit Schritte-Liste + Feldern
 // pro Session, graues Feld = Pflicht, weißes Feld = Zusatz/Bonus) für Wiedererkennungswert.
-function buildTalkingPickerSummaryHtml(data) {
+function buildTalkingPickerSummaryHtml(data, subject) {
+  subject = subject || subjectByKey('mathe');
   // Picker-Karte ist eine kompakte Übersicht - zeigt bewusst nur das aktuelle Halbjahr,
   // nicht die volle Historie (die gibt es im Mathe-Talks-Tab, aktuelles Halbjahr + Rest kollabiert).
   const currentHj = currentHalbjahrGuess();
@@ -2600,12 +2626,12 @@ function buildTalkingPickerSummaryHtml(data) {
     const tier = talkTier(pDone, aDone);
     return `
       <div class="tsum-hj-title" title="${TALK_TIER_TEXT[tier]}">Halbjahr ${escHtml(g.halbjahr)}</div>
-      <div class="tsum-block-title">🎤 Meine Mathe-Talks:</div>
+      <div class="tsum-block-title">🎤 Meine ${escHtml(subject.name)}-Talks:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Thema wählen</li><li>Vorbereiten (Fachbegriffe!)</li><li>Präsentieren &amp; Fragen beantworten</li></ol></div>
         ${presentRow}
       </div>
-      <div class="tsum-block-title">👂 Mathe-Talks anderer:</div>
+      <div class="tsum-block-title">👂 ${escHtml(subject.name)}-Talks anderer:</div>
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
         ${listenRow}
@@ -2613,28 +2639,37 @@ function buildTalkingPickerSummaryHtml(data) {
   }).join('');
 
   return `
-    <div class="trophy-panel">
-      <div class="tsum-header">
-        <div class="tsum-header-title">
-          <svg width="30" height="30" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0;">
-            <path d="M6 8c0-2.2 1.8-4 4-4h20c2.2 0 4 1.8 4 4v14c0 2.2-1.8 4-4 4H16l-7 6v-6H10c-2.2 0-4-1.8-4-4V8z" fill="#f4a6c9" stroke="#7c3f78" stroke-width="1.6" stroke-linejoin="round"/>
-            <circle cx="14" cy="15" r="1.8" fill="#7c3f78"/>
-            <circle cx="20" cy="15" r="1.8" fill="#7c3f78"/>
-            <circle cx="26" cy="15" r="1.8" fill="#7c3f78"/>
-            <path d="M31 3l1.1 2.7L35 7l-2.9 1.1L31 11l-1.1-2.9L27 7l2.9-1.3z" fill="#f6c945" stroke="#c99a1f" stroke-width="0.6" stroke-linejoin="round"/>
-          </svg>
-          Mathe-Talks
+    <div class="trophy-panel" style="margin-bottom:16px;">
+      <div class="tsum-header" style="background:linear-gradient(135deg, ${subject.colorBg}, ${subject.color}33);">
+        <div class="tsum-header-title" style="color:${subject.color};">
+          <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${subject.color};flex-shrink:0;"></span>
+          ${escHtml(subject.name)}-Talks
         </div>
         <div class="tsum-header-legend"><span class="tsum-legend-swatch grey"></span> graues Feld: Pflicht<br><span class="tsum-legend-swatch white"></span> weißes Feld: Zusatz-Punkte</div>
       </div>
       ${pendingCount ? `<div style="margin-bottom:12px;">
-        <span class="pill pill-yellow" style="font-size:12.5px;padding:5px 12px;font-weight:700;cursor:pointer;" onclick="showView('talking')">
+        <span class="pill pill-yellow" style="font-size:12.5px;padding:5px 12px;font-weight:700;cursor:pointer;" onclick="showSubjectTalking('${subject.key}')">
           📬 ${pendingCount} ausstehende Einladung${pendingCount > 1 ? 'en' : ''}
         </span>
       </div>` : ''}
       ${blocks}
-      <button class="btn-sm" style="margin-top:12px;" onclick="showView('talking')">→ Zu den Mathe-Talks</button>
+      <button class="btn-sm" style="margin-top:12px;" onclick="showSubjectTalking('${subject.key}')">→ Zu den ${escHtml(subject.name)}-Talks</button>
     </div>`;
+}
+
+// Klick auf einen der drei Fach-Talks-Tabs: merkt sich das Fach, zeigt die (gemeinsame)
+// Talks-View, markiert nur den angeklickten Tab als aktiv (die anderen beiden Fach-Tabs nicht).
+function showSubjectTalking(key) {
+  activeSubject = key;
+  showView('talking');
+  document.querySelectorAll('[id^="tab-talking-"]').forEach(t => t.classList.remove('active'));
+  const tab = document.getElementById('tab-talking-' + key);
+  if (tab) tab.classList.add('active');
+  const subj = subjectByKey(key);
+  const headerText = document.getElementById('talking-header-text');
+  if (headerText) headerText.textContent = subj.name + '-Talks';
+  const header = document.getElementById('talking-header');
+  if (header) header.style.background = `linear-gradient(135deg, ${subj.colorBg}, ${subj.color}33)`;
 }
 
 async function loadTalkingSessions() {
@@ -3104,7 +3139,9 @@ async function loadTalkingStudent() {
   el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
     const [cmRes, slotsRes, mineRes] = await Promise.all([
-      fetch('/api/classmates'), fetch('/api/talking-slots/open'), fetch('/api/talking-sessions/mine')
+      fetch('/api/classmates'),
+      fetch('/api/talking-slots/open?subject=' + encodeURIComponent(activeSubject)),
+      fetch('/api/talking-sessions/mine?subject=' + encodeURIComponent(activeSubject))
     ]);
     talkingClassmates = cmRes.ok ? await cmRes.json() : [];
     talkingOpenSlots = slotsRes.ok ? await slotsRes.json() : [];
@@ -3320,7 +3357,7 @@ async function loadTalkingAdmin() {
   el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
     const [slotsRes, rosterRes] = await Promise.all([
-      fetch('/api/admin/talking-slots'), fetch('/api/classmates')
+      fetch('/api/admin/talking-slots?subject=' + encodeURIComponent(activeSubject)), fetch('/api/classmates')
     ]);
     talkingAdminSlots = slotsRes.ok ? await slotsRes.json() : [];
     talkingAdminRoster = rosterRes.ok ? await rosterRes.json() : [];
@@ -3620,11 +3657,12 @@ function currentHalbjahrGuess() {
 
 function toTimeInputValue(u) { const m = String(u || '').match(/(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2,'0') + ':' + m[2] : ''; }
 function openTalkingSlotModal() {
+  const subj = subjectByKey(activeSubject);
   document.getElementById('tslot-halbjahr').value = currentHalbjahrGuess();
   document.getElementById('tslot-datum').value = '';
   document.getElementById('tslot-uhrzeit').value = '';
-  document.getElementById('tslot-dauer').value = '45';
-  document.getElementById('tslot-ort').value = '';
+  document.getElementById('tslot-dauer').value = String(subj.defaultDauer || 45);
+  document.getElementById('tslot-ort').value = subj.defaultOrt || '';
   document.getElementById('tslot-recurring').checked = false;
   document.getElementById('tslot-recurring-fields').style.display = 'none';
   document.getElementById('tslot-single-fields').style.display = 'block';
@@ -3646,6 +3684,7 @@ async function submitTalkingSlot() {
   const dauer = parseInt(document.getElementById('tslot-dauer').value) || 45;
   const ort = document.getElementById('tslot-ort').value.trim();
   if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
+  const subjectId = subjectByKey(activeSubject).id;
   const recurring = document.getElementById('tslot-recurring').checked;
   let body;
   if (recurring) {
@@ -3653,11 +3692,11 @@ async function submitTalkingSlot() {
     const von = document.getElementById('tslot-von').value;
     const bis = document.getElementById('tslot-bis').value;
     if (!von || !bis) { alert('Bitte Zeitraum angeben.'); return; }
-    body = { halbjahr, uhrzeit, dauer, ort, recurring: { weekday, von, bis } };
+    body = { halbjahr, uhrzeit, dauer, ort, subjectId, recurring: { weekday, von, bis } };
   } else {
     const datum = document.getElementById('tslot-datum').value;
     if (!datum) { alert('Bitte Datum angeben.'); return; }
-    body = { halbjahr, uhrzeit, dauer, ort, datum };
+    body = { halbjahr, uhrzeit, dauer, ort, subjectId, datum };
   }
   const r = await fetch('/api/admin/talking-slots', {
     method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
