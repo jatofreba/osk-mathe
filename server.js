@@ -1834,16 +1834,16 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
 async function halbjahrOverview(klasse, onlyUid) {
   const uidFilter = onlyUid ? ' AND u.id = $2' : '';
   const params = onlyUid ? [klasse, onlyUid] : [klasse];
-  const [students, presented, attended, lzkRows, stationRows] = await Promise.all([
+  const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
     pool.query(`SELECT id, username FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
-      SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
+      SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
       JOIN users u ON u.id = ts.presenter_id
       WHERE u.klasse = $1${uidFilter}
     `, params),
     pool.query(`
-      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter, ti.pokale
+      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter, ti.pokale
       FROM talking_invitations ti
       JOIN talking_sessions ts ON ts.id = ti.session_id
       JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -1861,7 +1861,11 @@ async function halbjahrOverview(klasse, onlyUid) {
       FROM station_events se JOIN users u ON u.id = se.user_id
       WHERE u.klasse = $1${uidFilter}
     `, params),
+    pool.query(`SELECT id, key, name, color FROM subjects ORDER BY id`),
   ]);
+
+  const subjectById = {};
+  subjectsRows.rows.forEach(s => { subjectById[s.id] = s; });
 
   // Talks/Input werden dem ZUGEWIESENEN Halbjahr des Slots zugeordnet (talking_slots.halbjahr,
   // von der Lehrkraft gesetzt - so zählt auch das Pokale-System). Input-Slots haben kein Halbjahr
@@ -1869,14 +1873,27 @@ async function halbjahrOverview(klasse, onlyUid) {
   const slotHj = (r) => (r.halbjahr && String(r.halbjahr).trim()) ? String(r.halbjahr).trim() : halbjahrForDate(r.datum);
   const maxD = (a, b) => (!a ? b : !b ? a : (a > b ? a : b));
   const byUser = {};
+  // Talks/Input werden zusätzlich nach Fach getrennt (bySubject) - LZK/Stationen bleiben fach-
+  // unabhängig auf HJ-Ebene (die Lerntheken/LZK gibt es aktuell nur für Mathe).
   const ensure = (uid, hj) => {
     if (!byUser[uid]) byUser[uid] = {};
     if (!byUser[uid][hj]) byUser[uid][hj] = {
-      talksPresented: 0, talksListened: 0, inputParticipated: 0, stationsCompleted: 0, pokalePresented: 0, pokaleListened: 0,
-      lzk: [], talkDetails: [], inputDetails: [], stationDetails: [],
-      lastTalk: null, lastInput: null, lastLzk: null, lastStation: null, lastActivity: null
+      stationsCompleted: 0, lzk: [], stationDetails: [],
+      lastLzk: null, lastStation: null, lastActivity: null,
+      bySubject: {},
     };
     return byUser[uid][hj];
+  };
+  const ensureSubject = (uid, hj, subjectId) => {
+    const hjRow = ensure(uid, hj);
+    const subj = subjectById[subjectId];
+    const key = subj ? subj.key : 'unbekannt';
+    if (!hjRow.bySubject[key]) hjRow.bySubject[key] = {
+      subjectName: subj ? subj.name : 'Unbekannt', subjectColor: subj ? subj.color : '#94a3b8',
+      talksPresented: 0, talksListened: 0, inputParticipated: 0, pokalePresented: 0, pokaleListened: 0,
+      talkDetails: [], inputDetails: [], lastTalk: null, lastInput: null,
+    };
+    return hjRow.bySubject[key];
   };
   const halbjahre = new Set();
 
@@ -1884,17 +1901,17 @@ async function halbjahrOverview(klasse, onlyUid) {
     if (r.status !== 'erledigt') return;
     const hj = slotHj(r); if (!hj) return;
     halbjahre.add(hj);
-    const b = ensure(r.uid, hj);
-    if (r.typ === 'input') { b.inputParticipated++; b.inputDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema }); b.lastInput = maxD(b.lastInput, r.datum); }
-    else { b.talksPresented++; b.pokalePresented += r.pokale || 0; b.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale }); b.lastTalk = maxD(b.lastTalk, r.datum); }
+    const s = ensureSubject(r.uid, hj, r.subjectId);
+    if (r.typ === 'input') { s.inputParticipated++; s.inputDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema }); s.lastInput = maxD(s.lastInput, r.datum); }
+    else { s.talksPresented++; s.pokalePresented += r.pokale || 0; s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale }); s.lastTalk = maxD(s.lastTalk, r.datum); }
   });
   attended.rows.forEach(r => {
     if (r.status !== 'erledigt') return;
     const hj = slotHj(r); if (!hj) return;
     halbjahre.add(hj);
-    const b = ensure(r.uid, hj);
-    if (r.typ === 'input') { b.inputParticipated++; b.inputDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter }); b.lastInput = maxD(b.lastInput, r.datum); }
-    else { b.talksListened++; b.pokaleListened += r.pokale || 0; b.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter, pokale: r.pokale }); b.lastTalk = maxD(b.lastTalk, r.datum); }
+    const s = ensureSubject(r.uid, hj, r.subjectId);
+    if (r.typ === 'input') { s.inputParticipated++; s.inputDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter }); s.lastInput = maxD(s.lastInput, r.datum); }
+    else { s.talksListened++; s.pokaleListened += r.pokale || 0; s.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter, pokale: r.pokale }); s.lastTalk = maxD(s.lastTalk, r.datum); }
   });
   lzkRows.rows.forEach(r => {
     const hj = halbjahrForDate(r.datum); if (!hj) return;
@@ -1913,15 +1930,19 @@ async function halbjahrOverview(klasse, onlyUid) {
   });
 
   Object.values(byUser).forEach(hjMap => Object.values(hjMap).forEach(b => {
-    b.lastActivity = [b.lastTalk, b.lastInput, b.lastLzk, b.lastStation].reduce((a, c) => maxD(a, c), null);
-    b.talkDetails.sort((x, y) => y.datum.localeCompare(x.datum));
-    b.inputDetails.sort((x, y) => y.datum.localeCompare(x.datum));
+    const subjDates = Object.values(b.bySubject).flatMap(s => [s.lastTalk, s.lastInput]);
+    b.lastActivity = [...subjDates, b.lastLzk, b.lastStation].reduce((a, c) => maxD(a, c), null);
     b.lzk.sort((x, y) => (y.datum || '').localeCompare(x.datum || ''));
     b.stationDetails.sort((x, y) => y.datum.localeCompare(x.datum));
+    Object.values(b.bySubject).forEach(s => {
+      s.talkDetails.sort((x, y) => y.datum.localeCompare(x.datum));
+      s.inputDetails.sort((x, y) => y.datum.localeCompare(x.datum));
+    });
   }));
 
   return {
     halbjahre: [...halbjahre].sort().reverse(),
+    subjects: subjectsRows.rows.map(s => ({ key: s.key, name: s.name, color: s.color })),
     students: students.rows.map(s => ({ id: s.id, username: s.username, byHalbjahr: byUser[s.id] || {} })),
   };
 }
