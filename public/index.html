@@ -3082,61 +3082,92 @@ function renderHalbjahr() {
   if (!hjData.students.length) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen.</div>'; return; }
   if (!hjSelected) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten in irgendeinem Halbjahr erfasst.</div>'; return; }
 
-  const emptyB = { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], talkDetails:[], inputDetails:[], stationDetails:[], stationsCompleted:0, pokalePresented:0, pokaleListened:0, lastTalk:null, lastInput:null, lastLzk:null, lastStation:null, lastActivity:null };
+  // Talks/Input sind seit 2026-08-06 fach-getrennt (bySubject); LZK/Stationen bleiben HJ-weit
+  // (gibt's aktuell nur für Mathe) und werden daher im Mathe-Abschnitt mitgezeigt.
+  const emptySubj = { talksPresented:0, talksListened:0, inputParticipated:0, talkDetails:[], inputDetails:[], lastTalk:null, lastInput:null };
+  const emptyB = { lzk:[], stationDetails:[], stationsCompleted:0, lastLzk:null, lastStation:null, lastActivity:null, bySubject:{} };
   const bucketOf = (s) => (s.byHalbjahr || {})[hjSelected] || emptyB;
-  const isNothing = (b) => !b.talksPresented && !b.talksListened && !b.inputParticipated && !b.stationsCompleted && !(b.lzk||[]).filter(l=>l.status==='bestanden').length;
   const dash = '<span style="color:var(--md-on-surface-variant);">–</span>';
   const sub = (d) => d ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">${hjFmtDate(d)}</div>` : '';
   const lastRole = (details, role) => { const f = (details||[]).filter(x => x.role === role); return f.length ? f[0].datum : null; };
+  const isSubjNothing = (sd, isMathe, b) => !sd.talksPresented && !sd.talksListened && !sd.inputParticipated
+    && !(isMathe && (b.stationsCompleted || (b.lzk||[]).filter(l=>l.status==='bestanden').length));
 
-  const rows = hjData.students.map(s => {
-    const b = bucketOf(s);
-    const nothing = isNothing(b);
-    const lzkBestandenCount = (b.lzk||[]).filter(l => l.status==='bestanden').length;
-    return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id})" title="Details anzeigen">
-      <td><strong>${escHtml(s.username)}</strong>${b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
-      <td>${b.talksPresented ? '🎤 ' + b.talksPresented + sub(lastRole(b.talkDetails,'gehalten')) : dash}</td>
-      <td>${b.talksListened ? '👂 ' + b.talksListened + sub(lastRole(b.talkDetails,'zugehört')) : dash}</td>
-      <td>${b.inputParticipated ? '📘 ' + b.inputParticipated + sub(b.lastInput) : dash}</td>
-      <td>${lzkBestandenCount ? '🏆 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
-      <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>
-    </tr>`;
+  const sections = (subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')]).map(subj => {
+    const isMathe = subj.key === 'mathe';
+    let nothingCount = 0;
+    const rows = hjData.students.map(s => {
+      const b = bucketOf(s);
+      const sd = b.bySubject[subj.key] || emptySubj;
+      const nothing = isSubjNothing(sd, isMathe, b);
+      if (nothing) nothingCount++;
+      const lzkBestandenCount = isMathe ? (b.lzk||[]).filter(l => l.status==='bestanden').length : 0;
+      const extraCols = isMathe ? `
+        <td>${lzkBestandenCount ? '🏆 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
+        <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '';
+      return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id})" title="Details anzeigen">
+        <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
+        <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
+        <td>${sd.talksListened ? '👂 ' + sd.talksListened + sub(lastRole(sd.talkDetails,'zugehört')) : dash}</td>
+        <td>${sd.inputParticipated ? '📘 ' + sd.inputParticipated + sub(sd.lastInput) : dash}</td>${extraCols}
+      </tr>`;
+    }).join('');
+
+    const headCols = isMathe ? '<th>🏆 LZK</th><th>📚 Stationen</th>' : '';
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px;">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
+        <span style="font-weight:700;font-size:14px;">${escHtml(subj.name)}</span>
+        ${nothingCount ? `<span style="color:var(--md-error);font-weight:600;font-size:12px;">– ${nothingCount} ohne Aktivität</span>` : ''}
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Name</th><th>🎤 Gehalten</th><th>👂 Zugehört</th><th>📘 Input</th>${headCols}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
   }).join('');
 
-  const nothingCount = hjData.students.filter(s => isNothing(bucketOf(s))).length;
   el.innerHTML = `
-    <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:8px;">
-      Talks nach zugewiesenem Halbjahr (Slot-Feld), Input/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Zeile anklicken für Details.
-      ${nothingCount ? ` · <span style="color:var(--md-error);font-weight:600;">${nothingCount} ohne Aktivität in ${escHtml(hjSelected)}</span> (rot)` : ''}
+    <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">
+      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Input/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Nach Fach sortiert, Zeile anklicken für Details.
     </div>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Name</th><th>🎤 Gehalten</th><th>👂 Zugehört</th><th>📘 Input</th><th>🏆 LZK</th><th>📚 Stationen</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
+    ${sections}`;
 }
 
-// Detailansicht einer Schüler:in für das gewählte Halbjahr (Klick auf Tabellenzeile).
+// Detailansicht einer Schüler:in für das gewählte Halbjahr (Klick auf Tabellenzeile) - je Fach ein
+// eigener Abschnitt; LZK/Stationen nur im Mathe-Abschnitt (fach-unabhängig, siehe renderHalbjahr()).
 function openHjDetail(userId) {
   const s = hjData.students.find(x => x.id === userId);
   if (!s) return;
-  const b = (s.byHalbjahr || {})[hjSelected] || {};
+  const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
   const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🏆'.repeat(t.pokale):''}</span></div>`;
   const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🏆 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🏆'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
+  const subjSections = (subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')]).map(subj => {
+    const sd = (b.bySubject || {})[subj.key] || { talkDetails: [], inputDetails: [] };
+    const isMathe = subj.key === 'mathe';
+    return `
+      <div style="display:flex;align-items:center;gap:6px;margin:16px 0 4px;">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
+        <span class="admin-title" style="font-size:14px;">${escHtml(subj.name)}</span>
+      </div>
+      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin-bottom:2px;">🎤👂 Talks (${sd.talkDetails.length})</div>
+      ${list(sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
+      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📘 Input-Teilnahmen (${sd.inputDetails.length})</div>
+      ${list(sd.inputDetails, inputRow, 'Keine Input-Teilnahmen.')}
+      ${isMathe ? `
+      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">🏆 LZK (${(b.lzk||[]).length})</div>
+      ${list(b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')}
+      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📚 Stationen (${b.stationsCompleted||0})</div>
+      ${list(b.stationDetails, stationRow, 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.')}` : ''}`;
+  }).join('');
+
   document.getElementById('hjd-name').textContent = `🎓 ${s.username} · Halbjahr ${hjSelected}`;
   document.getElementById('hjd-content').innerHTML = `
     ${b.lastActivity ? `<div style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:10px;">Zuletzt aktiv: ${hjFmtDate(b.lastActivity)}</div>` : ''}
-    <div class="admin-title" style="font-size:14px;margin-bottom:4px;">🎤👂 Talks (${(b.talkDetails||[]).length})</div>
-    ${list(b.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
-    <div class="admin-title" style="font-size:14px;margin:14px 0 4px;">📘 Input-Teilnahmen (${(b.inputDetails||[]).length})</div>
-    ${list(b.inputDetails, inputRow, 'Keine Input-Teilnahmen.')}
-    <div class="admin-title" style="font-size:14px;margin:14px 0 4px;">🏆 LZK (${(b.lzk||[]).length})</div>
-    ${list(b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')}
-    <div class="admin-title" style="font-size:14px;margin:14px 0 4px;">📚 Stationen (${b.stationsCompleted||0})</div>
-    ${list(b.stationDetails, stationRow, 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.')}
+    ${subjSections}
   `;
   openModal('modal-hj-detail');
 }
