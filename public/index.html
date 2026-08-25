@@ -801,11 +801,12 @@ textarea.form-input{
       <div class="cal-grid" id="cal-dow-row"></div>
       <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
       <div class="cal-legend">
-        <span><i style="background:#2563eb;"></i> Meine Termine</span>
-        <span><i style="background:#fff;border:1px solid #93c5fd;"></i> Offen (buchbar)</span>
-        <span><i style="background:#dbeafe;border:1px solid #93c5fd;"></i> Gebucht</span>
+        <span><i style="background:#94a3b8;"></i> Meine Termine (gefüllt)</span>
+        <span><i style="background:#fff;border:1px solid #94a3b8;"></i> Offen (buchbar)</span>
+        <span><i style="background:#e2e8f0;border:1px solid #94a3b8;"></i> Gebucht</span>
         <span><i style="background:#fff;border:1px dashed #1d4ed8;"></i> Deadline</span>
         <span>🎤 Talk · 📘 Input</span>
+        <span id="cal-legend-subjects"></span>
       </div>
       <div class="cal-detail" id="cal-detail"><div class="cal-detail-empty">Wähle einen Tag, um Details & Buchung zu sehen.</div></div>
     </div>
@@ -1214,6 +1215,7 @@ async function loadSubjectsMeta() {
   return subjectsMeta;
 }
 function subjectByKey(key) { return subjectsMeta.find(s => s.key === key) || { key, name: key, color: '#2563eb', colorBg: '#eff6ff', defaultOrt: '', defaultDauer: 45 }; }
+function subjectById(id) { return subjectsMeta.find(s => s.id === id) || subjectByKey('mathe'); }
 
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
@@ -2750,6 +2752,9 @@ function renderCalendar() {
   if (label) label.textContent = CAL_MONTHS[calMonth] + ' ' + calYear;
   if (dowRow) dowRow.innerHTML = ['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => `<div class="cal-dow">${d}</div>`).join('');
 
+  const legendSubj = document.getElementById('cal-legend-subjects');
+  if (legendSubj) legendSubj.innerHTML = subjectsMeta.map(s => `<span><i style="background:${s.color};"></i> ${escHtml(s.name)}</span>`).join('');
+
   const byDay = calItemsByDay();
   const todayStr = calDateStr(new Date());
   const first = new Date(calYear, calMonth, 1);
@@ -2769,10 +2774,15 @@ function renderCalendar() {
     const evs = items.slice(0, 3).map(it => {
       if (it.kind === 'deadline') return `<div class="cal-ev cal-ev-deadline" title="${escHtml(it.titel)}">⏰ ${escHtml(it.titel)}</div>`;
       const mine = it.mineAsPresenter || it.mineAsListener;
+      const subj = subjectById(it.subjectId);
       const icon = it.typ === 'input' ? '📘' : '🎤';
-      const cls = mine ? 'cal-ev-mine' : (it.booked ? '' : 'cal-ev-open');
       const st = mine ? 'meine Buchung' : (it.booked ? 'gebucht' : 'offen – buchbar');
-      return `<div class="cal-ev ${cls}" title="${escHtml((it.uhrzeit||'') + ' ' + (it.typ==='input'?'Input':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'Input':'Talk'))}</div>`;
+      const style = mine
+        ? `background:${subj.color};color:#fff;border-color:${subj.color};`
+        : it.booked
+          ? `background:${subj.colorBg};color:${subj.color};border-color:${subj.color}66;`
+          : `background:#fff;color:${subj.color};border-color:${subj.color}88;`;
+      return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Input':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'Input':'Talk'))}</div>`;
     }).join('');
     const more = items.length > 3 ? `<div class="cal-more">+${items.length - 3} mehr</div>` : '';
     const cls = ['cal-cell'];
@@ -2802,7 +2812,8 @@ function renderCalDetail() {
         </div></div>`;
     }
     const icon = it.typ === 'input' ? '📘' : '🎤';
-    const typLabel = it.typ === 'input' ? 'Mathe-Input' : 'Mathe-Talk';
+    const subj = subjectById(it.subjectId);
+    const typLabel = subj.name + '-' + (it.typ === 'input' ? 'Input' : 'Talk');
     const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}`;
     let body, actions = '';
     if (!it.booked) {
@@ -2824,7 +2835,7 @@ function renderCalDetail() {
         ? `<button class="btn-act btn-red" onclick="calCancelSession(${it.session_id})">Stornieren</button>`
         : `<button class="btn-act btn-red" onclick="calDeleteSlot(${it.id})">Löschen</button>`;
     }
-    return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid #2563eb;">
+    return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
         <div>
           <div>${icon} <strong>${typLabel}</strong> ${it.booked ? '<span class="pill pill-green" style="font-size:10px;">✓ gebucht</span>' : '<span class="pill pill-yellow" style="font-size:10px;">○ offen</span>'}</div>
@@ -2859,7 +2870,8 @@ function openCalBookModal(slotId) {
   if (!slot) return;
   _calBookSlot = slot;
   const isInput = slot.typ === 'input';
-  document.getElementById('calbook-title').textContent = isInput ? '📘 Mathe-Input buchen' : '🎤 Mathe-Talk anmelden';
+  const bookSubj = subjectById(slot.subjectId);
+  document.getElementById('calbook-title').textContent = isInput ? `📘 ${bookSubj.name}-Input buchen` : `🎤 ${bookSubj.name}-Talk anmelden`;
   document.getElementById('calbook-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}`;
   document.getElementById('calbook-thema').value = '';
