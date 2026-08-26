@@ -80,10 +80,15 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   min-height:100vh;padding:24px;
   background:var(--md-background);
 }
+/* Login-Seite: obere Zeile (Karte + Wochenübersicht), darunter Taskcards über die volle Breite. */
+.login-outer{
+  display:flex;flex-direction:column;gap:20px;
+  width:100%;max-width:1120px;
+}
 .login-layout{
   display:flex;gap:24px;
   align-items:flex-start;justify-content:center;
-  flex-wrap:wrap;width:100%;max-width:1120px;
+  flex-wrap:wrap;width:100%;
 }
 .login-card{
   background:var(--md-surface);
@@ -92,14 +97,13 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   width:100%;max-width:400px;
   box-shadow:var(--md-elevation-3);
 }
-.login-side{display:flex;flex-direction:column;gap:20px;flex:1 1 560px;max-width:660px;min-width:0;}
 /* Wochenübersicht neben dem Login - bewusst ohne Namen (öffentlich sichtbar). */
 .login-week{
   background:var(--md-surface);
   border-radius:28px;
   padding:26px 24px;
   box-shadow:var(--md-elevation-3);
-  min-width:0;
+  flex:1 1 560px;max-width:660px;min-width:0;
 }
 .login-week-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .login-week-title{font-size:16px;font-weight:700;color:var(--md-on-surface);}
@@ -140,17 +144,23 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
 .lw-extra{margin-top:12px;padding-top:10px;border-top:1px solid var(--md-outline-variant);}
 .lw-extra-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--md-on-surface-variant);margin-bottom:5px;}
-/* Taskcards-Einbettung (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
+/* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
+   (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
 .login-taskcards{
   background:var(--md-surface);border-radius:28px;
   padding:20px;box-shadow:var(--md-elevation-3);
+  width:100%;min-width:0;
 }
-.login-taskcards iframe{width:100%;height:420px;border:none;border-radius:12px;display:block;}
+.login-taskcards iframe{width:100%;height:560px;border:none;border-radius:12px;display:block;background:var(--md-surface-container-low);}
 @media (max-width:1120px){
   #login-screen{align-items:flex-start;}
-  .login-layout{flex-direction:column;align-items:center;max-width:660px;}
+  .login-outer{max-width:660px;}
+  .login-layout{flex-direction:column;align-items:center;}
   .login-card{max-width:660px;}
-  .login-side{width:100%;flex:1 1 auto;}
+  .login-week{max-width:660px;width:100%;flex:1 1 auto;}
+}
+@media (max-width:600px){
+  .login-taskcards iframe{height:420px;}
 }
 .login-logo{font-size:36px;margin-bottom:12px;}
 .login-title{
@@ -723,23 +733,23 @@ textarea.form-input{
 
 <!-- ══ LOGIN ══════════════════════════════════════════════════════════════════ -->
 <div id="login-screen">
-  <div class="login-layout">
-    <div class="login-card">
-      <div class="login-logo">📐</div>
-      <div class="login-title"><strong>O</strong>rganisiert <strong>S</strong>elbst <strong>K</strong>nobeln</div>
-      <div class="login-sub">Mittelstufe · Melde dich an um loszulegen</div>
-      <div class="form-group">
-        <label class="form-label" for="inp-user">Benutzername</label>
-        <input class="form-input" id="inp-user" autocomplete="username" placeholder="z.B. anna.mueller">
+  <div class="login-outer">
+    <div class="login-layout">
+      <div class="login-card">
+        <div class="login-logo">📐</div>
+        <div class="login-title"><strong>O</strong>rganisiert <strong>S</strong>elbst <strong>K</strong>nobeln</div>
+        <div class="login-sub">Mittelstufe · Melde dich an um loszulegen</div>
+        <div class="form-group">
+          <label class="form-label" for="inp-user">Benutzername</label>
+          <input class="form-input" id="inp-user" autocomplete="username" placeholder="z.B. anna.mueller">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inp-pass">Passwort</label>
+          <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="••••••">
+        </div>
+        <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
+        <div class="login-error" id="login-error"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="inp-pass">Passwort</label>
-        <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="••••••">
-      </div>
-      <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
-      <div class="login-error" id="login-error"></div>
-    </div>
-    <div class="login-side">
       <div class="login-week" id="login-week">
         <div class="login-week-head">
           <span class="login-week-title">📅 Diese Woche</span>
@@ -747,12 +757,13 @@ textarea.form-input{
         </div>
         <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
       </div>
-      <div class="login-taskcards" id="login-taskcards" style="display:none;">
-        <div class="login-week-head" style="margin-bottom:12px;">
-          <span class="login-week-title">🗂️ Material</span>
-        </div>
-        <iframe id="login-taskcards-frame" src="" title="Taskcards" loading="lazy"></iframe>
+    </div>
+    <div class="login-taskcards" id="login-taskcards" style="display:none;">
+      <div class="login-week-head" style="margin-bottom:12px;">
+        <span class="login-week-title">🗂️ Material</span>
+        <a class="login-week-sub" id="login-taskcards-link" href="#" target="_blank" rel="noopener">In neuem Tab öffnen ↗</a>
       </div>
+      <iframe id="login-taskcards-frame" src="" title="Taskcards" loading="lazy"></iframe>
     </div>
   </div>
 </div>
@@ -1526,7 +1537,7 @@ function safeJSON(s) {
 // Taskcards: sobald die Einbettungs-URL des Boards hier eingetragen ist, erscheint
 // das Material-Panel unter der Wochenübersicht. Leer lassen = Panel bleibt aus.
 // Voraussetzung: das Board muss in Taskcards öffentlich/einbettbar freigegeben sein.
-const TASKCARDS_EMBED_URL = '';
+const TASKCARDS_EMBED_URL = 'https://osk.taskcards.app/#/board/2ea67f5f-532b-4e5f-8c68-cfb54f284551/view';
 
 const LW_DAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 const LW_DAY_NAMES = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
@@ -1580,7 +1591,11 @@ async function loadLoginWeek() {
   if (tcUrl) {
     const panel = document.getElementById('login-taskcards');
     const frame = document.getElementById('login-taskcards-frame');
+    const link  = document.getElementById('login-taskcards-link');
     if (frame) frame.src = tcUrl;
+    // Direktlink als Ausweg, falls Taskcards das Einbetten per X-Frame-Options/CSP
+    // blockiert - dann bleibt der Rahmen leer, der Link funktioniert aber weiterhin.
+    if (link) link.href = tcUrl;
     if (panel) panel.style.display = '';
   }
 
