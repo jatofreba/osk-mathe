@@ -3239,14 +3239,20 @@ function renderMyHalbjahr() {
   if (!el) return;
   if (me && me.role === 'admin') { el.innerHTML = ''; return; }
   const hj = currentHalbjahrGuess();
-  const b = (myHjData.byHalbjahr || {})[hj] || { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], stationsCompleted:0 };
+  const b = (myHjData.byHalbjahr || {})[hj] || { bySubject:{}, lzk:[], stationsCompleted:0 };
+  // Talks/Input sind seit dem Fächer-System nach Fach getrennt (bySubject) - die kompakte Karte
+  // zeigt weiterhin nur eine Gesamtzahl, daher hier über alle Fächer aufsummiert.
+  const subjVals = Object.values(b.bySubject || {});
+  const talksPresented = subjVals.reduce((sum, s) => sum + (s.talksPresented || 0), 0);
+  const talksListened = subjVals.reduce((sum, s) => sum + (s.talksListened || 0), 0);
+  const inputParticipated = subjVals.reduce((sum, s) => sum + (s.inputParticipated || 0), 0);
   const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🍀 ${escHtml(l.typ)}-LZK</span>`).join(' ');
   el.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
     <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">🎓 Mein Halbjahr ${escHtml(hj)}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <span class="pill pill-blue">🎤 ${b.talksPresented} gehalten</span>
-      <span class="pill pill-blue">👂 ${b.talksListened} zugehört</span>
-      <span class="pill pill-blue">📘 ${b.inputParticipated} Input-Teilnahmen</span>
+      <span class="pill pill-blue">🎤 ${talksPresented} gehalten</span>
+      <span class="pill pill-blue">👂 ${talksListened} zugehört</span>
+      <span class="pill pill-blue">📘 ${inputParticipated} Input-Teilnahmen</span>
       <span class="pill pill-blue">📚 ${b.stationsCompleted} Stationen</span>
       ${lzkB}
     </div>
