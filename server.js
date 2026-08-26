@@ -461,7 +461,9 @@ function parseUhrzeitMin(uhrzeit) {
 }
 
 // Alle Zeitfenster, die eine Person schon belegt: eigene Buchungen (Talk halten / Input)
-// + zugesagte Zuhör-Termine. datum als YYYY-MM-DD-Text (to_char) gegen Zeitzonen-Verschiebung.
+// + Zuhör-Einladungen, die noch nicht abgelehnt wurden ('eingeladen' ODER 'angenommen') - eine
+// nur eingeladene, noch unbeantwortete Person soll trotzdem nirgends sonst zugewiesen werden können.
+// datum als YYYY-MM-DD-Text (to_char) gegen Zeitzonen-Verschiebung.
 async function studentOccupiedIntervals(uid, excludeSlotId) {
   const r = await pool.query(`
     SELECT sl.id AS slot_id, to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.uhrzeit, sl.dauer
@@ -472,7 +474,7 @@ async function studentOccupiedIntervals(uid, excludeSlotId) {
     FROM talking_invitations ti
     JOIN talking_sessions ts ON ts.id = ti.session_id
     JOIN talking_slots sl ON sl.id = ts.slot_id
-    WHERE ti.listener_id = $1 AND ti.status = 'angenommen'
+    WHERE ti.listener_id = $1 AND ti.status != 'abgelehnt'
   `, [uid]);
   return r.rows
     .filter(row => row.slot_id !== excludeSlotId)
@@ -1610,6 +1612,31 @@ app.delete('/api/talking-invitations/:id', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Admin entfernt nachträglich eine Person aus einem Talk (Zuhören) oder Input (Teilnahme) - z.B.
+// wenn jemand versehentlich zugewiesen wurde. Gleiche Bewertungs-Guards wie beim Presenter-Auslad-
+// Endpunkt oben, zusätzlich auf die eigene Klasse gescoped (Admins verwalten nur ihre Klasse).
+app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) => {
+  try {
+    const inv = await pool.query(
+      `SELECT ti.id, ti.attended_status, ts.presented_status, sl.klasse
+       FROM talking_invitations ti
+       JOIN talking_sessions ts ON ts.id = ti.session_id
+       JOIN talking_slots sl ON sl.id = ts.slot_id
+       WHERE ti.id=$1`,
+      [req.params.id]
+    );
+    if (!inv.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const row = inv.rows[0];
+    if (row.klasse !== req.session.klasse) return res.status(403).json({ error: 'Kein Zugriff' });
+    if (row.presented_status !== 'ausstehend')
+      return res.status(409).json({ error: 'Vortrag bereits bewertet, Teilnahme kann nicht mehr entfernt werden' });
+    if (row.attended_status !== 'ausstehend')
+      return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden' });
+    await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 // Annehmen/Ablehnen geht nur, solange die TS des Presenters noch nicht bewertet wurde (presented_status
 // 'ausstehend'). Danach entscheidet ausschließlich die Zuhören-Bewertung der Lehrkraft (attended_status),
 // ob die Person teilgenommen hat - das nachträgliche Ablehnen einer bereits stattgefundenen TS ergibt keinen Sinn.
@@ -1882,7 +1909,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
                pu.username AS "presenterUsername",
                (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
                (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
-               COALESCE(json_agg(json_build_object('username', lu.username, 'status', inv.status, 'attendedStatus', inv.attended_status))
+               COALESCE(json_agg(json_build_object('id', inv.id, 'username', lu.username, 'status', inv.status, 'attendedStatus', inv.attended_status))
                  FILTER (WHERE inv.id IS NOT NULL), '[]') AS invitees
         FROM talking_slots s
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id

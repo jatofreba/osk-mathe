@@ -3481,10 +3481,14 @@ async function deleteDeadline(id) {
 function calInviteeListHtml(it) {
   const inv = it.invitees || [];
   if (!inv.length) return it.typ === 'input' ? '' : '<div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:3px;">Niemand eingeladen</div>';
+  const canRemove = me && me.role === 'admin' && it.presentedStatus === 'ausstehend';
   const pills = inv.map(iv => {
     const s = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
     const att = iv.attendedStatus === 'erledigt' ? ' 👂' : iv.attendedStatus === 'nicht_erledigt' ? ' 🚫' : '';
-    return `<span class="pill pill-blue" style="font-size:10px;">${escHtml(iv.username)} ${s}${att}</span>`;
+    const removeBtn = (canRemove && iv.attendedStatus === 'ausstehend' && iv.id)
+      ? ` <span onclick="calRemoveInvitee(${iv.id})" style="cursor:pointer;font-weight:800;color:var(--md-error);" title="Entfernen">×</span>`
+      : '';
+    return `<span class="pill pill-blue" style="font-size:10px;">${escHtml(iv.username)} ${s}${att}${removeBtn}</span>`;
   }).join(' ');
   return `<div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;"><span style="font-size:11px;color:var(--md-on-surface-variant);">Eingeladen:</span> ${pills}</div>`;
 }
@@ -3526,6 +3530,14 @@ async function calDeleteSlot(slotId) {
   if (!confirm('Termin wirklich löschen?')) return;
   const r = await fetch(`/api/admin/talking-slots/${slotId}`, { method:'DELETE' });
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
+  loadCalendar();
+}
+// Admin entfernt nachträglich eine einzelne Person aus einem Talk (Zuhören) oder Input (Teilnahme).
+async function calRemoveInvitee(invitationId) {
+  if (!confirm('Diese Person wirklich aus dem Termin entfernen?')) return;
+  const r = await fetch(`/api/admin/talking-invitations/${invitationId}`, { method:'DELETE' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler beim Entfernen.'); return; }
   loadCalendar();
 }
 
