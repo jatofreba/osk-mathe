@@ -130,18 +130,27 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   display:flex;flex-direction:column;gap:3px;
 }
 .lw-cell.lw-today{outline:1.5px solid var(--md-primary);outline-offset:-1.5px;}
+/* Nur EINE Farbdimension: Farbe = Fach (Balken + Fachname). Verfügbarkeit wird
+   nicht über eine zweite Farbe codiert, sondern über Kontrast - gebuchte Termine
+   treten zurück, freie stehen im Fach-Ton vorn. */
 .lw-chip{
   border-left:3px solid var(--md-outline-variant);border-radius:5px;
-  background:var(--md-surface);padding:3px 6px;
-  font-size:10.5px;line-height:1.3;
+  background:var(--md-surface);padding:4px 7px;
+  font-size:10.5px;line-height:1.35;
 }
 .lw-chip-time{font-weight:700;color:var(--md-on-surface);}
+.lw-chip-type{color:var(--md-on-surface-variant);font-weight:500;}
+.lw-chip-subj{font-weight:600;}
 .lw-chip-meta{color:var(--md-on-surface-variant);}
-.lw-chip.booked{opacity:.5;}
-.lw-chip-free{color:#166534;font-weight:700;}
+.lw-chip.booked{
+  background:transparent;
+  border-left-color:var(--md-outline-variant);
+  box-shadow:inset 0 0 0 1px var(--md-outline-variant);
+}
+.lw-chip.booked .lw-chip-time{color:var(--md-on-surface-variant);font-weight:600;}
+.lw-chip.booked .lw-chip-subj{color:var(--md-on-surface-variant);font-weight:500;}
 .lw-empty{font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
-.lw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:10.5px;color:var(--md-on-surface-variant);}
-.lw-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
+.lw-legend{margin-top:12px;font-size:10.5px;color:var(--md-on-surface-variant);}
 .lw-extra{margin-top:12px;padding-top:10px;border-top:1px solid var(--md-outline-variant);}
 .lw-extra-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--md-on-surface-variant);margin-bottom:5px;}
 /* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
@@ -1571,15 +1580,15 @@ function lwMonday() {
 
 function lwChip(s) {
   const color = s.subjectColor || '#94a3b8';
-  const typLabel = s.typ === 'input' ? '📘 Input' : '🎤 Talk';
-  const status = s.booked
-    ? '<span>gebucht</span>'
-    : '<span class="lw-chip-free">frei</span>';
-  const titleParts = [s.subjectName, s.typ === 'input' ? 'Input' : 'Talk', s.uhrzeit, s.ort, s.booked ? 'gebucht' : 'frei'];
-  return `<div class="lw-chip${s.booked ? ' booked' : ''}" style="border-left-color:${color};"
+  const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
+  // Gebuchtes tritt farblich zurück (neutral), Freies trägt die Fach-Farbe.
+  const subjStyle = s.booked ? '' : ` style="color:${color};"`;
+  const borderStyle = s.booked ? '' : ` style="border-left-color:${color};"`;
+  const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? 'schon gebucht' : 'frei buchbar'];
+  return `<div class="lw-chip${s.booked ? ' booked' : ''}"${borderStyle}
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time">${escHtml(s.uhrzeit || '')} · ${typLabel}</div>
-    <div class="lw-chip-meta">${escHtml(s.subjectName || '')} · ${status}</div>
+    <div class="lw-chip-time">${escHtml(s.uhrzeit || '')} <span class="lw-chip-type">${typLabel}</span></div>
+    <div class="lw-chip-meta"><span class="lw-chip-subj"${subjStyle}>${escHtml(s.subjectName || '')}</span>${s.booked ? ' · gebucht' : ''}</div>
   </div>`;
 }
 
@@ -1654,12 +1663,16 @@ async function loadLoginWeek() {
 
   const extrasHtml = (extras.length || deadlines.length) ? `<div class="lw-extra">
     <div class="lw-extra-title">Weitere Termine</div>
-    ${extras.map(s => `<div class="lw-chip" style="border-left-color:${s.subjectColor || '#94a3b8'};margin-bottom:3px;">
-      <div class="lw-chip-time">${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''} · ${s.typ === 'input' ? '📘 Input' : '🎤 Talk'}</div>
-      <div class="lw-chip-meta">${escHtml(s.subjectName || '')} · ${s.booked ? 'gebucht' : '<span class="lw-chip-free">frei</span>'}</div>
-    </div>`).join('')}
+    ${extras.map(s => {
+      const color = s.subjectColor || '#94a3b8';
+      const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
+      return `<div class="lw-chip${s.booked ? ' booked' : ''}" style="margin-bottom:3px;${s.booked ? '' : `border-left-color:${color};`}">
+        <div class="lw-chip-time">${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''} <span class="lw-chip-type">${typLabel}</span></div>
+        <div class="lw-chip-meta"><span class="lw-chip-subj"${s.booked ? '' : ` style="color:${color};"`}>${escHtml(s.subjectName || '')}</span>${s.booked ? ' · gebucht' : ''}</div>
+      </div>`;
+    }).join('')}
     ${deadlines.map(d => `<div class="lw-chip" style="margin-bottom:3px;">
-      <div class="lw-chip-time">${lwFmtDay(d.datum)} · 📌 Termin</div>
+      <div class="lw-chip-time">${lwFmtDay(d.datum)} <span class="lw-chip-type">Termin</span></div>
       <div class="lw-chip-meta">${escHtml(d.titel || '')}</div>
     </div>`).join('')}
   </div>` : '';
@@ -1668,10 +1681,7 @@ async function loadLoginWeek() {
     ? '<div class="lw-empty" style="margin-top:10px;">Diese Woche sind keine Termine eingetragen.</div>' : '';
 
   body.innerHTML = `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
-    <div class="lw-legend">
-      <span><i style="background:#dcfce7;"></i>frei buchbar</span>
-      <span><i style="background:var(--md-outline-variant);"></i>schon gebucht</span>
-    </div>
+    <div class="lw-legend">Farbe = Fach · ausgegraut = schon gebucht</div>
     ${extrasHtml}${emptyHint}`;
 }
 
