@@ -710,7 +710,7 @@ textarea.form-input{
   <div id="view-home" style="display:none;">
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">🏠 Übersicht</h2>
-      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Pokale und Mathe-Talks im Überblick.</p>
+      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Kleeblätter und Mathe-Talks im Überblick.</p>
       <div id="home-trophy-summary"></div>
     </div>
   </div>
@@ -944,7 +944,7 @@ textarea.form-input{
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Pokale</label>
+      <label class="form-label">Kleeblätter</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🍀</button>
         <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🍀</button>
@@ -1071,7 +1071,7 @@ textarea.form-input{
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Pokale</label>
+      <label class="form-label">Kleeblätter</label>
       <div id="trate-modal-pokale" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
     </div>
     <div class="form-group">
@@ -1587,7 +1587,7 @@ async function loadPickerData() {
     trophySummary.innerHTML = `<div class="trophy-section">
       <div class="trophy-lb-col tsum-col">
         <div class="trophy-panel">
-          <div class="trophy-panel-title">Meine Pokale</div>
+          <div class="trophy-panel-title">Meine Kleeblätter</div>
           <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
           <div class="trophy-track">
             <div class="trophy-fill${pct>=100?' trophy-perfect':''}" style="width:${Math.min(100,pct)}%;background:${fillColor};"></div>
@@ -1595,7 +1595,7 @@ async function loadPickerData() {
           <div class="trophy-milestones">
             <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
           </div>
-          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🍀 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
+          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🍀 Alle Kleeblätter gesammelt!':pct+' % aller möglichen Kleeblätter'}</div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${[
               ['📚', 'Mathe-Lerntheken', stationsEarned, stationsMax],
@@ -1617,14 +1617,14 @@ async function loadPickerData() {
       <div class="trophy-lb-col rank-col">
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Quote</div>
-          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller aktuell für dich erreichbaren Pokale</div>
+          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller aktuell für dich erreichbaren Kleeblätter</div>
           ${renderLb([...lbRows].sort((a,b) => (b.ownMax?b.pokale/b.ownMax:0)-(a.ownMax?a.pokale/a.ownMax:0)),
             s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) + ' %' : '–',
             s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : 0
           )}
         </div>
         <div class="trophy-panel">
-          <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
+          <div class="trophy-panel-title">Rangliste – Kleeblätter gesamt</div>
           ${renderLb(lbRows,
             s => '🍀 ' + s.pokale,
             s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
@@ -3409,7 +3409,7 @@ function renderTalkingStudent() {
 
   const trophyCard = `
     <div class="stat-card">
-      <div class="stat-lbl">🍀 Mathe-Talk-Pokale</div>
+      <div class="stat-lbl">🍀 Mathe-Talk-Kleeblätter</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
   const progressCards = groupsFull.length ? groupsFull.map(g => {
