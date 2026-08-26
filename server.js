@@ -95,6 +95,15 @@ async function initDB() {
         ALTER TABLE users ADD COLUMN kurs VARCHAR(1) NOT NULL DEFAULT 'E';
       END IF;
     END $$;
+    -- Passiv setzen (2026-08-26): Schüler:innen, die die Klasse verlassen haben o.ä., verschwinden
+    -- damit aus Übersichten/Ranglisten/Klassenkameraden-Listen, bleiben aber in der Klassen-Übersicht
+    -- (Nutzerverwaltung) sichtbar (dort ans Ende sortiert) und können reaktiviert werden. Login bleibt
+    -- bewusst weiter möglich - das ist kein Löschen, nur ein Ausblenden.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='aktiv') THEN
+        ALTER TABLE users ADD COLUMN aktiv BOOLEAN NOT NULL DEFAULT true;
+      END IF;
+    END $$;
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lerntheke_access' AND column_name='kurs') THEN
         ALTER TABLE lerntheke_access ADD COLUMN kurs VARCHAR(1) DEFAULT NULL;
@@ -233,11 +242,16 @@ async function initDB() {
       pflicht_zuhoeren       INTEGER NOT NULL DEFAULT 2,
       created_at             TIMESTAMPTZ DEFAULT NOW()
     );
-    INSERT INTO subjects (key, name, color, color_bg, default_dauer) VALUES
-      ('mathe',    'Mathe',    '#2563eb', '#eff6ff', 45),
-      ('englisch', 'Englisch', '#eab308', '#fefce8', 45),
-      ('deutsch',  'Deutsch',  '#dc2626', '#fef2f2', 45)
+    INSERT INTO subjects (key, name, color, color_bg, default_ort, default_dauer) VALUES
+      ('mathe',    'Mathe',    '#2563eb', '#eff6ff', 'Mathe-Fachbüro',    45),
+      ('englisch', 'Englisch', '#eab308', '#fefce8', 'Englisch-Fachbüro', 45),
+      ('deutsch',  'Deutsch',  '#dc2626', '#fef2f2', 'Deutsch-Fachbüro',  45)
     ON CONFLICT (key) DO NOTHING;
+    -- Bestehende Installationen hatten default_ort noch leer (Seed lief bereits vor dieser
+    -- Änderung) - einmalig nachziehen, aber admin-editierte Werte nicht überschreiben.
+    UPDATE subjects SET default_ort='Mathe-Fachbüro'    WHERE key='mathe'    AND default_ort='';
+    UPDATE subjects SET default_ort='Englisch-Fachbüro' WHERE key='englisch' AND default_ort='';
+    UPDATE subjects SET default_ort='Deutsch-Fachbüro'  WHERE key='deutsch'  AND default_ort='';
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='subject_id') THEN
         ALTER TABLE talking_slots ADD COLUMN subject_id INTEGER REFERENCES subjects(id);
@@ -881,7 +895,7 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT
-        u.id, u.username, u.klasse, u.created_at, u.kurs,
+        u.id, u.username, u.klasse, u.created_at, u.kurs, u.aktiv,
         (SELECT json_object_agg(key, value)
          FROM progress WHERE user_id=u.id) AS all_progress,
         (SELECT json_build_object('key', key, 'updated_at', updated_at)
@@ -1141,7 +1155,7 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
     }
 
     const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes] = await Promise.all([
-      pool.query(`SELECT id, username, kurs, klasse FROM users WHERE role='student'`),
+      pool.query(`SELECT id, username, kurs, klasse FROM users WHERE role='student' AND aktiv=true`),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
       pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
       pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
@@ -1393,12 +1407,25 @@ app.post('/api/admin/set-kurs', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// ── Admin: Schüler:in passiv/aktiv setzen (verschwindet aus Übersichten/Ranglisten/
+// Klassenkameraden, bleibt aber in der Klassen-Übersicht sichtbar und reaktivierbar) ──
+app.post('/api/admin/set-aktiv', requireAdmin, async (req, res) => {
+  try {
+    const { userId, aktiv } = req.body;
+    if (typeof aktiv !== 'boolean') return res.status(400).json({ error: 'Ungültig' });
+    const u = await pool.query('SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role=$3', [userId, req.session.klasse, 'student']);
+    if (!u.rows.length) return res.status(403).json({ error: 'Nicht gefunden' });
+    await pool.query('UPDATE users SET aktiv=$1 WHERE id=$2', [aktiv, userId]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 // ── Mathe-Talks ───────────────────────────────────────────────────────────────
 // Schüler/geteilt
 app.get('/api/classmates', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, username FROM users WHERE role=$1 AND klasse=$2 AND id != $3 ORDER BY username',
+      'SELECT id, username FROM users WHERE role=$1 AND klasse=$2 AND id != $3 AND aktiv=true ORDER BY username',
       ['student', req.session.klasse, req.session.userId]
     );
     res.json(r.rows);
@@ -1888,8 +1915,11 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
 async function halbjahrOverview(klasse, onlyUid) {
   const uidFilter = onlyUid ? ' AND u.id = $2' : '';
   const params = onlyUid ? [klasse, onlyUid] : [klasse];
+  // Passive Schüler:innen nur aus der Admin-Gesamtübersicht ausblenden (onlyUid fehlt) - der
+  // Selbst-Aufruf einer einzelnen Person (/api/my-halbjahr) bleibt davon unberührt.
+  const aktivFilter = onlyUid ? '' : ' AND aktiv=true';
   const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
-    pool.query(`SELECT id, username FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    pool.query(`SELECT id, username FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
       SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
