@@ -463,7 +463,8 @@ textarea.form-input{
 .summary-bar-fill{height:100%;border-radius:99px;transition:width .4s;}
 .summary-pct{font-size:12px;font-weight:500;letter-spacing:.5px;color:var(--md-on-surface-variant);}
 
-/* ── Lerntheke Picker ────────────────────────────────────────────────────── */
+/* ── Start / Lerntheke Picker ────────────────────────────────────────────── */
+#view-home{padding:32px 20px;background:var(--md-background);}
 #view-picker{padding:32px 20px;background:var(--md-background);}
 .picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;max-width:960px;margin:0 auto;align-items:start;}
 .lt-card{
@@ -683,19 +684,20 @@ textarea.form-input{
   </div>
 
   <div class="tabs" id="app-tabs">
-    <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
+    <div class="tab active" id="tab-home" onclick="showHome()">🏠 Start</div>
     <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
-    <div class="tab active" id="tab-lerntheke" onclick="showPicker()">📚 Mathe-Lerntheken</div>
-    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
     <div class="tab" id="tab-talking-mathe" onclick="showSubjectTalking('mathe')">🗣️ Mathe-Talks</div>
     <div class="tab" id="tab-talking-englisch" onclick="showSubjectTalking('englisch')">🗣️ Englisch-Talks</div>
     <div class="tab" id="tab-talking-deutsch" onclick="showSubjectTalking('deutsch')">🗣️ Deutsch-Talks</div>
+    <div class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</div>
+    <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
+    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
     <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Klassen-Übersicht</div>
   </div>
 
   <div id="view-lerntheke" style="width:100%;">
     <div id="picker-back-bar">
-      <button class="back-btn" onclick="showPicker()">← Alle Mathe-Lerntheken</button>
+      <button class="back-btn" onclick="showLerntheken()">← Alle Mathe-Lerntheken</button>
       <span class="lt-name" id="picker-back-lt-name"></span>
     </div>
     <div id="lt-picker" style="display:none;padding:8px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-shrink:0;">
@@ -705,12 +707,20 @@ textarea.form-input{
     <iframe id="lerntheke-frame" src="" title="Mathe-Lerntheke" style="border:none;display:block;width:100%;flex:1;min-height:0;"></iframe>
   </div>
 
+  <div id="view-home" style="display:none;">
+    <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
+      <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">🏠 Übersicht</h2>
+      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Pokale und Mathe-Talks im Überblick.</p>
+      <div id="home-trophy-summary"></div>
+    </div>
+  </div>
+
   <div id="view-picker" style="display:none;">
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">Meine Mathe-Lerntheken</h2>
       <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Wähle aus, an welcher Mathe-Lerntheke du arbeiten möchtest.</p>
       <div class="picker-grid" id="picker-cards"></div>
-      <div id="picker-trophy-summary" style="margin-top:24px;"></div>
+      <div id="picker-locked-panel" style="margin-top:24px;"></div>
     </div>
   </div>
 
@@ -846,7 +856,7 @@ textarea.form-input{
       </div>
       <div id="cpw-msg"></div>
       <div style="display:flex;gap:10px;margin-top:16px;">
-        <button class="btn-cancel" id="cpw-cancel-btn" onclick="showView('lerntheke')">Abbrechen</button>
+        <button class="btn-cancel" id="cpw-cancel-btn" onclick="me.role==='admin'?showView('admin'):showHome()">Abbrechen</button>
         <button class="btn-act btn-blue" onclick="doChangePw()">Speichern</button>
       </div>
     </div>
@@ -936,10 +946,10 @@ textarea.form-input{
     <div class="form-group">
       <label class="form-label">Pokale</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🏆</button>
-        <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🏆</button>
-        <button class="lzk-pokal-btn" data-v="2" onclick="selectLzkPokal(2)">2 🏆</button>
-        <button class="lzk-pokal-btn" data-v="3" onclick="selectLzkPokal(3)">3 🏆</button>
+        <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🍀</button>
+        <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🍀</button>
+        <button class="lzk-pokal-btn" data-v="2" onclick="selectLzkPokal(2)">2 🍀</button>
+        <button class="lzk-pokal-btn" data-v="3" onclick="selectLzkPokal(3)">3 🍀</button>
       </div>
     </div>
     <div class="modal-actions">
@@ -1285,7 +1295,7 @@ async function setMyDefaultSubject(value) {
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
 let adminViewMode = 'groups'; // 'groups' | 'matrix'
-let accessData = {}; // filled in showPicker(); used globally for effectiveKurs
+let accessData = {}; // filled in loadPickerData(); used globally for effectiveKurs
 function effectiveKurs(ltKey) {
   return accessData['_kurs_' + ltKey] || accessData['_kursDefault'] || me?.kurs || 'E';
 }
@@ -1465,7 +1475,7 @@ function switchLerntheke(url) {
   localStorage.setItem('lastLerntheke', url);
 }
 
-async function showPicker() {
+async function loadPickerData() {
   if (!ltMeta.length) {
     try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
   }
@@ -1508,6 +1518,15 @@ async function showPicker() {
   });
   const unlockedMeta = sortedMeta.filter(lt => accessData[lt.key] === false);
   const lockedMeta   = sortedMeta.filter(lt => accessData[lt.key] !== false);
+  const lockedPanelHtml = lockedMeta.length > 0 ? `
+    <div class="trophy-panel">
+      <div class="trophy-panel-title">Aktuell nicht freigeschaltet</div>
+      <div style="display:flex;flex-direction:column;gap:7px;margin-top:4px;">
+        ${lockedMeta.map(lt =>
+          `<div class="lt-card-slim"><span class="lt-slim-lock">🔒</span><span class="lt-slim-name">${lt.title}</span></div>`
+        ).join('')}
+      </div>
+    </div>` : '';
 
   // Compute total trophies — only for unlocked lerntheken, respecting kurs
   // Getrennt nach Quelle (Lerntheken-Stationen / LZK / Mathe-Talks) für die Detailaufschlüsselung.
@@ -1537,7 +1556,7 @@ async function showPicker() {
   const totalMax = stationsMax + lzkMax + talkMax;
 
   // Footer: Meine Pokale + Ranglisten + gesperrte Lerntheken (alle in einer Zeile)
-  const trophySummary = document.getElementById('picker-trophy-summary');
+  const trophySummary = document.getElementById('home-trophy-summary');
   if (trophySummary) {
     const pct = totalMax ? Math.round(totalEarned / totalMax * 100) : 0;
     function tierColor(p) { return p>=75?'#7c3aed':p>=50?'#2563eb':p>=25?'#16a34a':'#9ca3af'; }
@@ -1565,16 +1584,6 @@ async function showPicker() {
       }).join('');
     }
 
-    const lockedPanelHtml = lockedMeta.length > 0 ? `
-      <div class="trophy-panel">
-        <div class="trophy-panel-title">Aktuell nicht freigeschaltet</div>
-        <div style="display:flex;flex-direction:column;gap:7px;margin-top:4px;">
-          ${lockedMeta.map(lt =>
-            `<div class="lt-card-slim"><span class="lt-slim-lock">🔒</span><span class="lt-slim-name">${lt.title}</span></div>`
-          ).join('')}
-        </div>
-      </div>` : '';
-
     trophySummary.innerHTML = `<div class="trophy-section">
       <div class="trophy-lb-col tsum-col">
         <div class="trophy-panel">
@@ -1586,12 +1595,12 @@ async function showPicker() {
           <div class="trophy-milestones">
             <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
           </div>
-          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🏆 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
+          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🍀 Alle Pokale gesammelt!':pct+' % aller möglichen Pokale'}</div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${[
               ['📚', 'Mathe-Lerntheken', stationsEarned, stationsMax],
               ['🎓', 'LZK', lzkEarned, lzkMax],
-              ['🗣️', 'Mathe-Talks', talkEarned, talkMax],
+              ...subjectsMeta.map(subj => ['🗣️', subj.name + '-Talks', talkingMineBySubject[subj.key]?.trophies?.earned || 0, talkingMineBySubject[subj.key]?.trophies?.max || 0]),
             ].map(([icon, label, earned, max]) => {
               const subPct = max ? Math.round(earned / max * 100) : 0;
               return `
@@ -1604,7 +1613,6 @@ async function showPicker() {
           </div>
         </div>
         ${subjectsMeta.map(subj => buildTalkingPickerSummaryHtml(talkingMineBySubject[subj.key] || { presenting: [], invitations: [] }, subj)).join('')}
-        ${lockedPanelHtml}
       </div>
       <div class="trophy-lb-col rank-col">
         <div class="trophy-panel">
@@ -1618,7 +1626,7 @@ async function showPicker() {
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Pokale gesamt</div>
           ${renderLb(lbRows,
-            s => '🏆 ' + s.pokale,
+            s => '🍀 ' + s.pokale,
             s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
           )}
         </div>
@@ -1653,7 +1661,7 @@ async function showPicker() {
       if (!lzk) return '';
       const pk = lzk.pokale || 0;
       earnedTrophies += pk; maxTrophies += 3;
-      const pokalStr = [1,2,3].map(i => `<span style="opacity:${i<=pk?1:.18}">🏆</span>`).join('');
+      const pokalStr = [1,2,3].map(i => `<span style="opacity:${i<=pk?1:.18}">🍀</span>`).join('');
       if (lzk.status === 'bestanden')
         return `<span class="gpill gpill-ok" style="gap:3px;">${typ}-LZK ✓ ${pokalStr}</span>`;
       if (lzk.status === 'nicht_bestanden')
@@ -1674,8 +1682,8 @@ async function showPicker() {
     if (aufbauLzkOk && abflugDone) tier = 4;
 
     const trophyStr = earnedTrophies > 0
-      ? `<span style="font-size:12px;font-weight:500;">🏆 ${earnedTrophies} / ${maxTrophies}</span>`
-      : `<span style="font-size:12px;color:#aaa;">🏆 0 / ${maxTrophies}</span>`;
+      ? `<span style="font-size:12px;font-weight:500;">🍀 ${earnedTrophies} / ${maxTrophies}</span>`
+      : `<span style="font-size:12px;color:#aaa;">🍀 0 / ${maxTrophies}</span>`;
 
     const badges = groupEntries.map(([g, st]) => {
       const cls = st.stationsOk ? 'gpill-ok' : st.done > 0 ? 'gpill-partial' : 'gpill-none';
@@ -1702,7 +1710,18 @@ async function showPicker() {
   }).join('');
 
   container.innerHTML = unlockedHtml;
+  const lockedPanelEl = document.getElementById('picker-locked-panel');
+  if (lockedPanelEl) lockedPanelEl.innerHTML = lockedPanelHtml;
+}
 
+async function showHome() {
+  await loadPickerData();
+  showView('home');
+}
+
+async function showLerntheken() {
+  await loadPickerData();
+  if (ltMeta.length <= 1) { await startLerntheke(ltMeta[0] ? ltMeta[0].url : null); return; }
   showView('picker');
 }
 
@@ -1829,15 +1848,18 @@ async function showApp() {
     const barRole = document.getElementById('bar-role');
     const tabAdmin = document.getElementById('tab-admin');
     const tabLerntheke = document.getElementById('tab-lerntheke');
+    const tabHome = document.getElementById('tab-home');
     if (barRole) barRole.style.display = '';
     if (tabAdmin) tabAdmin.style.display = '';
     const tabHalbjahr = document.getElementById('tab-halbjahr');
     if (tabHalbjahr) tabHalbjahr.style.display = '';
     const tabKlasse = document.getElementById('tab-klasse');
     if (tabKlasse) tabKlasse.style.display = '';
-    // Kein eigenständiger Lerntheke-Tab für Admins: die Vorschau einer Lerntheke
-    // läuft ausschließlich über den 👁-Button (viewStudent()) in der Lerntheken-Übersicht.
+    // Kein eigenständiger Lerntheke-/Start-Tab für Admins: die Vorschau einer Lerntheke
+    // läuft ausschließlich über den 👁-Button (viewStudent()) in der Lerntheken-Übersicht,
+    // und "Start" zeigt eigene Pokale/Talks, die Admins nicht haben.
     if (tabLerntheke) tabLerntheke.style.display = 'none';
+    if (tabHome) tabHome.style.display = 'none';
   }
 
   if (me.mustChangePassword) {
@@ -1857,11 +1879,9 @@ async function showApp() {
     if (!ltMeta.length) {
       try { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); } catch {}
     }
-    if (ltMeta.length > 1) {
-      await showPicker();
-    } else {
-      await startLerntheke(ltMeta[0] ? ltMeta[0].url : null);
-    }
+    // Landing page ist jetzt die Pokale-/Talks-Übersicht (unabhängig von der Lerntheken-Anzahl) -
+    // Lerntheken-Auswahl passiert nur noch über den eigenen "Mathe-Lerntheken"-Tab (showLerntheken()).
+    await showHome();
   }
 }
 
@@ -1949,13 +1969,13 @@ function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','picker','admin','talking','calendar','halbjahr','klasse','changepw'].forEach(id => {
+  ['lerntheke','home','picker','admin','talking','calendar','halbjahr','klasse','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr' || id === 'klasse') {
+    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr' || id === 'klasse') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -2455,7 +2475,7 @@ async function doChangePw() {
     if (tabs) tabs.style.display = '';
     setTimeout(() => showApp(), 1500);
   } else {
-    setTimeout(() => showView('lerntheke'), 1500);
+    setTimeout(() => (me.role === 'admin' ? showView('admin') : showHome()), 1500);
   }
 }
 
@@ -2540,7 +2560,7 @@ function lzkCellHtml(studentLzk, s, lt) {
     const e = entry || fallback;
     const d = e.datum ? new Date(e.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
     const pk = e.pokale || 0;
-    const pokalStr = e.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🏆</span>`).join('') : '';
+    const pokalStr = e.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🍀</span>`).join('') : '';
     const stCls = e.status==='bestanden'?'lzk-st-ok':e.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
     const stTxt = e.status==='bestanden'?'✓':e.status==='nicht_bestanden'?'✗':'⏳';
     const warning = fallback ? `<span title="Unter anderer Mathe-Lerntheke gespeichert – beim Bearbeiten wird korrigiert" style="color:#d97706;font-size:10px;">⚠</span>` : '';
@@ -2605,7 +2625,7 @@ function fmtTalkingDatum(d) {
   return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
 }
 function talkingPokalStr(pokale, max) {
-  return Array.from({ length: max }, (_, i) => `<span style="opacity:${i < pokale ? 1 : .18}">🏆</span>`).join('');
+  return Array.from({ length: max }, (_, i) => `<span style="opacity:${i < pokale ? 1 : .18}">🍀</span>`).join('');
 }
 // Gruppiert präsentierte/angenommene Sessions je Halbjahr, sortiert nach Datum
 // (1. präsentierte Session bzw. erste 2 angenommene Zuhör-Termine gelten als Pflicht).
@@ -3210,7 +3230,7 @@ function renderMyHalbjahr() {
   if (me && me.role === 'admin') { el.innerHTML = ''; return; }
   const hj = currentHalbjahrGuess();
   const b = (myHjData.byHalbjahr || {})[hj] || { talksPresented:0, talksListened:0, inputParticipated:0, lzk:[], stationsCompleted:0 };
-  const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🏆 ${escHtml(l.typ)}-LZK</span>`).join(' ');
+  const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🍀 ${escHtml(l.typ)}-LZK</span>`).join(' ');
   el.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
     <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">🎓 Mein Halbjahr ${escHtml(hj)}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -3281,7 +3301,7 @@ function renderHalbjahr() {
       if (nothing) nothingCount++;
       const lzkBestandenCount = isMathe ? (b.lzk||[]).filter(l => l.status==='bestanden').length : 0;
       const extraCols = isMathe ? `
-        <td>${lzkBestandenCount ? '🏆 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
+        <td>${lzkBestandenCount ? '🍀 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
         <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '';
       return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id})" title="Details anzeigen">
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
@@ -3291,7 +3311,7 @@ function renderHalbjahr() {
       </tr>`;
     }).join('');
 
-    const headCols = isMathe ? '<th>🏆 LZK</th><th>📚 Stationen</th>' : '';
+    const headCols = isMathe ? '<th>🍀 LZK</th><th>📚 Stationen</th>' : '';
     return `
       <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px;">
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
@@ -3318,9 +3338,9 @@ function openHjDetail(userId) {
   if (!s) return;
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
-  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🏆'.repeat(t.pokale):''}</span></div>`;
+  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🍀'.repeat(t.pokale):''}</span></div>`;
   const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
-  const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🏆 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🏆'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
+  const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🍀 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🍀'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
   const subjSections = orderedSubjects().map(subj => {
@@ -3336,7 +3356,7 @@ function openHjDetail(userId) {
       <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📘 Input-Teilnahmen (${sd.inputDetails.length})</div>
       ${list(sd.inputDetails, inputRow, 'Keine Input-Teilnahmen.')}
       ${isMathe ? `
-      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">🏆 LZK (${(b.lzk||[]).length})</div>
+      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">🍀 LZK (${(b.lzk||[]).length})</div>
       ${list(b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')}
       <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📚 Stationen (${b.stationsCompleted||0})</div>
       ${list(b.stationDetails, stationRow, 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.')}` : ''}`;
@@ -3389,7 +3409,7 @@ function renderTalkingStudent() {
 
   const trophyCard = `
     <div class="stat-card">
-      <div class="stat-lbl">🏆 Mathe-Talk-Pokale</div>
+      <div class="stat-lbl">🍀 Mathe-Talk-Pokale</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
   const progressCards = groupsFull.length ? groupsFull.map(g => {
@@ -3397,7 +3417,7 @@ function renderTalkingStudent() {
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(p, a);
     const hjTrophies = talkingMine.trophies?.byHalbjahr?.[g.halbjahr];
-    const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🏆 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
+    const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🍀 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
     return `
       <div class="stat-card tt-tier-${tier}" title="${TALK_TIER_TEXT[tier]}">
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
@@ -3983,7 +4003,7 @@ function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, 
   document.getElementById('trate-modal-status-no').textContent = type === 'presented' ? '✗ Nicht gehalten' : '✗ Nicht teilgenommen';
   document.getElementById('trate-modal-status').value = currentStatus || 'ausstehend';
   document.getElementById('trate-modal-pokale').innerHTML = Array.from({ length: maxPokale + 1 }, (_, v) =>
-    `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🏆</button>`
+    `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🍀</button>`
   ).join('');
   document.getElementById('trate-modal-emojis').innerHTML = TALKING_QUALITY_EMOJIS.map(e =>
     `<button class="lzk-pokal-btn ${e === currentEmoji ? 'active' : ''}" data-e="${e}" onclick="selectTalkingRateEmoji('${e}')" style="font-size:16px;">${e}</button>`
