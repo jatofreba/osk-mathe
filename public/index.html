@@ -83,7 +83,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .login-layout{
   display:flex;gap:24px;
   align-items:flex-start;justify-content:center;
-  flex-wrap:wrap;width:100%;max-width:900px;
+  flex-wrap:wrap;width:100%;max-width:1120px;
 }
 .login-card{
   background:var(--md-surface);
@@ -92,45 +92,65 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   width:100%;max-width:400px;
   box-shadow:var(--md-elevation-3);
 }
+.login-side{display:flex;flex-direction:column;gap:20px;flex:1 1 560px;max-width:660px;min-width:0;}
 /* Wochenübersicht neben dem Login - bewusst ohne Namen (öffentlich sichtbar). */
 .login-week{
   background:var(--md-surface);
   border-radius:28px;
-  padding:28px 26px;
-  flex:1 1 340px;max-width:440px;
+  padding:26px 24px;
   box-shadow:var(--md-elevation-3);
+  min-width:0;
 }
-.login-week-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.login-week-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .login-week-title{font-size:16px;font-weight:700;color:var(--md-on-surface);}
 .login-week-sub{font-size:12px;color:var(--md-on-surface-variant);}
-.lw-subject{margin-bottom:14px;}
-.lw-subject-name{
-  display:flex;align-items:center;gap:7px;
-  font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-  margin-bottom:6px;
+/* Stundenraster: Zeilen = Blöcke, Spalten = Mo-Fr. Schmale Viewports scrollen horizontal. */
+.lw-grid-wrap{overflow-x:auto;}
+.lw-grid{display:grid;grid-template-columns:auto repeat(5,minmax(92px,1fr));gap:5px;min-width:600px;}
+.lw-dayhead{
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+  font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  color:var(--md-on-surface-variant);padding:2px 0 4px;
 }
-.lw-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.lw-row{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:6px 10px;margin-bottom:4px;
-  border-radius:8px;border-left:3px solid var(--md-outline-variant);
-  background:var(--md-surface-container-low);
-  font-size:12.5px;
+.lw-dayhead span{font-weight:500;font-size:10px;letter-spacing:0;}
+.lw-dayhead.lw-today{color:var(--md-primary);}
+.lw-blockhead{
+  display:flex;flex-direction:column;justify-content:center;gap:1px;
+  padding-right:10px;white-space:nowrap;
+  font-size:11.5px;font-weight:700;color:var(--md-on-surface);
 }
-.lw-when{font-weight:700;white-space:nowrap;}
-.lw-where{color:var(--md-on-surface-variant);}
-.lw-tag{
-  margin-left:auto;flex-shrink:0;
-  font-size:10.5px;font-weight:700;letter-spacing:.3px;
-  padding:2px 8px;border-radius:99px;white-space:nowrap;
+.lw-blockhead span{font-weight:500;font-size:10px;color:var(--md-on-surface-variant);}
+.lw-cell{
+  min-height:46px;padding:4px;
+  background:var(--md-surface-container-low);border-radius:8px;
+  display:flex;flex-direction:column;gap:3px;
 }
-.lw-free{background:#dcfce7;color:#166534;}
-.lw-booked{background:#e5e7eb;color:#4b5563;}
+.lw-cell.lw-today{outline:1.5px solid var(--md-primary);outline-offset:-1.5px;}
+.lw-chip{
+  border-left:3px solid var(--md-outline-variant);border-radius:5px;
+  background:var(--md-surface);padding:3px 6px;
+  font-size:10.5px;line-height:1.3;
+}
+.lw-chip-time{font-weight:700;color:var(--md-on-surface);}
+.lw-chip-meta{color:var(--md-on-surface-variant);}
+.lw-chip.booked{opacity:.5;}
+.lw-chip-free{color:#166534;font-weight:700;}
 .lw-empty{font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
-@media (max-width:880px){
+.lw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:10.5px;color:var(--md-on-surface-variant);}
+.lw-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
+.lw-extra{margin-top:12px;padding-top:10px;border-top:1px solid var(--md-outline-variant);}
+.lw-extra-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--md-on-surface-variant);margin-bottom:5px;}
+/* Taskcards-Einbettung (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
+.login-taskcards{
+  background:var(--md-surface);border-radius:28px;
+  padding:20px;box-shadow:var(--md-elevation-3);
+}
+.login-taskcards iframe{width:100%;height:420px;border:none;border-radius:12px;display:block;}
+@media (max-width:1120px){
   #login-screen{align-items:flex-start;}
-  .login-layout{flex-direction:column;align-items:center;max-width:400px;}
-  .login-week{max-width:400px;width:100%;}
+  .login-layout{flex-direction:column;align-items:center;max-width:660px;}
+  .login-card{max-width:660px;}
+  .login-side{width:100%;flex:1 1 auto;}
 }
 .login-logo{font-size:36px;margin-bottom:12px;}
 .login-title{
@@ -716,12 +736,20 @@ textarea.form-input{
       <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
       <div class="login-error" id="login-error"></div>
     </div>
-    <div class="login-week" id="login-week">
-      <div class="login-week-head">
-        <span class="login-week-title">📅 Diese Woche</span>
-        <span class="login-week-sub" id="login-week-range"></span>
+    <div class="login-side">
+      <div class="login-week" id="login-week">
+        <div class="login-week-head">
+          <span class="login-week-title">📅 Diese Woche</span>
+          <span class="login-week-sub" id="login-week-range"></span>
+        </div>
+        <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
       </div>
-      <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
+      <div class="login-taskcards" id="login-taskcards" style="display:none;">
+        <div class="login-week-head" style="margin-bottom:12px;">
+          <span class="login-week-title">🗂️ Material</span>
+        </div>
+        <iframe id="login-taskcards-frame" src="" title="Taskcards" loading="lazy"></iframe>
+      </div>
     </div>
   </div>
 </div>
@@ -1489,18 +1517,70 @@ function safeJSON(s) {
 
 // ══ Wochenübersicht auf der Login-Seite ══════════════════════════════════════
 // Quelle: /api/public/week (ohne Auth). Zeigt bewusst KEINE Namen - nur wann welcher
-// Termin je Fach stattfindet und ob er noch frei ist. Lerngruppe ist serverseitig
-// vorerst fest gesetzt; ein Selector kann hier später den Fetch parametrisieren.
+// Termin stattfindet und ob er noch frei ist. Lerngruppe ist serverseitig vorerst
+// fest gesetzt; ein Selector kann hier später den Fetch parametrisieren.
+//
+// Taskcards: sobald die Einbettungs-URL des Boards hier eingetragen ist, erscheint
+// das Material-Panel unter der Wochenübersicht. Leer lassen = Panel bleibt aus.
+// Voraussetzung: das Board muss in Taskcards öffentlich/einbettbar freigegeben sein.
+const TASKCARDS_EMBED_URL = '';
+
 const LW_DAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const LW_DAY_NAMES = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
+// Stundenraster der Schule. Ein Termin landet in dem Block, in dessen Zeitfenster
+// seine Startzeit fällt; alles andere (Randzeiten, Wochenende, Termine ohne Uhrzeit)
+// wandert in die "Weitere Termine"-Liste unter dem Raster, statt still zu verschwinden.
+const LW_BLOCKS = [
+  { label: '1. Block',    von: '08:45', bis: '10:15' },
+  { label: '2. Block',    von: '10:45', bis: '12:15' },
+  { label: 'Mittagsband', von: '12:30', bis: '13:15' },
+];
+
+function lwMin(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+}
+function lwDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function lwFmtDay(datum) {
   const d = new Date(datum + 'T00:00:00');
   if (isNaN(d)) return datum || '';
   return `${LW_DAYS[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
 }
+// Montag der laufenden Woche - passend zu Postgres date_trunc('week') im Endpunkt.
+function lwMonday() {
+  const d = new Date(); d.setHours(0,0,0,0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+
+function lwChip(s) {
+  const color = s.subjectColor || '#94a3b8';
+  const typLabel = s.typ === 'input' ? '📘 Input' : '🎤 Talk';
+  const status = s.booked
+    ? '<span>gebucht</span>'
+    : '<span class="lw-chip-free">frei</span>';
+  const titleParts = [s.subjectName, s.typ === 'input' ? 'Input' : 'Talk', s.uhrzeit, s.ort, s.booked ? 'gebucht' : 'frei'];
+  return `<div class="lw-chip${s.booked ? ' booked' : ''}" style="border-left-color:${color};"
+    title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
+    <div class="lw-chip-time">${escHtml(s.uhrzeit || '')} · ${typLabel}</div>
+    <div class="lw-chip-meta">${escHtml(s.subjectName || '')} · ${status}</div>
+  </div>`;
+}
 
 async function loadLoginWeek() {
   const body = document.getElementById('login-week-body');
   if (!body) return;
+
+  const tcUrl = (TASKCARDS_EMBED_URL || '').trim();
+  if (tcUrl) {
+    const panel = document.getElementById('login-taskcards');
+    const frame = document.getElementById('login-taskcards-frame');
+    if (frame) frame.src = tcUrl;
+    if (panel) panel.style.display = '';
+  }
+
   let data;
   try {
     const r = await fetch('/api/public/week');
@@ -1510,64 +1590,71 @@ async function loadLoginWeek() {
     body.innerHTML = '<div class="lw-empty">Wochenübersicht gerade nicht verfügbar.</div>';
     return;
   }
+
+  const monday = lwMonday();
+  const dayDates = LW_DAY_NAMES.map((_, i) => {
+    const d = new Date(monday); d.setDate(monday.getDate() + i); return d;
+  });
+  const todayStr = lwDateStr(new Date());
+
   const rangeEl = document.getElementById('login-week-range');
-  if (rangeEl) rangeEl.textContent = data.klasse ? 'Lerngruppe ' + data.klasse : '';
+  if (rangeEl) {
+    const fmt = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
+    rangeEl.textContent = `${data.klasse ? 'Lerngruppe ' + data.klasse + ' · ' : ''}${fmt(dayDates[0])}–${fmt(dayDates[4])}`;
+  }
 
   const slots = data.slots || [];
   const deadlines = data.deadlines || [];
-  if (!slots.length && !deadlines.length) {
-    body.innerHTML = '<div class="lw-empty">Diese Woche sind keine Termine eingetragen.</div>';
-    return;
-  }
 
-  // Nach Fach gruppieren (Reihenfolge = subjects.id, also Mathe/Englisch/Deutsch).
-  const bySubject = new Map();
+  // Termine in [Block][Wochentag] einsortieren; Reste sammeln.
+  const cells = LW_BLOCKS.map(() => LW_DAY_NAMES.map(() => []));
+  const extras = [];
   slots.forEach(s => {
-    const key = s.subjectKey || 'unbekannt';
-    if (!bySubject.has(key)) bySubject.set(key, {
-      id: s.subjectId ?? 999,
-      name: s.subjectName || 'Ohne Fach',
-      color: s.subjectColor || '#94a3b8',
-      rows: [],
-    });
-    bySubject.get(key).rows.push(s);
+    const dayIdx = dayDates.findIndex(d => lwDateStr(d) === s.datum);
+    const start = lwMin(s.uhrzeit);
+    const blockIdx = start === null ? -1 : LW_BLOCKS.findIndex(b => start >= lwMin(b.von) && start < lwMin(b.bis));
+    if (dayIdx === -1 || blockIdx === -1) extras.push(s);
+    else cells[blockIdx][dayIdx].push(s);
   });
+  cells.forEach(row => row.forEach(list => list.sort((a, b) => (lwMin(a.uhrzeit) ?? 0) - (lwMin(b.uhrzeit) ?? 0))));
 
-  const subjectHtml = [...bySubject.values()]
-    .sort((a, b) => a.id - b.id)
-    .map(grp => {
-      const rows = grp.rows.map(s => {
-        const typLabel = s.typ === 'input' ? '📘 Input' : '🎤 Talk';
-        const uhrzeit = s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : '';
-        const ort = s.ort ? ' · ' + escHtml(s.ort) : '';
-        const tag = s.booked
-          ? '<span class="lw-tag lw-booked">gebucht</span>'
-          : '<span class="lw-tag lw-free">frei</span>';
-        return `<div class="lw-row" style="border-left-color:${grp.color};">
-          <span class="lw-when">${lwFmtDay(s.datum)}${uhrzeit}</span>
-          <span class="lw-where">${typLabel}${ort}</span>
-          ${tag}
-        </div>`;
-      }).join('');
-      return `<div class="lw-subject">
-        <div class="lw-subject-name" style="color:${grp.color};">
-          <span class="lw-dot" style="background:${grp.color};"></span>${escHtml(grp.name)}
-        </div>
-        ${rows}
-      </div>`;
+  const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) => {
+    const isToday = lwDateStr(dayDates[i]) === todayStr;
+    return `<div class="lw-dayhead${isToday ? ' lw-today' : ''}">${name}
+      <span>${String(dayDates[i].getDate()).padStart(2,'0')}.${String(dayDates[i].getMonth()+1).padStart(2,'0')}.</span>
+    </div>`;
+  }).join('');
+
+  const blockRows = LW_BLOCKS.map((b, bi) => {
+    const head = `<div class="lw-blockhead">${b.label}<span>${b.von}–${b.bis}</span></div>`;
+    const cellsHtml = LW_DAY_NAMES.map((_, di) => {
+      const isToday = lwDateStr(dayDates[di]) === todayStr;
+      return `<div class="lw-cell${isToday ? ' lw-today' : ''}">${cells[bi][di].map(lwChip).join('')}</div>`;
     }).join('');
+    return head + cellsHtml;
+  }).join('');
 
-  const deadlineHtml = deadlines.length ? `<div class="lw-subject">
-    <div class="lw-subject-name" style="color:var(--md-on-surface-variant);">
-      <span class="lw-dot" style="background:var(--md-on-surface-variant);"></span>Termine
-    </div>
-    ${deadlines.map(d => `<div class="lw-row">
-      <span class="lw-when">${lwFmtDay(d.datum)}</span>
-      <span class="lw-where">📌 ${escHtml(d.titel || '')}</span>
+  const extrasHtml = (extras.length || deadlines.length) ? `<div class="lw-extra">
+    <div class="lw-extra-title">Weitere Termine</div>
+    ${extras.map(s => `<div class="lw-chip" style="border-left-color:${s.subjectColor || '#94a3b8'};margin-bottom:3px;">
+      <div class="lw-chip-time">${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''} · ${s.typ === 'input' ? '📘 Input' : '🎤 Talk'}</div>
+      <div class="lw-chip-meta">${escHtml(s.subjectName || '')} · ${s.booked ? 'gebucht' : '<span class="lw-chip-free">frei</span>'}</div>
+    </div>`).join('')}
+    ${deadlines.map(d => `<div class="lw-chip" style="margin-bottom:3px;">
+      <div class="lw-chip-time">${lwFmtDay(d.datum)} · 📌 Termin</div>
+      <div class="lw-chip-meta">${escHtml(d.titel || '')}</div>
     </div>`).join('')}
   </div>` : '';
 
-  body.innerHTML = subjectHtml + deadlineHtml;
+  const emptyHint = (!slots.length && !deadlines.length)
+    ? '<div class="lw-empty" style="margin-top:10px;">Diese Woche sind keine Termine eingetragen.</div>' : '';
+
+  body.innerHTML = `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
+    <div class="lw-legend">
+      <span><i style="background:#dcfce7;"></i>frei buchbar</span>
+      <span><i style="background:var(--md-outline-variant);"></i>schon gebucht</span>
+    </div>
+    ${extrasHtml}${emptyHint}`;
 }
 
 // ══ Login ════════════════════════════════════════════════════════════════════
