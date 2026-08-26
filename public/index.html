@@ -689,11 +689,11 @@ textarea.form-input{
   <div class="tabs" id="app-tabs">
     <div class="tab active" id="tab-home" onclick="showHome()">🏠 Start</div>
     <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
+    <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
     <div class="tab" id="tab-talking-mathe" onclick="showSubjectTalking('mathe')">🗣️ Mathe-Talks</div>
     <div class="tab" id="tab-talking-englisch" onclick="showSubjectTalking('englisch')">🗣️ Englisch-Talks</div>
     <div class="tab" id="tab-talking-deutsch" onclick="showSubjectTalking('deutsch')">🗣️ Deutsch-Talks</div>
     <div class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</div>
-    <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
     <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
     <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Klassen-Übersicht</div>
   </div>
@@ -1884,7 +1884,9 @@ async function showApp() {
   if (me.role === 'admin') {
     // Lädt eine Lerntheke unsichtbar ins iframe vor, damit viewStudent() sofort Inhalt hat
     await loadLerntheken();
-    showView('admin');
+    // Landing page für Admins ist der Kalender (Tagesgeschäft: Termine, Deadlines) statt der
+    // Lerntheken-Übersicht - die bleibt über den eigenen Tab weiterhin einen Klick entfernt.
+    showView('calendar');
   } else {
     // Load metadata first so picker/switcher knows what's available
     if (!ltMeta.length) {
@@ -2435,7 +2437,7 @@ function renderKlasseTable() {
     tbody.innerHTML = `<tr><td colspan="3" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
     return;
   }
-  const sorted = [...allStudents].sort((a, b) => a.username.localeCompare(b.username));
+  const sorted = [...allStudents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   tbody.innerHTML = sorted.map(s => {
     const globalKurs = s.kurs || 'E';
     return `<tr data-name="${s.username}">
