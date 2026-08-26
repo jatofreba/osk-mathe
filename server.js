@@ -2014,6 +2014,43 @@ app.get('/api/my-halbjahr', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// ── Öffentliche Wochenübersicht (Login-Seite, OHNE Auth) ──────────────────────
+// Zeigt die Termine der laufenden Woche (Mo-So) je Fach: wann, wo, welcher Typ und
+// ob noch frei oder schon gebucht. BEWUSST OHNE NAMEN - die Seite ist ohne Login
+// erreichbar, deshalb werden weder Presenter noch Eingeladene ausgegeben (nur der
+// Boolean `booked`). Beim Erweitern dieser Route unbedingt namensfrei halten.
+// Lerngruppe vorerst fest; ein Selector auf der Login-Seite kann diese Konstante
+// später durch einen validierten Query-Parameter ersetzen.
+const PUBLIC_WEEK_KLASSE = 'M3M4';
+app.get('/api/public/week', async (req, res) => {
+  try {
+    const [slots, deadlines] = await Promise.all([
+      pool.query(`
+        SELECT s.id, s.typ, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort,
+               sub.id AS "subjectId", sub.key AS "subjectKey", sub.name AS "subjectName",
+               sub.color AS "subjectColor",
+               (ts.id IS NOT NULL) AS booked
+        FROM talking_slots s
+        LEFT JOIN subjects sub ON sub.id = s.subject_id
+        LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+        WHERE s.klasse = $1
+          AND s.datum >= date_trunc('week', CURRENT_DATE)::date
+          AND s.datum <  date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
+        ORDER BY s.datum, s.uhrzeit
+      `, [PUBLIC_WEEK_KLASSE]),
+      pool.query(`
+        SELECT id, to_char(datum,'YYYY-MM-DD') AS datum, titel
+        FROM math_deadlines
+        WHERE klasse = $1
+          AND datum >= date_trunc('week', CURRENT_DATE)::date
+          AND datum <  date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
+        ORDER BY datum
+      `, [PUBLIC_WEEK_KLASSE]),
+    ]);
+    res.json({ klasse: PUBLIC_WEEK_KLASSE, slots: slots.rows, deadlines: deadlines.rows });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 // ── Catch-all ─────────────────────────────────────────────────────────────────
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
