@@ -1155,6 +1155,10 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Input-Termin freischalten</div>
     <div class="form-group">
+      <label class="form-label">Fach</label>
+      <select class="form-input" id="islot-subject" onchange="applyInputSlotSubjectDefaults()"></select>
+    </div>
+    <div class="form-group">
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
         <input type="checkbox" id="islot-recurring" onchange="toggleInputRecurring()"> Wöchentlich wiederkehrend
       </label>
@@ -1194,6 +1198,43 @@ textarea.form-input{
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-deadline')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="submitDeadline()">Eintragen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Input-Termin - Schüler:innen zuweisen (Admin, bei Erstellung + nachträglich) ══ -->
+<div class="overlay" id="modal-input-assign">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title" id="iassign-title">Schüler:innen zuweisen</div>
+    <div id="iassign-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:10px;"></div>
+    <div class="form-group" id="iassign-thema-group">
+      <label class="form-label">Thema</label>
+      <input class="form-input" id="iassign-thema" placeholder="z.B. Übungsaufgaben besprechen">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Wen zuweisen?</label>
+      <div id="iassign-classmates" style="max-height:220px;overflow-y:auto;"></div>
+    </div>
+    <div id="iassign-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-input-assign')">Schließen</button>
+      <button class="btn-act btn-blue" onclick="submitInputAssign()">Zuweisen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Fach-Einstellungen (Admin) ═══════════════════════════════════════ -->
+<div class="overlay" id="modal-subject-settings">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title" id="ssettings-title">Fach-Einstellungen</div>
+    <div class="form-group"><label class="form-label">Standard-Ort</label><input class="form-input" id="ssettings-ort" placeholder="z.B. Mathe-Fachbüro"></div>
+    <div class="form-group"><label class="form-label">Standard-Dauer (Minuten)</label><input class="form-input" id="ssettings-dauer" type="number" min="5" max="600"></div>
+    <div class="form-group"><label class="form-label">Pflicht: X mal präsentieren</label><input class="form-input" id="ssettings-pp" type="number" min="0" max="10"></div>
+    <div class="form-group"><label class="form-label">Pflicht: Y mal zuhören</label><input class="form-input" id="ssettings-pz" type="number" min="0" max="10"></div>
+    <div id="ssettings-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-subject-settings')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="submitSubjectSettings()">Speichern</button>
     </div>
   </div>
 </div>
@@ -2748,7 +2789,7 @@ async function loadCalendar() {
   try {
     const [cr, cmr, hr] = await Promise.all([
       fetch('/api/calendar'),
-      (me && me.role !== 'admin') ? fetch('/api/classmates') : Promise.resolve(null),
+      fetch('/api/classmates'), // funktioniert auch für Admins (nur role='student'+klasse-Filter) - Roster fürs Input-Zuweisen
       (me && me.role !== 'admin') ? fetch('/api/my-halbjahr') : Promise.resolve(null)
     ]);
     calData = cr.ok ? await cr.json() : { slots: [], deadlines: [] };
@@ -2858,6 +2899,11 @@ function renderCalDetail() {
       actions = it.booked
         ? `<button class="btn-act btn-red" onclick="calCancelSession(${it.session_id})">Stornieren</button>`
         : `<button class="btn-act btn-red" onclick="calDeleteSlot(${it.id})">Löschen</button>`;
+      // Admin darf bei Input-Terminen direkt Schüler:innen zuweisen - bei Erstellung (noch offen)
+      // UND nachträglich (schon gebucht, weitere Personen dazu).
+      if (it.typ === 'input') {
+        actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere zuweisen' : '+ zuweisen'}</button> ` + actions;
+      }
     }
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -2931,11 +2977,23 @@ function toggleInputRecurring() {
   document.getElementById('islot-recurring-fields').style.display = c ? 'block' : 'none';
   document.getElementById('islot-single-fields').style.display = c ? 'none' : 'block';
 }
+function applyInputSlotSubjectDefaults() {
+  const sel = document.getElementById('islot-subject');
+  if (!sel || !sel.value) return;
+  const subj = subjectById(parseInt(sel.value));
+  document.getElementById('islot-dauer').value = String(subj.defaultDauer || 45);
+  document.getElementById('islot-ort').value = subj.defaultOrt || '';
+}
 function openInputSlotModal(presetDate) {
+  const subjSel = document.getElementById('islot-subject');
+  if (subjSel) {
+    subjSel.innerHTML = subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+    // Vorbelegung: zuletzt besuchter Fach-Talks-Tab (activeSubject) als sinnvoller Hinweis, sonst erstes Fach.
+    const hintSubj = subjectByKey(activeSubject);
+    subjSel.value = String(hintSubj.id || (subjectsMeta[0] && subjectsMeta[0].id) || '');
+  }
   document.getElementById('islot-datum').value = presetDate || calSelected || calDateStr(new Date());
   document.getElementById('islot-uhrzeit').value = '';
-  document.getElementById('islot-dauer').value = '45';
-  document.getElementById('islot-ort').value = '';
   document.getElementById('islot-recurring').checked = false;
   document.getElementById('islot-recurring-fields').style.display = 'none';
   document.getElementById('islot-single-fields').style.display = 'block';
@@ -2943,10 +3001,12 @@ function openInputSlotModal(presetDate) {
   document.getElementById('islot-bis').value = '';
   document.getElementById('islot-weekday').value = '1';
   document.getElementById('islot-error').style.display = 'none';
+  applyInputSlotSubjectDefaults();
   openModal('modal-input-slot');
 }
 async function submitInputSlot() {
   const errEl = document.getElementById('islot-error'); errEl.style.display = 'none';
+  const subjectId = parseInt(document.getElementById('islot-subject').value) || null;
   const uhrzeit = document.getElementById('islot-uhrzeit').value.trim();
   const dauer = parseInt(document.getElementById('islot-dauer').value) || 45;
   const ort = document.getElementById('islot-ort').value.trim();
@@ -2957,11 +3017,11 @@ async function submitInputSlot() {
     const von = document.getElementById('islot-von').value;
     const bis = document.getElementById('islot-bis').value;
     if (!von || !bis) { errEl.textContent = 'Bitte Zeitraum (Von/Bis) angeben.'; errEl.style.display = 'block'; return; }
-    body = { typ:'input', uhrzeit, dauer, ort, recurring: { weekday, von, bis } };
+    body = { typ:'input', uhrzeit, dauer, ort, subjectId, recurring: { weekday, von, bis } };
   } else {
     const datum = document.getElementById('islot-datum').value;
     if (!datum) { errEl.textContent = 'Bitte Datum angeben.'; errEl.style.display = 'block'; return; }
-    body = { typ:'input', datum, uhrzeit, dauer, ort };
+    body = { typ:'input', datum, uhrzeit, dauer, ort, subjectId };
   }
   const r = await fetch('/api/admin/talking-slots', {
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -2971,6 +3031,95 @@ async function submitInputSlot() {
   if (!r.ok) { errEl.textContent = d.error || 'Fehler.'; errEl.style.display = 'block'; return; }
   closeModal('modal-input-slot');
   loadCalendar();
+}
+
+// Admin: bei einem Input-Termin direkt Schüler:innen zuweisen (bei Erstellung, wenn noch offen -
+// ODER nachträglich, wenn schon gebucht). Terminkonflikte werden serverseitig geprüft; wer wegen
+// Konflikt nicht zugewiesen wurde, kommt mit Grund zurück (assignStudentsToSlot(), siehe server.js).
+let _iassignSlot = null;
+function openInputAssignModal(slotId) {
+  const slot = (calData.slots || []).find(s => s.id === slotId);
+  if (!slot) return;
+  _iassignSlot = slot;
+  const subj = subjectById(slot.subjectId);
+  document.getElementById('iassign-title').textContent = `📘 ${subj.name}-Input: Schüler:innen zuweisen`;
+  document.getElementById('iassign-info').textContent =
+    `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}`;
+  const themaGroup = document.getElementById('iassign-thema-group');
+  if (slot.booked) {
+    themaGroup.style.display = 'none';
+  } else {
+    themaGroup.style.display = '';
+    document.getElementById('iassign-thema').value = '';
+  }
+  const already = new Set((slot.invitees || []).map(iv => iv.username));
+  const available = (calClassmates || []).filter(c => !already.has(c.username));
+  document.getElementById('iassign-classmates').innerHTML = available.map(c =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+      <input type="checkbox" value="${c.id}" class="iassign-cm-cb"> ${escHtml(c.username)}
+    </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Alle Schüler:innen bereits zugewiesen.</span>';
+  document.getElementById('iassign-error').style.display = 'none';
+  openModal('modal-input-assign');
+}
+
+async function submitInputAssign() {
+  const errEl = document.getElementById('iassign-error');
+  errEl.style.display = 'none';
+  const studentIds = [...document.querySelectorAll('.iassign-cm-cb:checked')].map(cb => parseInt(cb.value));
+  if (!studentIds.length) { errEl.textContent = 'Bitte mindestens eine Person auswählen.'; errEl.style.display = 'block'; return; }
+
+  let r;
+  if (_iassignSlot.booked) {
+    r = await fetch(`/api/admin/talking-sessions/${_iassignSlot.session_id}/assign`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ studentIds })
+    });
+  } else {
+    const thema = document.getElementById('iassign-thema').value.trim();
+    if (!thema) { errEl.textContent = 'Bitte Thema angeben.'; errEl.style.display = 'block'; return; }
+    r = await fetch('/api/admin/talking-sessions', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ slotId: _iassignSlot.id, thema, studentIds })
+    });
+  }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Zuweisen.'; errEl.style.display = 'block'; return; }
+
+  if (d.conflicts && d.conflicts.length) {
+    alert('⚠️ Nicht zugewiesen wegen Terminkonflikt:\n' + d.conflicts.map(c => `· ${c.username}: ${c.reason}`).join('\n'));
+  }
+  closeModal('modal-input-assign');
+  loadCalendar();
+}
+
+// Admin: Fach-Einstellungen (Standard-Ort/-Dauer/Pflicht-Mindestanzahl) - wirkt auf den aktuell
+// offenen Fach-Talks-Tab (activeSubject). Name/Farbe/Key sind fest, nicht editierbar.
+function openSubjectSettingsModal() {
+  const subj = subjectByKey(activeSubject);
+  document.getElementById('ssettings-title').textContent = `⚙ ${subj.name}-Einstellungen`;
+  document.getElementById('ssettings-ort').value = subj.defaultOrt || '';
+  document.getElementById('ssettings-dauer').value = subj.defaultDauer || 45;
+  document.getElementById('ssettings-pp').value = subj.pflichtPraesentieren != null ? subj.pflichtPraesentieren : 1;
+  document.getElementById('ssettings-pz').value = subj.pflichtZuhoeren != null ? subj.pflichtZuhoeren : 2;
+  document.getElementById('ssettings-error').style.display = 'none';
+  openModal('modal-subject-settings');
+}
+
+async function submitSubjectSettings() {
+  const errEl = document.getElementById('ssettings-error');
+  errEl.style.display = 'none';
+  const subj = subjectByKey(activeSubject);
+  if (!subj.id) { errEl.textContent = 'Fach nicht gefunden.'; errEl.style.display = 'block'; return; }
+  const defaultOrt = document.getElementById('ssettings-ort').value.trim();
+  const defaultDauer = parseInt(document.getElementById('ssettings-dauer').value) || 45;
+  const pflichtPraesentieren = parseInt(document.getElementById('ssettings-pp').value);
+  const pflichtZuhoeren = parseInt(document.getElementById('ssettings-pz').value);
+  const r = await fetch(`/api/admin/subjects/${subj.id}`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Speichern.'; errEl.style.display = 'block'; return; }
+  Object.assign(subj, { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren });
+  closeModal('modal-subject-settings');
 }
 
 // Admin: Deadline eintragen/löschen
@@ -3697,6 +3846,7 @@ function renderTalkingAdmin() {
     <div class="admin-top" style="margin-top:24px;">
       <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
       <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
+      <button class="btn-act btn-outline" onclick="openSubjectSettingsModal()">⚙ Fach-Einstellungen</button>
       <button class="btn-act btn-outline" onclick="loadTalkingAdmin()">↺ Laden</button>
     </div>
     ${talkingAdminSlots.length === 0 ? '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Termine angelegt.</div>' : `
