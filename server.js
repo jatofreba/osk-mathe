@@ -2081,6 +2081,15 @@ app.get('/api/public/week', async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// ── Öffentliche Tagesseiten (/montag … /freitag) ──────────────────────────────
+// Eigenständige, einbettbare Ansicht eines Wochentags der laufenden Woche - gedacht
+// als Webseiten-Karte in Taskcards. Muss VOR dem Catch-all stehen, sonst würde dort
+// index.html (die Login-Seite) ausgeliefert. Daten kommen clientseitig aus
+// /api/public/week, also ohne Login und ohne Namen.
+app.get(['/montag','/dienstag','/mittwoch','/donnerstag','/freitag'], (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'tag.html'))
+);
+
 // ── Catch-all ─────────────────────────────────────────────────────────────────
 app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))

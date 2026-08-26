@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tagesübersicht</title>
+<style>
+  *{box-sizing:border-box;}
+  body{
+    margin:0;padding:16px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:#fff;color:#1c1b1f;
+    -webkit-font-smoothing:antialiased;
+  }
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .day{font-size:20px;font-weight:800;}
+  .day span{font-weight:500;color:#5f6368;font-size:15px;margin-left:6px;}
+  .meta{font-size:12px;color:#5f6368;}
+  .block{margin-bottom:12px;}
+  .block-head{
+    display:flex;align-items:baseline;gap:8px;
+    font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+    color:#5f6368;margin-bottom:6px;
+  }
+  .block-head span{font-weight:500;letter-spacing:0;text-transform:none;}
+  .slots{display:flex;flex-direction:column;gap:5px;}
+  /* Farbe codiert ausschliesslich das Fach - unabhaengig davon, ob der Termin
+     frei oder schon gebucht ist. Der Status steht als Text an jedem Termin. */
+  .chip{
+    border-left:4px solid #cac4d0;border-radius:7px;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);
+    padding:8px 11px;font-size:13px;line-height:1.4;
+  }
+  .chip-time{font-weight:700;}
+  .chip-type{font-weight:500;color:#5f6368;}
+  .chip-meta{color:#5f6368;font-size:12px;}
+  .chip-subj{font-weight:600;}
+  .none{font-size:12.5px;color:#8b8b8b;font-style:italic;padding:3px 0 3px 2px;}
+  .extra{margin-top:14px;padding-top:10px;border-top:1px solid #e3e0e6;}
+  .extra-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#5f6368;margin-bottom:6px;}
+  .legend{margin-top:14px;font-size:11px;color:#8b8b8b;}
+  .err{font-size:13px;color:#b3261e;}
+  @media (prefers-color-scheme:dark){
+    body{background:#141218;color:#e6e0e9;}
+    .day span,.meta,.block-head,.chip-type,.chip-meta{color:#cac4d0;}
+    .chip{background:#211f26;box-shadow:none;}
+    .extra{border-top-color:#49454f;}
+    .none,.legend{color:#938f99;}
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="day" id="day-name">…</div>
+  <div class="meta" id="day-meta"></div>
+</div>
+<div id="body"><div class="none">Lade…</div></div>
+
+<script>
+// Eigenstaendige Tagesansicht zum Einbetten (z.B. als Taskcards-Webseiten-Karte).
+// Zieht die Daten bei jedem Aufruf frisch aus /api/public/week - zeigt also immer
+// die laufende Woche. BEWUSST OHNE NAMEN, da ohne Login erreichbar.
+var DAYS = ['montag','dienstag','mittwoch','donnerstag','freitag'];
+var DAY_LABELS = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
+var BLOCKS = [
+  { label: '1. Block',    von: '08:45', bis: '10:15' },
+  { label: '2. Block',    von: '10:45', bis: '12:15' },
+  { label: 'Mittagsband', von: '12:30', bis: '13:15' }
+];
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function toMin(hhmm) {
+  var m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  return m ? parseInt(m[1],10) * 60 + parseInt(m[2],10) : null;
+}
+function pad(n) { return String(n).padStart(2,'0'); }
+function dateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
+function fmtDate(d) { return pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.' + d.getFullYear(); }
+// Montag der laufenden Woche - passend zu Postgres date_trunc('week') im Endpunkt.
+function monday() {
+  var d = new Date(); d.setHours(0,0,0,0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+function dayIndex() {
+  var seg = (location.pathname.split('/').filter(Boolean).pop() || '').toLowerCase();
+  var i = DAYS.indexOf(seg);
+  return i === -1 ? 0 : i;
+}
+
+function chip(s) {
+  var color = s.subjectColor || '#94a3b8';
+  var typ = s.typ === 'input' ? 'Input' : 'Talk';
+  var ort = s.ort ? ' · ' + esc(s.ort) : '';
+  return '<div class="chip" style="border-left-color:' + esc(color) + ';">' +
+    '<div class="chip-time">' + esc(s.uhrzeit || '') + ' <span class="chip-type">' + typ + '</span></div>' +
+    '<div class="chip-meta"><span class="chip-subj" style="color:' + esc(color) + ';">' +
+      esc(s.subjectName || '') + '</span>' + ort + (s.booked ? ' · gebucht' : ' · frei') + '</div>' +
+  '</div>';
+}
+
+function render(data) {
+  var idx = dayIndex();
+  var d = monday(); d.setDate(d.getDate() + idx);
+  var ds = dateStr(d);
+
+  document.getElementById('day-name').innerHTML =
+    DAY_LABELS[idx] + '<span>' + pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.</span>';
+  document.getElementById('day-meta').textContent = data.klasse ? 'Lerngruppe ' + data.klasse : '';
+  document.title = DAY_LABELS[idx] + ' ' + fmtDate(d);
+
+  var slots = (data.slots || []).filter(function(s) { return s.datum === ds; });
+  var deadlines = (data.deadlines || []).filter(function(x) { return x.datum === ds; });
+
+  var used = [];
+  var html = BLOCKS.map(function(b) {
+    var inBlock = slots.filter(function(s) {
+      var t = toMin(s.uhrzeit);
+      if (t === null) return false;
+      var hit = t >= toMin(b.von) && t < toMin(b.bis);
+      if (hit) used.push(s);
+      return hit;
+    }).sort(function(a, c) { return (toMin(a.uhrzeit)||0) - (toMin(c.uhrzeit)||0); });
+    return '<div class="block">' +
+      '<div class="block-head">' + b.label + ' <span>' + b.von + '–' + b.bis + '</span></div>' +
+      '<div class="slots">' +
+        (inBlock.length ? inBlock.map(chip).join('') : '<div class="none">nichts geplant</div>') +
+      '</div></div>';
+  }).join('');
+
+  // Termine ausserhalb der drei Bloecke gehen nicht verloren, sondern werden angehaengt.
+  var rest = slots.filter(function(s) { return used.indexOf(s) === -1; });
+  if (rest.length || deadlines.length) {
+    html += '<div class="extra"><div class="extra-title">Weitere Termine</div><div class="slots">' +
+      rest.map(chip).join('') +
+      deadlines.map(function(x) {
+        return '<div class="chip"><div class="chip-time">Termin</div>' +
+          '<div class="chip-meta">' + esc(x.titel || '') + '</div></div>';
+      }).join('') +
+    '</div></div>';
+  }
+
+  html += '<div class="legend">Farbe = Fach</div>';
+  document.getElementById('body').innerHTML = html;
+}
+
+function load() {
+  fetch('/api/public/week', { cache: 'no-store' })
+    .then(function(r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+    .then(render)
+    .catch(function() {
+      document.getElementById('body').innerHTML =
+        '<div class="err">Übersicht gerade nicht erreichbar.</div>';
+    });
+}
+
+load();
+// Karte bleibt in Taskcards oft lange offen - alle 5 Minuten nachladen, damit
+// neu angelegte oder gebuchte Termine ohne manuelles Neuladen erscheinen.
+setInterval(load, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>
