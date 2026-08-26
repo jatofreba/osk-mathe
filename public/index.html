@@ -248,8 +248,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .cal-wrap{max-width:940px;margin:0 auto;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
 .cal-title{font-size:20px;font-weight:800;display:flex;align-items:center;gap:8px;color:#1d4ed8;}
-.cal-nav{display:flex;align-items:center;gap:8px;}
-.cal-month{font-size:15px;font-weight:700;min-width:150px;text-align:center;}
+.cal-nav{display:flex;align-items:center;gap:10px;}
+.cal-nav-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--md-outline-variant);background:var(--md-surface);font-size:18px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s;}
+.cal-nav-btn:hover{background:#eff6ff;border-color:#93c5fd;}
+.cal-month{font-size:18px;font-weight:800;min-width:160px;text-align:center;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
 .cal-dow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--md-on-surface-variant);text-align:center;padding:4px 0;}
 .cal-cell{min-height:80px;border:1px solid var(--md-outline-variant);border-radius:8px;padding:4px 5px;background:var(--md-surface);display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:background .12s;overflow:hidden;}
@@ -796,9 +798,9 @@ textarea.form-input{
       <div class="cal-head">
         <div class="cal-title">📅 Mein Kalender</div>
         <div class="cal-nav">
-          <button class="btn-sm" onclick="calShiftMonth(-1)" title="Vorheriger Monat">‹</button>
+          <button class="cal-nav-btn" onclick="calShiftMonth(-1)" title="Vorheriger Monat">‹</button>
           <div class="cal-month" id="cal-month-label"></div>
-          <button class="btn-sm" onclick="calShiftMonth(1)" title="Nächster Monat">›</button>
+          <button class="cal-nav-btn" onclick="calShiftMonth(1)" title="Nächster Monat">›</button>
           <button class="btn-sm" onclick="calGoToday()">Heute</button>
         </div>
       </div>
@@ -3314,7 +3316,7 @@ function renderHalbjahr() {
       const extraCols = isMathe ? `
         <td>${lzkBestandenCount ? '🍀 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
         <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '';
-      return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id})" title="Details anzeigen">
+      return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id},'${subj.key}')" title="Details anzeigen">
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
         <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
         <td>${sd.talksListened ? '👂 ' + sd.talksListened + sub(lastRole(sd.talkDetails,'zugehört')) : dash}</td>
@@ -3342,9 +3344,10 @@ function renderHalbjahr() {
     ${sections}`;
 }
 
-// Detailansicht einer Schüler:in für das gewählte Halbjahr (Klick auf Tabellenzeile) - je Fach ein
-// eigener Abschnitt; LZK/Stationen nur im Mathe-Abschnitt (fach-unabhängig, siehe renderHalbjahr()).
-function openHjDetail(userId) {
+// Detailansicht einer Schüler:in für das gewählte Halbjahr (Klick auf Tabellenzeile) - zeigt nur
+// das Fach, dessen Zeile angeklickt wurde (subjectKey); LZK/Stationen nur im Mathe-Abschnitt
+// (fach-unabhängig, siehe renderHalbjahr()).
+function openHjDetail(userId, subjectKey) {
   const s = hjData.students.find(x => x.id === userId);
   if (!s) return;
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
@@ -3354,7 +3357,8 @@ function openHjDetail(userId) {
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🍀 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🍀'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
-  const subjSections = orderedSubjects().map(subj => {
+  const subjList = subjectKey ? orderedSubjects().filter(x => x.key === subjectKey) : orderedSubjects();
+  const subjSections = subjList.map(subj => {
     const sd = (b.bySubject || {})[subj.key] || { talkDetails: [], inputDetails: [] };
     const isMathe = subj.key === 'mathe';
     return `
@@ -3373,7 +3377,8 @@ function openHjDetail(userId) {
       ${list(b.stationDetails, stationRow, 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.')}` : ''}`;
   }).join('');
 
-  document.getElementById('hjd-name').textContent = `🎓 ${s.username} · Halbjahr ${hjSelected}`;
+  const subjMeta = subjectKey ? subjectByKey(subjectKey) : null;
+  document.getElementById('hjd-name').textContent = `🎓 ${s.username}${subjMeta ? ' · ' + subjMeta.name : ''} · Halbjahr ${hjSelected}`;
   document.getElementById('hjd-content').innerHTML = `
     ${b.lastActivity ? `<div style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:10px;">Zuletzt aktiv: ${hjFmtDate(b.lastActivity)}</div>` : ''}
     ${subjSections}
