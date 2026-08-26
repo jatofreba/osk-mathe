@@ -253,6 +253,22 @@ async function initDB() {
         ALTER TABLE users ADD COLUMN default_subject_id INTEGER REFERENCES subjects(id);
       END IF;
     END $$;
+    -- Kurs (E/G) pro Fach (2026-08-26): Mathe/Englisch/Deutsch bekommen je Schüler:in einen
+    -- eigenen Kurs-Wert. Mathe bleibt zusätzlich in users.kurs gespiegelt, da die bestehende
+    -- Lerntheken-Default-Logik (Aufbau-Gruppe etc.) ausschließlich von dort liest - siehe
+    -- /api/access, /api/admin/students u.a. Englisch/Deutsch haben aktuell keine Lerntheken,
+    -- der Kurs-Wert wird dort nur gespeichert (Grundlage für spätere Differenzierung).
+    CREATE TABLE IF NOT EXISTS user_subject_kurs (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+      kurs       VARCHAR(1) NOT NULL DEFAULT 'E',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, subject_id)
+    );
+    INSERT INTO user_subject_kurs (user_id, subject_id, kurs)
+      SELECT u.id, (SELECT id FROM subjects WHERE key='mathe'), u.kurs
+      FROM users u WHERE u.role='student'
+      ON CONFLICT (user_id, subject_id) DO NOTHING;
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -879,7 +895,10 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
          FROM lzk WHERE user_id=u.id) AS lzk,
         (SELECT json_agg(json_build_object('lerntheke',lerntheke,'gesperrt',gesperrt,'kurs',kurs))
          FROM lerntheke_access WHERE user_id=u.id) AS access,
-        (SELECT lerntheke FROM active_lerntheke WHERE user_id=u.id) AS active_lerntheke
+        (SELECT lerntheke FROM active_lerntheke WHERE user_id=u.id) AS active_lerntheke,
+        (SELECT json_object_agg(s.key, usk.kurs)
+         FROM user_subject_kurs usk JOIN subjects s ON s.id=usk.subject_id
+         WHERE usk.user_id=u.id) AS subject_kurs
       FROM users u
       WHERE u.role='student' AND u.klasse=$1
       ORDER BY u.username
@@ -1340,10 +1359,10 @@ app.get('/api/access', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// ── Admin: Kurs setzen (global oder pro Lerntheke) ────────────────────────────
+// ── Admin: Kurs setzen (global/pro Fach oder pro Lerntheke) ────────────────────
 app.post('/api/admin/set-kurs', requireAdmin, async (req, res) => {
   try {
-    const { userId, kurs, lerntheke } = req.body;
+    const { userId, kurs, lerntheke, subjectId } = req.body;
     if (!['E','G'].includes(kurs)) return res.status(400).json({ error: 'Ungültig' });
     const u = await pool.query('SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role=$3', [userId, req.session.klasse, 'student']);
     if (!u.rows.length) return res.status(403).json({ error: 'Nicht gefunden' });
@@ -1354,7 +1373,21 @@ app.post('/api/admin/set-kurs', requireAdmin, async (req, res) => {
         ON CONFLICT (user_id, lerntheke) DO UPDATE SET kurs=$3, updated_at=NOW()
       `, [userId, lerntheke, kurs]);
     } else {
-      await pool.query('UPDATE users SET kurs=$1 WHERE id=$2', [kurs, userId]);
+      const subjRes = subjectId
+        ? await pool.query('SELECT id, key FROM subjects WHERE id=$1', [subjectId])
+        : await pool.query(`SELECT id, key FROM subjects WHERE key='mathe'`);
+      const subj = subjRes.rows[0];
+      if (!subj) return res.status(400).json({ error: 'Unbekanntes Fach' });
+      await pool.query(`
+        INSERT INTO user_subject_kurs (user_id, subject_id, kurs)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, subject_id) DO UPDATE SET kurs=$3, updated_at=NOW()
+      `, [userId, subj.id, kurs]);
+      if (subj.key === 'mathe') {
+        // users.kurs bleibt gespiegelt - bestehende Mathe-Lerntheken-Logik (Aufbau-Filter etc.)
+        // liest ausschließlich von dort und muss dafür nicht umgebaut werden.
+        await pool.query('UPDATE users SET kurs=$1 WHERE id=$2', [kurs, userId]);
+      }
     }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }

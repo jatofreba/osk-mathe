@@ -770,7 +770,7 @@ textarea.form-input{
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Name</th><th>Kurs</th><th></th></tr></thead>
+        <thead><tr id="klasse-thead-row"><th>Name</th><th>Kurs</th><th></th></tr></thead>
         <tbody id="klasse-tbl"></tbody>
       </table>
     </div>
@@ -2433,20 +2433,25 @@ async function loadKlasse() {
 function renderKlasseTable() {
   const tbody = document.getElementById('klasse-tbl');
   if (!tbody) return;
+  const thead = document.getElementById('klasse-thead-row');
+  if (thead) thead.innerHTML = '<th>Name</th>' + subjectsMeta.map(s => `<th>${escHtml(s.name)}</th>`).join('') + '<th></th>';
   if (!allStudents.length) {
-    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${subjectsMeta.length + 2}" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
     return;
   }
   const sorted = [...allStudents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   tbody.innerHTML = sorted.map(s => {
-    const globalKurs = s.kurs || 'E';
+    const subjCols = subjectsMeta.map(subj => {
+      const kurs = (subj.key === 'mathe') ? (s.kurs || 'E') : ((s.subject_kurs && s.subject_kurs[subj.key]) || 'E');
+      return `<td>
+        <button class="kurs-btn ${kurs === 'G' ? 'kurs-g' : 'kurs-e'}"
+          title="${escHtml(subj.name)}-Kurs – klicken zum Wechseln"
+          onclick="setKurs(event,${s.id},'${kurs === 'G' ? 'E' : 'G'}',this,${subj.id})">${kurs}</button>
+      </td>`;
+    }).join('');
     return `<tr data-name="${s.username}">
       <td style="font-weight:600;">${s.username}</td>
-      <td>
-        <button class="kurs-btn ${globalKurs === 'G' ? 'kurs-g' : 'kurs-e'}"
-          title="Globaler Kurs – klicken zum Wechseln"
-          onclick="setKurs(event,${s.id},'${globalKurs === 'G' ? 'E' : 'G'}',this)">${globalKurs}-Kurs</button>
-      </td>
+      ${subjCols}
       <td>
         <div class="action-btns">
           <button class="btn-icon" onclick="openReset(${s.id},'${s.username}')">🔑</button>
@@ -2507,18 +2512,22 @@ async function setKorrektur(userId, gruppe, status, lerntheke, event) {
 // ── Active Lerntheke (Student) ────────────────────────────────────────────────
 
 // ── Kurs-Buttons ──────────────────────────────────────────────────────────────
-async function setKurs(e, userId, newKurs, btn) {
+async function setKurs(e, userId, newKurs, btn, subjectId) {
   e.stopPropagation();
   const r = await fetch('/api/admin/set-kurs', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ userId, kurs: newKurs })
+    body: JSON.stringify({ userId, kurs: newKurs, subjectId })
   });
   if (!r.ok) return;
   const s = allStudents.find(st => st.id === userId);
-  if (s) s.kurs = newKurs;
-  btn.textContent = newKurs + '-Kurs';
+  if (s) {
+    const subj = subjectId ? subjectById(subjectId) : subjectByKey('mathe');
+    if (!subjectId || (subj && subj.key === 'mathe')) s.kurs = newKurs;
+    if (subj) { s.subject_kurs = s.subject_kurs || {}; s.subject_kurs[subj.key] = newKurs; }
+  }
+  btn.textContent = subjectId ? newKurs : (newKurs + '-Kurs');
   btn.className = `kurs-btn ${newKurs==='G'?'kurs-g':'kurs-e'}`;
-  btn.onclick = e2 => setKurs(e2, userId, newKurs==='G'?'E':'G', btn);
+  btn.onclick = e2 => setKurs(e2, userId, newKurs==='G'?'E':'G', btn, subjectId);
 }
 
 async function setKursLt(e, userId, ltKey, newKurs, btn, globalKurs) {
