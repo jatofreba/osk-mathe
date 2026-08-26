@@ -246,6 +246,13 @@ async function initDB() {
     UPDATE talking_slots SET subject_id=(SELECT id FROM subjects WHERE key='mathe') WHERE subject_id IS NULL;
     -- Admin-erstellte Input-Sessions ohne festen "Presenter" (nur zugewiesene Teilnehmer:innen) - siehe [[project_talking_sessions]].
     ALTER TABLE talking_sessions ALTER COLUMN presenter_id DROP NOT NULL;
+    -- Persönliche Fach-Präferenz je Admin (2026-08-26): das gewählte Fach steht in Übersichten immer
+    -- zuerst (z.B. Halbjahr-Übersicht) - NULL = keine Präferenz, natürliche Fach-Reihenfolge.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='default_subject_id') THEN
+        ALTER TABLE users ADD COLUMN default_subject_id INTEGER REFERENCES subjects(id);
+      END IF;
+    END $$;
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -506,7 +513,7 @@ app.post('/api/login', async (req, res) => {
       userId: user.id, username: user.username,
       klasse: user.klasse, role: user.role
     });
-    res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password });
+    res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password, defaultSubjectId: user.default_subject_id });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -516,12 +523,26 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', async (req, res) => {
   if (!req.session.userId) return res.json({ loggedIn: false });
-  const kr = await pool.query('SELECT kurs FROM users WHERE id=$1', [req.session.userId]).catch(() => ({ rows: [] }));
+  const kr = await pool.query('SELECT kurs, default_subject_id AS "defaultSubjectId" FROM users WHERE id=$1', [req.session.userId]).catch(() => ({ rows: [] }));
   res.json({
     loggedIn: true, userId: req.session.userId,
     username: req.session.username, klasse: req.session.klasse, role: req.session.role,
-    kurs: kr.rows[0]?.kurs || 'E'
+    kurs: kr.rows[0]?.kurs || 'E',
+    defaultSubjectId: kr.rows[0]?.defaultSubjectId ?? null
   });
+});
+
+// Admin wählt ihr/sein "Standard-Fach" - steht danach in Übersichten (Halbjahr-Übersicht etc.) zuerst.
+app.post('/api/set-default-subject', requireAdmin, async (req, res) => {
+  try {
+    const { subjectId } = req.body;
+    if (subjectId != null) {
+      const check = await pool.query('SELECT id FROM subjects WHERE id=$1', [subjectId]);
+      if (!check.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
+    }
+    await pool.query('UPDATE users SET default_subject_id=$1 WHERE id=$2', [subjectId ?? null, req.session.userId]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
 app.post('/api/change-password', requireLogin, async (req, res) => {

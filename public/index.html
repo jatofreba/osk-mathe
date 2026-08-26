@@ -819,6 +819,8 @@ textarea.form-input{
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <label style="font-size:13px;font-weight:600;">Halbjahr:</label>
           <select class="form-input" id="hj-select" style="width:auto;" onchange="renderHalbjahr()"></select>
+          <label style="font-size:13px;font-weight:600;">Mein Fach zuerst:</label>
+          <select class="form-input" id="hj-default-subject" style="width:auto;" onchange="setMyDefaultSubject(this.value)"></select>
           <button class="btn-act btn-outline" onclick="loadHalbjahr()">↺ Laden</button>
         </div>
       </div>
@@ -1216,6 +1218,28 @@ async function loadSubjectsMeta() {
 }
 function subjectByKey(key) { return subjectsMeta.find(s => s.key === key) || { key, name: key, color: '#2563eb', colorBg: '#eff6ff', defaultOrt: '', defaultDauer: 45 }; }
 function subjectById(id) { return subjectsMeta.find(s => s.id === id) || subjectByKey('mathe'); }
+// Fächer-Liste mit dem persönlichen Default-Fach der Admin-Person zuerst (me.defaultSubjectId,
+// über setMyDefaultSubject() gewählt) - Rest bleibt in der natürlichen Reihenfolge dahinter.
+function orderedSubjects() {
+  const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
+  if (!me || me.defaultSubjectId == null) return list;
+  const idx = list.findIndex(s => s.id === me.defaultSubjectId);
+  if (idx <= 0) return list;
+  const copy = list.slice();
+  const [preferred] = copy.splice(idx, 1);
+  copy.unshift(preferred);
+  return copy;
+}
+async function setMyDefaultSubject(value) {
+  const subjectId = value ? parseInt(value) : null;
+  try {
+    await fetch('/api/set-default-subject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subjectId })
+    });
+  } catch {}
+  if (me) me.defaultSubjectId = subjectId;
+  renderHalbjahr();
+}
 
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
 let ltMeta = [];
@@ -3068,6 +3092,11 @@ async function loadHalbjahr() {
     if (!hjSelected || !hjData.halbjahre.includes(hjSelected)) hjSelected = hjData.halbjahre[0] || null;
     if (hjSelected) sel.value = hjSelected;
   }
+  const defSel = document.getElementById('hj-default-subject');
+  if (defSel) {
+    defSel.innerHTML = '<option value="">– keine Präferenz –</option>' + subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+    defSel.value = (me && me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
+  }
   renderHalbjahr();
 }
 
@@ -3093,7 +3122,7 @@ function renderHalbjahr() {
   const isSubjNothing = (sd, isMathe, b) => !sd.talksPresented && !sd.talksListened && !sd.inputParticipated
     && !(isMathe && (b.stationsCompleted || (b.lzk||[]).filter(l=>l.status==='bestanden').length));
 
-  const sections = (subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')]).map(subj => {
+  const sections = orderedSubjects().map(subj => {
     const isMathe = subj.key === 'mathe';
     let nothingCount = 0;
     const rows = hjData.students.map(s => {
@@ -3145,7 +3174,7 @@ function openHjDetail(userId) {
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🏆 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🏆'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
-  const subjSections = (subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')]).map(subj => {
+  const subjSections = orderedSubjects().map(subj => {
     const sd = (b.bySubject || {})[subj.key] || { talkDetails: [], inputDetails: [] };
     const isMathe = subj.key === 'mathe';
     return `
