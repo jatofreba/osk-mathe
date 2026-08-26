@@ -2086,9 +2086,37 @@ app.get('/api/public/week', async (req, res) => {
 // als Webseiten-Karte in Taskcards. Muss VOR dem Catch-all stehen, sonst würde dort
 // index.html (die Login-Seite) ausgeliefert. Daten kommen clientseitig aus
 // /api/public/week, also ohne Login und ohne Namen.
-app.get(['/montag','/dienstag','/mittwoch','/donnerstag','/freitag'], (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'tag.html'))
-);
+// Titel/Beschreibung werden hier serverseitig eingesetzt: Link-Vorschauen (Taskcards,
+// Messenger, ...) rendern kein JavaScript, sonst zeigten alle fünf Tage denselben
+// generischen Titel. tag.html wird dafür einmal gelesen und im Speicher gehalten.
+const TAG_LABELS = {
+  montag: 'Montag', dienstag: 'Dienstag', mittwoch: 'Mittwoch',
+  donnerstag: 'Donnerstag', freitag: 'Freitag',
+};
+let tagHtmlCache = null;
+const escAttr = (s) => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+app.get(['/montag','/dienstag','/mittwoch','/donnerstag','/freitag'], (req, res) => {
+  try {
+    if (!tagHtmlCache) tagHtmlCache = fs.readFileSync(path.join(__dirname, 'public', 'tag.html'), 'utf8');
+    const key = req.path.replace(/^\//, '').toLowerCase();
+    const label = TAG_LABELS[key] || 'Tagesübersicht';
+    const titel = `${label} · Lerngruppe ${PUBLIC_WEEK_KLASSE}`;
+    const beschreibung = `Talks und Input am ${label} der laufenden Woche – mit freien und schon gebuchten Terminen.`;
+    // Host stammt aus dem Request-Header, deshalb wie alle Werte escaped.
+    const url = `${req.protocol}://${req.get('host') || ''}${req.path}`;
+    res.type('html').send(
+      tagHtmlCache
+        .split('__TITEL__').join(escAttr(titel))
+        .split('__BESCHREIBUNG__').join(escAttr(beschreibung))
+        .split('__URL__').join(escAttr(url))
+    );
+  } catch(e) {
+    res.status(500).send('Tagesübersicht gerade nicht verfügbar.');
+  }
+});
 
 // ── Catch-all ─────────────────────────────────────────────────────────────────
 app.get('*', (req, res) =>
