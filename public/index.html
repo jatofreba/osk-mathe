@@ -80,12 +80,57 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   min-height:100vh;padding:24px;
   background:var(--md-background);
 }
+.login-layout{
+  display:flex;gap:24px;
+  align-items:flex-start;justify-content:center;
+  flex-wrap:wrap;width:100%;max-width:900px;
+}
 .login-card{
   background:var(--md-surface);
   border-radius:28px;
   padding:44px 40px;
   width:100%;max-width:400px;
   box-shadow:var(--md-elevation-3);
+}
+/* Wochenübersicht neben dem Login - bewusst ohne Namen (öffentlich sichtbar). */
+.login-week{
+  background:var(--md-surface);
+  border-radius:28px;
+  padding:28px 26px;
+  flex:1 1 340px;max-width:440px;
+  box-shadow:var(--md-elevation-3);
+}
+.login-week-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.login-week-title{font-size:16px;font-weight:700;color:var(--md-on-surface);}
+.login-week-sub{font-size:12px;color:var(--md-on-surface-variant);}
+.lw-subject{margin-bottom:14px;}
+.lw-subject-name{
+  display:flex;align-items:center;gap:7px;
+  font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  margin-bottom:6px;
+}
+.lw-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.lw-row{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 10px;margin-bottom:4px;
+  border-radius:8px;border-left:3px solid var(--md-outline-variant);
+  background:var(--md-surface-container-low);
+  font-size:12.5px;
+}
+.lw-when{font-weight:700;white-space:nowrap;}
+.lw-where{color:var(--md-on-surface-variant);}
+.lw-tag{
+  margin-left:auto;flex-shrink:0;
+  font-size:10.5px;font-weight:700;letter-spacing:.3px;
+  padding:2px 8px;border-radius:99px;white-space:nowrap;
+}
+.lw-free{background:#dcfce7;color:#166534;}
+.lw-booked{background:#e5e7eb;color:#4b5563;}
+.lw-empty{font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
+@media (max-width:880px){
+  #login-screen{align-items:flex-start;}
+  .login-layout{flex-direction:column;align-items:center;max-width:400px;}
+  .login-week{max-width:400px;width:100%;}
 }
 .login-logo{font-size:36px;margin-bottom:12px;}
 .login-title{
@@ -655,20 +700,29 @@ textarea.form-input{
 
 <!-- ══ LOGIN ══════════════════════════════════════════════════════════════════ -->
 <div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">📐</div>
-    <div class="login-title"><strong>O</strong>rganisiert <strong>S</strong>elbst <strong>K</strong>nobeln</div>
-    <div class="login-sub">Mittelstufe · Melde dich an um loszulegen</div>
-    <div class="form-group">
-      <label class="form-label" for="inp-user">Benutzername</label>
-      <input class="form-input" id="inp-user" autocomplete="username" placeholder="z.B. anna.mueller">
+  <div class="login-layout">
+    <div class="login-card">
+      <div class="login-logo">📐</div>
+      <div class="login-title"><strong>O</strong>rganisiert <strong>S</strong>elbst <strong>K</strong>nobeln</div>
+      <div class="login-sub">Mittelstufe · Melde dich an um loszulegen</div>
+      <div class="form-group">
+        <label class="form-label" for="inp-user">Benutzername</label>
+        <input class="form-input" id="inp-user" autocomplete="username" placeholder="z.B. anna.mueller">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="inp-pass">Passwort</label>
+        <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="••••••">
+      </div>
+      <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
+      <div class="login-error" id="login-error"></div>
     </div>
-    <div class="form-group">
-      <label class="form-label" for="inp-pass">Passwort</label>
-      <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="••••••">
+    <div class="login-week" id="login-week">
+      <div class="login-week-head">
+        <span class="login-week-title">📅 Diese Woche</span>
+        <span class="login-week-sub" id="login-week-range"></span>
+      </div>
+      <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
     </div>
-    <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
-    <div class="login-error" id="login-error"></div>
   </div>
 </div>
 
@@ -1424,12 +1478,97 @@ function safeJSON(s) {
 
 // ══ Session check on load ════════════════════════════════════════════════════
 (async () => {
+  let loggedIn = false;
   try {
     const r = await fetch('/api/me');
     const d = await r.json();
-    if (d.loggedIn) { me = d; showApp(); }
+    if (d.loggedIn) { loggedIn = true; me = d; showApp(); }
   } catch {}
+  if (!loggedIn) loadLoginWeek();
 })();
+
+// ══ Wochenübersicht auf der Login-Seite ══════════════════════════════════════
+// Quelle: /api/public/week (ohne Auth). Zeigt bewusst KEINE Namen - nur wann welcher
+// Termin je Fach stattfindet und ob er noch frei ist. Lerngruppe ist serverseitig
+// vorerst fest gesetzt; ein Selector kann hier später den Fetch parametrisieren.
+const LW_DAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+function lwFmtDay(datum) {
+  const d = new Date(datum + 'T00:00:00');
+  if (isNaN(d)) return datum || '';
+  return `${LW_DAYS[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
+}
+
+async function loadLoginWeek() {
+  const body = document.getElementById('login-week-body');
+  if (!body) return;
+  let data;
+  try {
+    const r = await fetch('/api/public/week');
+    if (!r.ok) throw new Error('http ' + r.status);
+    data = await r.json();
+  } catch {
+    body.innerHTML = '<div class="lw-empty">Wochenübersicht gerade nicht verfügbar.</div>';
+    return;
+  }
+  const rangeEl = document.getElementById('login-week-range');
+  if (rangeEl) rangeEl.textContent = data.klasse ? 'Lerngruppe ' + data.klasse : '';
+
+  const slots = data.slots || [];
+  const deadlines = data.deadlines || [];
+  if (!slots.length && !deadlines.length) {
+    body.innerHTML = '<div class="lw-empty">Diese Woche sind keine Termine eingetragen.</div>';
+    return;
+  }
+
+  // Nach Fach gruppieren (Reihenfolge = subjects.id, also Mathe/Englisch/Deutsch).
+  const bySubject = new Map();
+  slots.forEach(s => {
+    const key = s.subjectKey || 'unbekannt';
+    if (!bySubject.has(key)) bySubject.set(key, {
+      id: s.subjectId ?? 999,
+      name: s.subjectName || 'Ohne Fach',
+      color: s.subjectColor || '#94a3b8',
+      rows: [],
+    });
+    bySubject.get(key).rows.push(s);
+  });
+
+  const subjectHtml = [...bySubject.values()]
+    .sort((a, b) => a.id - b.id)
+    .map(grp => {
+      const rows = grp.rows.map(s => {
+        const typLabel = s.typ === 'input' ? '📘 Input' : '🎤 Talk';
+        const uhrzeit = s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : '';
+        const ort = s.ort ? ' · ' + escHtml(s.ort) : '';
+        const tag = s.booked
+          ? '<span class="lw-tag lw-booked">gebucht</span>'
+          : '<span class="lw-tag lw-free">frei</span>';
+        return `<div class="lw-row" style="border-left-color:${grp.color};">
+          <span class="lw-when">${lwFmtDay(s.datum)}${uhrzeit}</span>
+          <span class="lw-where">${typLabel}${ort}</span>
+          ${tag}
+        </div>`;
+      }).join('');
+      return `<div class="lw-subject">
+        <div class="lw-subject-name" style="color:${grp.color};">
+          <span class="lw-dot" style="background:${grp.color};"></span>${escHtml(grp.name)}
+        </div>
+        ${rows}
+      </div>`;
+    }).join('');
+
+  const deadlineHtml = deadlines.length ? `<div class="lw-subject">
+    <div class="lw-subject-name" style="color:var(--md-on-surface-variant);">
+      <span class="lw-dot" style="background:var(--md-on-surface-variant);"></span>Termine
+    </div>
+    ${deadlines.map(d => `<div class="lw-row">
+      <span class="lw-when">${lwFmtDay(d.datum)}</span>
+      <span class="lw-where">📌 ${escHtml(d.titel || '')}</span>
+    </div>`).join('')}
+  </div>` : '';
+
+  body.innerHTML = subjectHtml + deadlineHtml;
+}
 
 // ══ Login ════════════════════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
