@@ -139,6 +139,13 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-chip-type{color:var(--md-on-surface-variant);font-weight:500;}
 .lw-chip-subj{font-weight:600;}
 .lw-chip-meta{color:var(--md-on-surface-variant);}
+/* Piktogramme (Mikrofon = Talk, Buch = Input): erben per currentColor die Fach-Farbe,
+   anders als Emoji, die sich nicht einfärben lassen. */
+.lw-ico{
+  width:11px;height:11px;vertical-align:-1px;margin-right:2px;
+  fill:none;stroke:currentColor;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round;
+}
 .lw-empty{font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
 .lw-legend{margin-top:12px;font-size:10.5px;color:var(--md-on-surface-variant);}
 .lw-extra{margin-top:12px;padding-top:10px;border-top:1px solid var(--md-outline-variant);}
@@ -751,7 +758,7 @@ textarea.form-input{
       </div>
       <div class="login-week" id="login-week">
         <div class="login-week-head">
-          <span class="login-week-title">📅 Diese Woche</span>
+          <span class="login-week-title">📅 Fachbüro-Angebote</span>
           <span class="login-week-sub" id="login-week-range"></span>
         </div>
         <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
@@ -1568,13 +1575,22 @@ function lwMonday() {
   return d;
 }
 
+// Mikrofon = Talk, Buch = Input. Bewusst als SVG statt Emoji, damit die Symbole
+// die Fach-Farbe annehmen können (Emoji haben feste Eigenfarben).
+function lwIcon(typ) {
+  const inner = typ === 'input'
+    ? '<rect x="3" y="2.5" width="10" height="11" rx="1.5"/><line x1="6" y1="2.5" x2="6" y2="13.5"/>'
+    : '<rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4.5 8a3.5 3.5 0 0 0 7 0"/><line x1="8" y1="11.5" x2="8" y2="14"/>';
+  return `<svg class="lw-ico" viewBox="0 0 16 16" aria-hidden="true">${inner}</svg>`;
+}
+
 function lwChip(s) {
   const color = s.subjectColor || '#94a3b8';
   const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? 'schon gebucht' : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time">${escHtml(s.uhrzeit || '')} <span class="lw-chip-type">${typLabel}</span></div>
+    <div class="lw-chip-time"><span style="color:${color};">${lwIcon(s.typ)}</span>${escHtml(s.uhrzeit || '')} <span class="lw-chip-type">${typLabel}</span></div>
     <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${color};">${escHtml(s.subjectName || '')}</span> · ${s.booked ? 'gebucht' : 'frei'}</div>
   </div>`;
 }
@@ -1650,7 +1666,7 @@ async function loadLoginWeek() {
       const color = s.subjectColor || '#94a3b8';
       const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
-        <div class="lw-chip-time">${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''} <span class="lw-chip-type">${typLabel}</span></div>
+        <div class="lw-chip-time"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''} <span class="lw-chip-type">${typLabel}</span></div>
         <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${color};">${escHtml(s.subjectName || '')}</span> · ${s.booked ? 'gebucht' : 'frei'}</div>
       </div>`;
     }).join('')}

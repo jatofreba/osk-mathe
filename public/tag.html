@@ -46,6 +46,13 @@
   .chip-type{font-weight:500;color:#5f6368;}
   .chip-meta{color:#5f6368;font-size:12px;}
   .chip-subj{font-weight:600;}
+  /* Piktogramme (Mikrofon = Talk, Buch = Input): erben per currentColor die
+     Fach-Farbe - Emoji lassen sich dagegen nicht einfaerben. */
+  .ico{
+    width:13px;height:13px;vertical-align:-2px;margin-right:4px;
+    fill:none;stroke:currentColor;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;
+  }
   .none{font-size:12.5px;color:#8b8b8b;font-style:italic;padding:3px 0 3px 2px;}
   .extra{margin-top:14px;padding-top:10px;border-top:1px solid #e3e0e6;}
   .extra-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#5f6368;margin-bottom:6px;}
@@ -104,12 +111,21 @@ function dayIndex() {
   return i === -1 ? 0 : i;
 }
 
+// Mikrofon = Talk, Buch = Input - als SVG, damit die Symbole die Fach-Farbe annehmen.
+function icon(typ) {
+  var inner = typ === 'input'
+    ? '<rect x="3" y="2.5" width="10" height="11" rx="1.5"/><line x1="6" y1="2.5" x2="6" y2="13.5"/>'
+    : '<rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4.5 8a3.5 3.5 0 0 0 7 0"/><line x1="8" y1="11.5" x2="8" y2="14"/>';
+  return '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">' + inner + '</svg>';
+}
+
 function chip(s) {
   var color = s.subjectColor || '#94a3b8';
   var typ = s.typ === 'input' ? 'Input' : 'Talk';
   var ort = s.ort ? ' · ' + esc(s.ort) : '';
   return '<div class="chip" style="border-left-color:' + esc(color) + ';">' +
-    '<div class="chip-time">' + esc(s.uhrzeit || '') + ' <span class="chip-type">' + typ + '</span></div>' +
+    '<div class="chip-time"><span style="color:' + esc(color) + ';">' + icon(s.typ) + '</span>' +
+      esc(s.uhrzeit || '') + ' <span class="chip-type">' + typ + '</span></div>' +
     '<div class="chip-meta"><span class="chip-subj" style="color:' + esc(color) + ';">' +
       esc(s.subjectName || '') + '</span>' + ort + (s.booked ? ' · gebucht' : ' · frei') + '</div>' +
   '</div>';
