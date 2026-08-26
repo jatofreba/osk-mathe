@@ -679,6 +679,7 @@ textarea.form-input{
     <span class="pill pill-blue" id="bar-klasse"></span>
     <span class="pill" id="bar-kurs" style="display:none"></span>
     <span class="pill pill-purple" id="bar-role" style="display:none">Admin</span>
+    <select class="form-input" id="bar-default-subject" style="display:none;width:auto;padding:4px 8px;font-size:12px;" onchange="setMyDefaultSubject(this.value)" title="Mein Standard-Fach – vorausgewählt bei neuen Input-Terminen"></select>
     <button class="btn-sm" onclick="showView('changepw')" title="Passwort ändern">🔑</button>
     <button class="btn-sm" onclick="doLogout()">Abmelden</button>
   </div>
@@ -829,8 +830,6 @@ textarea.form-input{
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <label style="font-size:13px;font-weight:600;">Halbjahr:</label>
           <select class="form-input" id="hj-select" style="width:auto;" onchange="renderHalbjahr()"></select>
-          <label style="font-size:13px;font-weight:600;">Mein Fach zuerst:</label>
-          <select class="form-input" id="hj-default-subject" style="width:auto;" onchange="setMyDefaultSubject(this.value)"></select>
           <button class="btn-act btn-outline" onclick="loadHalbjahr()">↺ Laden</button>
         </div>
       </div>
@@ -1289,6 +1288,8 @@ async function setMyDefaultSubject(value) {
     });
   } catch {}
   if (me) me.defaultSubjectId = subjectId;
+  const barSubj = document.getElementById('bar-default-subject');
+  if (barSubj) barSubj.value = subjectId != null ? String(subjectId) : '';
   renderHalbjahr();
 }
 
@@ -1851,6 +1852,14 @@ async function showApp() {
     const tabHome = document.getElementById('tab-home');
     if (barRole) barRole.style.display = '';
     if (tabAdmin) tabAdmin.style.display = '';
+    // Mein Standard-Fach ist ein Account-Attribut, daher prominent in der Topbar (nicht in
+    // einer einzelnen Ansicht versteckt) - steuert u.a. die Vorauswahl bei neuen Input-Terminen.
+    const barSubj = document.getElementById('bar-default-subject');
+    if (barSubj) {
+      barSubj.innerHTML = '<option value="">Fach: keine Präferenz</option>' + subjectsMeta.map(s => `<option value="${s.id}">Fach: ${escHtml(s.name)}</option>`).join('');
+      barSubj.value = (me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
+      barSubj.style.display = '';
+    }
     const tabHalbjahr = document.getElementById('tab-halbjahr');
     if (tabHalbjahr) tabHalbjahr.style.display = '';
     const tabKlasse = document.getElementById('tab-klasse');
@@ -3008,9 +3017,10 @@ function openInputSlotModal(presetDate) {
   const subjSel = document.getElementById('islot-subject');
   if (subjSel) {
     subjSel.innerHTML = subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
-    // Vorbelegung: zuletzt besuchter Fach-Talks-Tab (activeSubject) als sinnvoller Hinweis, sonst erstes Fach.
-    const hintSubj = subjectByKey(activeSubject);
-    subjSel.value = String(hintSubj.id || (subjectsMeta[0] && subjectsMeta[0].id) || '');
+    // Vorbelegung: Standard-Fach des Admin-Accounts hat Vorrang (Account-Attribut), sonst zuletzt
+    // besuchter Fach-Talks-Tab (activeSubject), sonst erstes Fach.
+    const hintSubj = (me && me.defaultSubjectId != null) ? subjectById(me.defaultSubjectId) : subjectByKey(activeSubject);
+    subjSel.value = String((hintSubj && hintSubj.id) || (subjectsMeta[0] && subjectsMeta[0].id) || '');
   }
   document.getElementById('islot-datum').value = presetDate || calSelected || calDateStr(new Date());
   document.getElementById('islot-uhrzeit').value = '';
@@ -3260,11 +3270,6 @@ async function loadHalbjahr() {
     sel.innerHTML = hjData.halbjahre.length ? hjData.halbjahre.map(h => `<option value="${h}">${h}</option>`).join('') : '<option value="">–</option>';
     if (!hjSelected || !hjData.halbjahre.includes(hjSelected)) hjSelected = hjData.halbjahre[0] || null;
     if (hjSelected) sel.value = hjSelected;
-  }
-  const defSel = document.getElementById('hj-default-subject');
-  if (defSel) {
-    defSel.innerHTML = '<option value="">– keine Präferenz –</option>' + subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
-    defSel.value = (me && me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
   }
   renderHalbjahr();
 }
