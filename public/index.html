@@ -1272,6 +1272,10 @@ textarea.form-input{
       <select class="form-input" id="islot-subject" onchange="applyInputSlotSubjectDefaults()"></select>
     </div>
     <div class="form-group">
+      <label class="form-label">Lehrkraft</label>
+      <select class="form-input" id="islot-teacher"></select>
+    </div>
+    <div class="form-group">
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
         <input type="checkbox" id="islot-recurring" onchange="toggleInputRecurring()"> Wöchentlich wiederkehrend
       </label>
@@ -2926,6 +2930,13 @@ const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯'
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// Kurzform für Lehrkraft-Anzeige (z.B. gegenüber Schüler:innen bei Input-Terminen): erster+letzter
+// Buchstabe groß, Rest klein - z.B. "herf" -> "HerF".
+function formatTeacherShort(username) {
+  const s = String(username || '').toLowerCase();
+  if (s.length <= 1) return s.toUpperCase();
+  return s[0].toUpperCase() + s.slice(1, -1) + s[s.length - 1].toUpperCase();
+}
 function fmtTalkingDatum(d) {
   return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
 }
@@ -3204,7 +3215,8 @@ function renderCalDetail() {
     const icon = it.typ === 'input' ? '📘' : '🎤';
     const subj = subjectById(it.subjectId);
     const typLabel = subj.name + '-' + (it.typ === 'input' ? 'Input' : 'Talk');
-    const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}`;
+    const teacherLabel = (it.typ === 'input' && it.teacherUsername) ? ' · Lehrkraft: ' + escHtml(formatTeacherShort(it.teacherUsername)) : '';
+    const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}${teacherLabel}`;
     let body, actions = '';
     if (!it.booked) {
       body = '<span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>';
@@ -3268,8 +3280,9 @@ function openCalBookModal(slotId) {
   const isInput = slot.typ === 'input';
   const bookSubj = subjectById(slot.subjectId);
   document.getElementById('calbook-title').textContent = isInput ? `📘 ${bookSubj.name}-Input buchen` : `🎤 ${bookSubj.name}-Talk anmelden`;
+  const teacherInfo = (isInput && slot.teacherUsername) ? ' · Lehrkraft: ' + formatTeacherShort(slot.teacherUsername) : '';
   document.getElementById('calbook-info').textContent =
-    `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}`;
+    `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}${teacherInfo}`;
   document.getElementById('calbook-thema').value = '';
   document.getElementById('calbook-cm-label').textContent = isInput ? 'Mitschüler:innen mitbringen (optional)' : 'Wen lädst du ein? (mind. 1)';
   document.getElementById('calbook-classmates').innerHTML = (calClassmates || []).map(c =>
@@ -3310,7 +3323,7 @@ function applyInputSlotSubjectDefaults() {
   document.getElementById('islot-dauer').value = String(subj.defaultDauer || 45);
   document.getElementById('islot-ort').value = subj.defaultOrt || '';
 }
-function openInputSlotModal(presetDate) {
+async function openInputSlotModal(presetDate) {
   const subjSel = document.getElementById('islot-subject');
   if (subjSel) {
     subjSel.innerHTML = subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
@@ -3318,6 +3331,20 @@ function openInputSlotModal(presetDate) {
     // besuchter Fach-Talks-Tab (activeSubject), sonst erstes Fach.
     const hintSubj = (me && me.defaultSubjectId != null) ? subjectById(me.defaultSubjectId) : subjectByKey(activeSubject);
     subjSel.value = String((hintSubj && hintSubj.id) || (subjectsMeta[0] && subjectsMeta[0].id) || '');
+  }
+  // Lehrkraft: Default ist der eigene Account, wählbar ist jeder Mit-Admin derselben Klasse
+  // (z.B. wenn eine andere Lehrkraft den Input tatsächlich hält).
+  const teacherSel = document.getElementById('islot-teacher');
+  if (teacherSel && me) {
+    teacherSel.innerHTML = `<option value="${me.userId}">${escHtml(me.username)}</option>`;
+    teacherSel.value = String(me.userId);
+    try {
+      const pr = await fetch('/api/admin/peers');
+      if (pr.ok) {
+        const peers = await pr.json();
+        teacherSel.innerHTML += peers.map(p => `<option value="${p.id}">${escHtml(p.username)}</option>`).join('');
+      }
+    } catch {}
   }
   document.getElementById('islot-datum').value = presetDate || calSelected || calDateStr(new Date());
   document.getElementById('islot-uhrzeit').value = '';
@@ -3334,6 +3361,8 @@ function openInputSlotModal(presetDate) {
 async function submitInputSlot() {
   const errEl = document.getElementById('islot-error'); errEl.style.display = 'none';
   const subjectId = parseInt(document.getElementById('islot-subject').value) || null;
+  const teacherSel = document.getElementById('islot-teacher');
+  const teacherId = teacherSel ? parseInt(teacherSel.value) || null : null;
   const uhrzeit = document.getElementById('islot-uhrzeit').value.trim();
   const dauer = parseInt(document.getElementById('islot-dauer').value) || 45;
   const ort = document.getElementById('islot-ort').value.trim();
@@ -3344,11 +3373,11 @@ async function submitInputSlot() {
     const von = document.getElementById('islot-von').value;
     const bis = document.getElementById('islot-bis').value;
     if (!von || !bis) { errEl.textContent = 'Bitte Zeitraum (Von/Bis) angeben.'; errEl.style.display = 'block'; return; }
-    body = { typ:'input', uhrzeit, dauer, ort, subjectId, recurring: { weekday, von, bis } };
+    body = { typ:'input', uhrzeit, dauer, ort, subjectId, teacherId, recurring: { weekday, von, bis } };
   } else {
     const datum = document.getElementById('islot-datum').value;
     if (!datum) { errEl.textContent = 'Bitte Datum angeben.'; errEl.style.display = 'block'; return; }
-    body = { typ:'input', datum, uhrzeit, dauer, ort, subjectId };
+    body = { typ:'input', datum, uhrzeit, dauer, ort, subjectId, teacherId };
   }
   const r = await fetch('/api/admin/talking-slots', {
     method:'POST', headers:{'Content-Type':'application/json'},

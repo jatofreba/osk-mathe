@@ -545,7 +545,7 @@ app.post('/api/login', async (req, res) => {
       userId: user.id, username: user.username,
       klasse: user.klasse, role: user.role
     });
-    res.json({ ok: true, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password, defaultSubjectId: user.default_subject_id });
+    res.json({ ok: true, userId: user.id, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password, defaultSubjectId: user.default_subject_id });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -1668,7 +1668,7 @@ app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) 
 // Lehrkraft. typ='talk' (default) oder 'input'; dauer in Minuten (Default 45).
 app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
-    const { datum, uhrzeit, ort, halbjahr, recurring, typ, dauer, subjectId } = req.body;
+    const { datum, uhrzeit, ort, halbjahr, recurring, typ, dauer, subjectId, teacherId } = req.body;
     const slotTyp = typ === 'input' ? 'input' : 'talk';
     // Input-Slots brauchen kein Halbjahr (nicht in die Pokale-Zählung eingebunden).
     if (slotTyp === 'talk' && !halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
@@ -1680,6 +1680,15 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     } else {
       const check = await pool.query('SELECT id FROM subjects WHERE id=$1', [subjId]);
       if (!check.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
+    }
+    // Zugeordnete Lehrkraft (admin_id) - Default die erstellende Person, überschreibbar auf einen
+    // Mit-Admin derselben Klasse (z.B. wenn eine andere Lehrkraft den Input tatsächlich hält).
+    // Für Schüler:innen bei Input-Terminen sichtbar (siehe /api/calendar).
+    let teacherUserId = req.session.userId;
+    if (teacherId && Number(teacherId) !== req.session.userId) {
+      const t = await pool.query('SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role=$3', [teacherId, req.session.klasse, 'admin']);
+      if (!t.rows.length) return res.status(400).json({ error: 'Ungültige Lehrkraft' });
+      teacherUserId = t.rows[0].id;
     }
     const dates = [];
     if (recurring) {
@@ -1702,7 +1711,7 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       await pool.query(`
         INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', req.session.userId, slotTyp, slotDauer, subjId]);
+      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', teacherUserId, slotTyp, slotDauer, subjId]);
     }
     res.json({ ok: true, count: dates.length });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -1907,6 +1916,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
                ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
                pu.username AS "presenterUsername",
+               tu.username AS "teacherUsername",
                (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
                (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
                COALESCE(json_agg(json_build_object('id', inv.id, 'username', lu.username, 'status', inv.status, 'attendedStatus', inv.attended_status))
@@ -1914,10 +1924,11 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
         FROM talking_slots s
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
         LEFT JOIN users pu ON pu.id = ts.presenter_id
+        LEFT JOIN users tu ON tu.id = s.admin_id
         LEFT JOIN talking_invitations inv ON inv.session_id = ts.id
         LEFT JOIN users lu ON lu.id = inv.listener_id
         WHERE s.klasse = $1
-        GROUP BY s.id, ts.id, pu.username
+        GROUP BY s.id, ts.id, pu.username, tu.username
         ORDER BY s.datum, s.uhrzeit
       `, [req.session.klasse, uid]),
       pool.query(
