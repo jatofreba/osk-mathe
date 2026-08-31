@@ -97,6 +97,13 @@ function toMin(hhmm) {
   return m ? parseInt(m[1],10) * 60 + parseInt(m[2],10) : null;
 }
 function pad(n) { return String(n).padStart(2,'0'); }
+// Anzeige "08:45–10:15": Ende aus Startzeit + Dauer (Default 45 Min, wie in der DB).
+function timeRange(uhrzeit, dauer) {
+  var start = toMin(uhrzeit);
+  if (start === null) return esc(uhrzeit || '');
+  var end = start + (parseInt(dauer, 10) || 45);
+  return esc(uhrzeit) + '–' + pad(Math.floor(end / 60) % 24) + ':' + pad(end % 60);
+}
 function dateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
 function fmtDate(d) { return pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.' + d.getFullYear(); }
 // Montag der laufenden Woche - passend zu Postgres date_trunc('week') im Endpunkt.
@@ -125,7 +132,7 @@ function chip(s) {
   var ort = s.ort ? ' · ' + esc(s.ort) : '';
   return '<div class="chip" style="border-left-color:' + esc(color) + ';">' +
     '<div class="chip-time"><span style="color:' + esc(color) + ';">' + icon(s.typ) + '</span>' +
-      esc(s.uhrzeit || '') + ' <span class="chip-type">' + typ + '</span></div>' +
+      timeRange(s.uhrzeit, s.dauer) + ' <span class="chip-type">' + typ + '</span></div>' +
     '<div class="chip-meta"><span class="chip-subj" style="color:' + esc(color) + ';">' +
       esc(s.subjectName || '') + '</span>' + ort + (s.booked ? ' · gebucht' : ' · frei') + '</div>' +
   '</div>';
