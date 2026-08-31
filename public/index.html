@@ -1272,7 +1272,7 @@ textarea.form-input{
       <select class="form-input" id="islot-subject" onchange="applyInputSlotSubjectDefaults()"></select>
     </div>
     <div class="form-group">
-      <label class="form-label">Lehrkraft</label>
+      <label class="form-label">Lernbegleitung</label>
       <select class="form-input" id="islot-teacher"></select>
     </div>
     <div class="form-group">
@@ -2930,7 +2930,7 @@ const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯'
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-// Kurzform für Lehrkraft-Anzeige (z.B. gegenüber Schüler:innen bei Input-Terminen): erster+letzter
+// Kurzform für die Anzeige der Lernbegleitung (z.B. gegenüber Schüler:innen bei Input-Terminen): erster+letzter
 // Buchstabe groß, Rest klein - z.B. "herf" -> "HerF".
 function formatTeacherShort(username) {
   const s = String(username || '').toLowerCase();
@@ -3215,7 +3215,7 @@ function renderCalDetail() {
     const icon = it.typ === 'input' ? '📘' : '🎤';
     const subj = subjectById(it.subjectId);
     const typLabel = subj.name + '-' + (it.typ === 'input' ? 'Input' : 'Talk');
-    const teacherLabel = (it.typ === 'input' && it.teacherUsername) ? ' · Lehrkraft: ' + escHtml(formatTeacherShort(it.teacherUsername)) : '';
+    const teacherLabel = (it.typ === 'input' && it.teacherUsername) ? ' · Lernbegleitung: ' + escHtml(formatTeacherShort(it.teacherUsername)) : '';
     const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}${teacherLabel}`;
     let body, actions = '';
     if (!it.booked) {
@@ -3280,7 +3280,7 @@ function openCalBookModal(slotId) {
   const isInput = slot.typ === 'input';
   const bookSubj = subjectById(slot.subjectId);
   document.getElementById('calbook-title').textContent = isInput ? `📘 ${bookSubj.name}-Input buchen` : `🎤 ${bookSubj.name}-Talk anmelden`;
-  const teacherInfo = (isInput && slot.teacherUsername) ? ' · Lehrkraft: ' + formatTeacherShort(slot.teacherUsername) : '';
+  const teacherInfo = (isInput && slot.teacherUsername) ? ' · Lernbegleitung: ' + formatTeacherShort(slot.teacherUsername) : '';
   document.getElementById('calbook-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}${teacherInfo}`;
   document.getElementById('calbook-thema').value = '';
@@ -3332,8 +3332,8 @@ async function openInputSlotModal(presetDate) {
     const hintSubj = (me && me.defaultSubjectId != null) ? subjectById(me.defaultSubjectId) : subjectByKey(activeSubject);
     subjSel.value = String((hintSubj && hintSubj.id) || (subjectsMeta[0] && subjectsMeta[0].id) || '');
   }
-  // Lehrkraft: Default ist der eigene Account, wählbar ist jeder Mit-Admin derselben Klasse
-  // (z.B. wenn eine andere Lehrkraft den Input tatsächlich hält).
+  // Lernbegleitung: Default ist der eigene Account, wählbar ist jeder Mit-Admin derselben Klasse
+  // (z.B. wenn eine andere Lernbegleitung den Input tatsächlich hält).
   const teacherSel = document.getElementById('islot-teacher');
   if (teacherSel && me) {
     teacherSel.innerHTML = `<option value="${me.userId}">${escHtml(me.username)}</option>`;
@@ -3810,7 +3810,7 @@ function renderTalkingStudent() {
   const listenDetailCell = (i, grey) => {
     if (!i) return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei zum freiwilligen Zuhören –</span></div>`;
     // Annehmen/Ablehnen nur solange die TS des Presenters noch nicht bewertet wurde - danach
-    // entscheidet nur noch die Zuhören-Bewertung der Lehrkraft (attendedStatus), ob teilgenommen wurde.
+    // entscheidet nur noch die Zuhören-Bewertung der Lernbegleitung (attendedStatus), ob teilgenommen wurde.
     const pending = i.status === 'eingeladen' && i.presentedStatus === 'ausstehend';
     const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
     return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">

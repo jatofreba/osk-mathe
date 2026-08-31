@@ -190,7 +190,7 @@ async function initDB() {
       END IF;
     END $$;
     -- Mathe-Input (2026-08-01): talking_slots dienen jetzt auch als Input-Termine (typ='input').
-    -- typ='talk' = Schüler-Vortrag (mit Pokalen), typ='input' = Lehrkraft-Input, Solo-buchbar, ohne Pokale.
+    -- typ='talk' = Schüler-Vortrag (mit Pokalen), typ='input' = Input der Lernbegleitung, Solo-buchbar, ohne Pokale.
     -- dauer (Minuten) für Überschneidungsschutz; uhrzeit bleibt Text, wird als HH:MM interpretiert.
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='typ') THEN
@@ -202,7 +202,7 @@ async function initDB() {
         ALTER TABLE talking_slots ADD COLUMN dauer INTEGER NOT NULL DEFAULT 45;
       END IF;
     END $$;
-    -- Deadlines/Termine der Lehrkräfte (klassenweit sichtbar im Kalender, alles Mathe = blau).
+    -- Deadlines/Termine der Lernbegleitungen (klassenweit sichtbar im Kalender, alles Mathe = blau).
     CREATE TABLE IF NOT EXISTS math_deadlines (
       id         SERIAL PRIMARY KEY,
       klasse     TEXT NOT NULL,
@@ -1638,7 +1638,7 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
 });
 
 // Annehmen/Ablehnen geht nur, solange die TS des Presenters noch nicht bewertet wurde (presented_status
-// 'ausstehend'). Danach entscheidet ausschließlich die Zuhören-Bewertung der Lehrkraft (attended_status),
+// 'ausstehend'). Danach entscheidet ausschließlich die Zuhören-Bewertung der Lernbegleitung (attended_status),
 // ob die Person teilgenommen hat - das nachträgliche Ablehnen einer bereits stattgefundenen TS ergibt keinen Sinn.
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
@@ -1665,7 +1665,7 @@ app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) 
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Lehrkraft. typ='talk' (default) oder 'input'; dauer in Minuten (Default 45).
+// Lernbegleitung. typ='talk' (default) oder 'input'; dauer in Minuten (Default 45).
 app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
     const { datum, uhrzeit, ort, halbjahr, recurring, typ, dauer, subjectId, teacherId } = req.body;
@@ -1681,13 +1681,13 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       const check = await pool.query('SELECT id FROM subjects WHERE id=$1', [subjId]);
       if (!check.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
     }
-    // Zugeordnete Lehrkraft (admin_id) - Default die erstellende Person, überschreibbar auf einen
-    // Mit-Admin derselben Klasse (z.B. wenn eine andere Lehrkraft den Input tatsächlich hält).
+    // Zugeordnete Lernbegleitung (admin_id) - Default die erstellende Person, überschreibbar auf einen
+    // Mit-Admin derselben Klasse (z.B. wenn eine andere Lernbegleitung den Input tatsächlich hält).
     // Für Schüler:innen bei Input-Terminen sichtbar (siehe /api/calendar).
     let teacherUserId = req.session.userId;
     if (teacherId && Number(teacherId) !== req.session.userId) {
       const t = await pool.query('SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role=$3', [teacherId, req.session.klasse, 'admin']);
-      if (!t.rows.length) return res.status(400).json({ error: 'Ungültige Lehrkraft' });
+      if (!t.rows.length) return res.status(400).json({ error: 'Ungültige Lernbegleitung' });
       teacherUserId = t.rows[0].id;
     }
     const dates = [];
@@ -1881,7 +1881,7 @@ app.delete('/api/admin/talking-sessions/:id', requireAdmin, async (req, res) => 
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// ── Deadlines (Lehrkraft-Termine, klassenweit) ─────────────────────────────────
+// ── Deadlines (Termine der Lernbegleitung, klassenweit) ────────────────────────
 app.post('/api/admin/deadlines', requireAdmin, async (req, res) => {
   try {
     const { datum, titel } = req.body;
@@ -1906,7 +1906,7 @@ app.delete('/api/admin/deadlines/:id', requireAdmin, async (req, res) => {
 });
 
 // ── Kalender: alle Mathe-Termine der Klasse (Talks + Input + Deadlines) ─────────
-// Klassenweit sichtbar (Lehrkraft A sieht Slots von Lehrkraft B). Pro Slot markiert,
+// Klassenweit sichtbar (Lernbegleitung A sieht Slots von Lernbegleitung B). Pro Slot markiert,
 // in welcher Rolle der/die anfragende User beteiligt ist (für Buchungs-/Antwort-Aktionen).
 app.get('/api/calendar', requireLogin, async (req, res) => {
   try {
@@ -1990,7 +1990,7 @@ async function halbjahrOverview(klasse, onlyUid) {
   subjectsRows.rows.forEach(s => { subjectById[s.id] = s; });
 
   // Talks/Input werden dem ZUGEWIESENEN Halbjahr des Slots zugeordnet (talking_slots.halbjahr,
-  // von der Lehrkraft gesetzt - so zählt auch das Pokale-System). Input-Slots haben kein Halbjahr
+  // von der Lernbegleitung gesetzt - so zählt auch das Pokale-System). Input-Slots haben kein Halbjahr
   // -> Fallback aufs Datum. LZK/Stationen haben kein Halbjahr-Feld -> immer aus dem Datum.
   const slotHj = (r) => (r.halbjahr && String(r.halbjahr).trim()) ? String(r.halbjahr).trim() : halbjahrForDate(r.datum);
   const maxD = (a, b) => (!a ? b : !b ? a : (a > b ? a : b));
