@@ -328,6 +328,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   border-bottom:1px solid var(--md-outline-variant);
   padding:0 16px;
   flex-shrink:0;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
 }
 .tab{
   padding:8px 16px;
@@ -339,6 +342,8 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   border-bottom:2px solid transparent;
   margin-bottom:-1px;
   transition:all .15s;
+  white-space:nowrap;
+  flex-shrink:0;
 }
 .tab.active{color:var(--md-on-surface);border-bottom-color:var(--md-primary);}
 .tab:hover:not(.active){color:var(--md-on-surface);background:var(--md-surface-container-low);}
@@ -351,6 +356,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 #view-talking{display:none;padding:24px;}
 #view-calendar{display:none;padding:24px;}
 #view-halbjahr{display:none;padding:24px;}
+#view-klasse{display:none;padding:24px;}
+/* Tabellen/Kopfzeilen nicht auf voller Breite ausufern lassen (iPad-Querformat/Desktop) - sonst
+   wirken schmale Tabellen (z.B. Lerngruppen-Übersicht) unnötig gestreckt und leer. */
+.admin-top,.tbl-wrap{max-width:1200px;margin-left:auto;margin-right:auto;}
 /* ── Mein Kalender (alles Mathe = blau) ────────────────────────────────────── */
 .cal-wrap{max-width:940px;margin:0 auto;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
@@ -388,7 +397,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   flex:1;
 }
 
-.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,220px));gap:12px;margin-bottom:24px;}
 .stat-card{
   background:var(--md-surface);
   border-radius:var(--md-r);
@@ -709,7 +718,7 @@ textarea.form-input{
 /* ── Aktiv-Button ────────────────────────────────────────────────────────────── */
 .lt-last-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle;}
 /* ── Trophy summary & Leaderboard ───────────────────────────────────────────── */
-.trophy-section{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;}
+.trophy-section{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;max-width:1200px;margin-left:auto;margin-right:auto;}
 .trophy-lb-col{display:flex;flex-direction:column;gap:16px;flex:1 1 260px;}
 .trophy-lb-col.tsum-col{flex:1.7 1 360px;}
 .trophy-lb-col.rank-col{flex:1 1 260px;}
