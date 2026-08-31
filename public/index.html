@@ -340,6 +340,12 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
   scrollbar-width:thin;
+  /* Menüzeile bleibt beim Scrollen stehen, direkt unter der (ebenfalls stickyen)
+     Topbar. --shell-h wird per JS aus der tatsächlichen Topbar-Höhe gesetzt, da
+     die je nach Rolle und Fensterbreite (Umbruch) unterschiedlich hoch ist. */
+  position:sticky;
+  top:var(--shell-h, 44px);
+  z-index:49;
 }
 .tab{
   padding:8px 16px;
@@ -2424,10 +2430,24 @@ window.addEventListener('message', async (e) => {
 // ══ View switching ═══════════════════════════════════════════════════════════
 function updateShellHeight() {
   const tb = document.querySelector('.topbar');
-  if (tb) {
+  // Nur bei echter Höhe setzen: solange #app noch display:none ist (vor dem Login),
+  // wäre offsetHeight 0 - dann würden die Tabs hinter der Topbar kleben, statt den
+  // CSS-Fallback zu nutzen.
+  if (tb && tb.offsetHeight > 0) {
     document.documentElement.style.setProperty('--shell-h', tb.offsetHeight + 'px');
   }
 }
+
+// Die Tabs kleben per CSS unter der Topbar (top:var(--shell-h)). Deren Höhe ändert
+// sich je nach Rolle (Admin-Pills, Fach-Auswahl) und bei schmalen Fenstern durch
+// Umbruch - deshalb laufend nachmessen statt einmalig beim Start.
+(function trackShellHeight() {
+  const tb = document.querySelector('.topbar');
+  if (!tb) return;
+  updateShellHeight();
+  if (window.ResizeObserver) new ResizeObserver(updateShellHeight).observe(tb);
+  else window.addEventListener('resize', updateShellHeight);
+})();
 
 function showView(v) {
   const appEl = document.getElementById('app');
