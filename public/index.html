@@ -176,15 +176,6 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-chip.mw-taken .lw-chip-subj,.lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
 .mw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--md-on-surface-variant);}
 .mw-legend b{font-weight:700;}
-/* Teilnehmende in der Admin-Wochenansicht: wer ist bei welchem Termin dabei. */
-.aw-people{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;}
-.aw-person{
-  font-size:10px;line-height:1.3;padding:1px 6px;border-radius:99px;
-  background:var(--md-surface-container-low);color:var(--md-on-surface);
-  border:1px solid var(--md-outline-variant);
-}
-.aw-person-main{font-weight:700;}
-.aw-person-pending{opacity:.75;font-style:italic;}
 /* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
    (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
 .login-taskcards{
@@ -909,6 +900,7 @@ textarea.form-input{
       <div class="admin-title">👥 Lerngruppen-Übersicht</div>
       <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
       <button class="btn-act btn-outline" onclick="openSingle()">+ Einzeln anlegen</button>
+      <button class="btn-act btn-outline" onclick="openSingleAdmin()">+ Mit-Admin anlegen</button>
       <button class="btn-act btn-outline" onclick="loadKlasse()">↺ Laden</button>
     </div>
     <div id="admin-peers-panel" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;">
@@ -956,7 +948,6 @@ textarea.form-input{
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
-      <div id="cal-adminweek"></div>
       <div id="cal-myhj"></div>
       <div id="cal-invites"></div>
       <div class="cal-grid" id="cal-dow-row"></div>
@@ -1045,7 +1036,7 @@ textarea.form-input{
 <!-- ══ MODAL: Einzeln anlegen ════════════════════════════════════════════════ -->
 <div class="overlay" id="modal-single">
   <div class="modal">
-    <div class="modal-title">Schüler:in anlegen</div>
+    <div class="modal-title" id="single-title">Schüler:in anlegen</div>
     <div class="form-group">
       <label class="form-label">Benutzername</label>
       <input class="form-input" id="s-user" placeholder="anna.mueller">
@@ -2802,7 +2793,18 @@ async function doBulk() {
   setTimeout(() => { closeModal('modal-bulk'); loadStudents(); }, 1500);
 }
 
+let createIsAdmin = false;
 function openSingle() {
+  createIsAdmin = false;
+  document.getElementById('single-title').textContent = 'Schüler:in anlegen';
+  document.getElementById('s-user').value = '';
+  document.getElementById('s-pass').value = '';
+  document.getElementById('single-msg').innerHTML = '';
+  openModal('modal-single');
+}
+function openSingleAdmin() {
+  createIsAdmin = true;
+  document.getElementById('single-title').textContent = 'Mit-Admin anlegen';
   document.getElementById('s-user').value = '';
   document.getElementById('s-pass').value = '';
   document.getElementById('single-msg').innerHTML = '';
@@ -2812,14 +2814,17 @@ function openSingle() {
 async function doSingle() {
   const username = document.getElementById('s-user').value.trim();
   const password = document.getElementById('s-pass').value;
-  const r = await fetch('/api/admin/create-student', {
+  const r = await fetch(createIsAdmin ? '/api/admin/create-admin' : '/api/admin/create-student', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ username, password })
   });
   const d = await r.json();
   if (!r.ok) { showMsg('single-msg', d.error, 'err'); return; }
   showMsg('single-msg', `✓ ${username} angelegt.`, 'ok');
-  setTimeout(() => { closeModal('modal-single'); loadStudents(); }, 1200);
+  setTimeout(() => {
+    closeModal('modal-single');
+    if (createIsAdmin) loadAdminPeers(); else loadStudents();
+  }, 1200);
 }
 
 function openReset(id, name) {
@@ -3327,7 +3332,7 @@ async function loadCalendar() {
   } catch(e) { calData = { slots: [], deadlines: [] }; }
   const adminActions = document.getElementById('cal-admin-actions');
   if (adminActions) adminActions.style.display = (me && me.role === 'admin') ? 'flex' : 'none';
-  renderAdminWeek(); renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
+  renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
 }
 
 function calItemsByDay() {
@@ -3765,113 +3770,6 @@ async function calRemoveInvitee(invitationId) {
 
 // Kompakte "Mein Halbjahr"-Karte für Schüler:innen im Kalender (laufendes Halbjahr).
 let myHjData = { halbjahre: [], byHalbjahr: {} };
-// ── "Meine Woche" für Admins (Kalender-Landingpage) ──────────────────────────
-// Gleiches Blockraster wie bei den Schüler:innen, aber mit der für die Lernbegleitung
-// entscheidenden Info: WER nimmt an welchem Termin teil. Quelle ist calData
-// (/api/calendar, bereits in loadCalendar geladen) - kein zusätzlicher Request.
-// Eigene Angebote (zugewiesene Lernbegleitung = ich) sind hervorgehoben.
-function awChip(s) {
-  const subj = subjectById(s.subjectId);
-  const color = subj.color || '#94a3b8';
-  const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
-  const isMine = s.teacherUsername && me && s.teacherUsername === me.username;
-  const state = !s.booked ? 'free' : (isMine ? 'mine' : 'taken');
-
-  // Teilnehmende: buchende Person zuerst (bei Input die anfragende, bei Talk die
-  // vortragende), danach die Eingeladenen mit ihrem Zusage-Status.
-  const teilnehmende = [];
-  if (s.presenterUsername) {
-    teilnehmende.push(`<span class="aw-person aw-person-main">${escHtml(s.presenterUsername)}</span>`);
-  }
-  (s.invitees || []).forEach(iv => {
-    if (iv.status === 'abgelehnt') return; // abgesagt - nimmt nicht teil
-    const icon = iv.status === 'angenommen' ? '✓' : '⏳';
-    const cls = iv.status === 'angenommen' ? 'aw-person' : 'aw-person aw-person-pending';
-    teilnehmende.push(`<span class="${cls}" title="${iv.status === 'angenommen' ? 'zugesagt' : 'eingeladen, noch keine Antwort'}">${escHtml(iv.username)} ${icon}</span>`);
-  });
-
-  const chipStyle = state === 'taken' ? '' : ` style="border-left-color:${color};color:${color};"`;
-  const meta = [
-    s.ort ? escHtml(s.ort) : '',
-    s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
-  ].filter(Boolean);
-
-  return `<div class="lw-chip mw-${state}"${chipStyle}>
-    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>${isMine ? ' · <span class="mw-chip-status" style="color:' + color + ';">von dir</span>' : ''}${!s.booked ? ' · <span class="mw-chip-status">frei</span>' : ''}</div>
-    ${meta.length ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">${meta.join(' · ')}</div>` : ''}
-    ${s.thema ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">„${escHtml(s.thema)}"</div>` : ''}
-    ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
-  </div>`;
-}
-
-function renderAdminWeek() {
-  const el = document.getElementById('cal-adminweek');
-  if (!el) return;
-  if (!me || me.role !== 'admin') { el.innerHTML = ''; return; }
-
-  const monday = lwMonday();
-  const dayDates = LW_DAY_NAMES.map((_, i) => {
-    const d = new Date(monday); d.setDate(monday.getDate() + i); return d;
-  });
-  const dayStrs = dayDates.map(lwDateStr);
-  const weekSlots = (calData.slots || []).filter(s => dayStrs.indexOf(s.datum) !== -1);
-
-  const cells = LW_BLOCKS.map(() => LW_DAY_NAMES.map(() => []));
-  const extras = [];
-  weekSlots.forEach(s => {
-    const dayIdx = dayStrs.indexOf(s.datum);
-    const start = lwMin(s.uhrzeit);
-    const blockIdx = start === null ? -1 : LW_BLOCKS.findIndex(b => start >= lwMin(b.von) && start < lwMin(b.bis));
-    if (blockIdx === -1) extras.push(s);
-    else cells[blockIdx][dayIdx].push(s);
-  });
-  cells.forEach(row => row.forEach(list => list.sort((a, b) => (lwMin(a.uhrzeit) ?? 0) - (lwMin(b.uhrzeit) ?? 0))));
-
-  const booked = weekSlots.filter(s => s.booked).length;
-  const free = weekSlots.filter(s => !s.booked).length;
-  // Teilnahmen = alle Personen, die diese Woche tatsächlich an einem Termin sind
-  // (buchende Person + zugesagte/noch offene Eingeladene, ohne Absagen).
-  const teilnahmen = weekSlots.reduce((sum, s) =>
-    sum + (s.presenterUsername ? 1 : 0) + (s.invitees || []).filter(iv => iv.status !== 'abgelehnt').length, 0);
-
-  const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) =>
-    `<div class="lw-dayhead">${name}
-      <span>${String(dayDates[i].getDate()).padStart(2,'0')}.${String(dayDates[i].getMonth()+1).padStart(2,'0')}.</span>
-    </div>`
-  ).join('');
-
-  const blockRows = LW_BLOCKS.map((b, bi) =>
-    `<div class="lw-blockhead">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-    LW_DAY_NAMES.map((_, di) => `<div class="lw-cell">${cells[bi][di].map(awChip).join('')}</div>`).join('')
-  ).join('');
-
-  const extrasHtml = extras.length ? `<div class="lw-extra">
-    <div class="lw-extra-title">Weitere Termine dieser Woche</div>
-    ${extras.map(s => `<div style="margin-bottom:3px;">${awChip(s)}</div>`).join('')}
-  </div>` : '';
-
-  const fmt = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
-  el.innerHTML = `<div class="mw-panel" style="margin-bottom:14px;">
-    <div class="mw-head">
-      <div>
-        <div class="mw-title">📅 Meine Woche</div>
-        <div class="mw-sub">${fmt(dayDates[0])}–${fmt(dayDates[4])} · ${booked} gebucht${free ? ` · ${free} frei` : ''} · ${teilnahmen} Teilnahme${teilnahmen === 1 ? '' : 'n'}</div>
-      </div>
-      <button class="mw-book-btn" onclick="openInputSlotModal()">+ Input-Termin</button>
-    </div>
-    ${weekSlots.length
-      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
-         <div class="mw-legend">
-           <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
-           <span>✓ zugesagt</span>
-           <span>⏳ eingeladen, noch offen</span>
-         </div>`
-      : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
-    ${extrasHtml}
-  </div>`;
-}
-
 function renderMyHalbjahr() {
   const el = document.getElementById('cal-myhj');
   if (!el) return;

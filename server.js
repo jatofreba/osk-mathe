@@ -956,6 +956,24 @@ app.post('/api/admin/create-student', requireAdmin, async (req, res) => {
   }
 });
 
+// Admin legt Mit-Admin für die eigene Lerngruppe an - muss beim ersten Login das (vom anlegenden
+// Admin vergebene, temporäre) Passwort selbst ändern, analog zu den initial geseedeten Accounts.
+app.post('/api/admin/create-admin', requireAdmin, async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (password.length < 4) return res.status(400).json({ error: 'Passwort mind. 4 Zeichen' });
+    await pool.query(
+      'INSERT INTO users (username,password_hash,klasse,role,must_change_password) VALUES ($1,$2,$3,$4,$5)',
+      [username.trim().toLowerCase(), await bcrypt.hash(password, 10), req.session.klasse, 'admin', true]
+    );
+    res.json({ ok: true });
+  } catch(e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 app.post('/api/admin/bulk-create', requireAdmin, async (req, res) => {
   try {
     const { students } = req.body;
