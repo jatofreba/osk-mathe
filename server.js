@@ -1031,6 +1031,27 @@ app.post('/api/admin/reset-admin-password', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Admin löscht einen Mit-Admin der eigenen Lerngruppe - weder sich selbst noch den letzten
+// verbleibenden Admin-Account (sonst wäre die Lerngruppe ausgesperrt).
+app.delete('/api/admin/peer/:id', requireAdmin, async (req, res) => {
+  try {
+    if (Number(req.params.id) === req.session.userId)
+      return res.status(400).json({ error: 'Eigener Account kann nicht gelöscht werden' });
+    const countRes = await pool.query(
+      'SELECT COUNT(*) n FROM users WHERE klasse=$1 AND role=$2',
+      [req.session.klasse, 'admin']
+    );
+    if (parseInt(countRes.rows[0].n) <= 1)
+      return res.status(400).json({ error: 'Letzter Admin-Account der Lerngruppe kann nicht gelöscht werden' });
+    const r = await pool.query(
+      'DELETE FROM users WHERE id=$1 AND klasse=$2 AND role=$3',
+      [req.params.id, req.session.klasse, 'admin']
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.delete('/api/admin/student/:id', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(

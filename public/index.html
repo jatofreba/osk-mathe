@@ -2879,11 +2879,22 @@ async function loadAdminPeers() {
     list.innerHTML = peers.map(p => `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <span>${p.username}</span>
-        <button class="btn-icon" onclick="openResetAdmin(${p.id},'${p.username}')" title="Passwort zurücksetzen">🔑</button>
+        <div style="display:flex;gap:4px;">
+          <button class="btn-icon" onclick="openResetAdmin(${p.id},'${p.username}')" title="Passwort zurücksetzen">🔑</button>
+          <button class="btn-icon red" onclick="deleteAdminPeer(${p.id},'${p.username}')" title="Admin-Account löschen">🗑</button>
+        </div>
       </div>
     `).join('');
     panel.style.display = '';
   } catch {}
+}
+
+async function deleteAdminPeer(id, name) {
+  if (!confirm(`${name} wirklich als Admin-Account löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+  const r = await fetch(`/api/admin/peer/${id}`, { method:'DELETE' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler beim Löschen.'); return; }
+  loadAdminPeers();
 }
 
 
