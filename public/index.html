@@ -347,13 +347,18 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   top:var(--shell-h, 44px);
   z-index:49;
 }
+/* Tabs sind echte Button-Elemente: nativ per Tab-Taste erreichbar, Enter und
+   Leertaste lösen sie aus. Daher hier die Button-Eigenstyles zurücksetzen. */
 .tab{
   padding:8px 16px;
   font-size:13px;
+  font-family:inherit;
   font-weight:500;
   letter-spacing:.1px;
   color:var(--md-on-surface-variant);
   cursor:pointer;
+  background:none;
+  border:none;
   border-bottom:2px solid transparent;
   margin-bottom:-1px;
   transition:all .15s;
@@ -362,6 +367,27 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 }
 .tab.active{color:var(--md-on-surface);border-bottom-color:var(--md-primary);}
 .tab:hover:not(.active){color:var(--md-on-surface);background:var(--md-surface-container-low);}
+
+/* Sichtbarer Tastatur-Fokus: vorher gab es ausser bei Textfeldern gar keinen,
+   d.h. beim Navigieren per Tab war nicht erkennbar, wo man gerade steht.
+   :focus-visible zeigt ihn nur bei Tastatur-/nicht-Maus-Bedienung. */
+:focus-visible{
+  outline:3px solid var(--md-primary);
+  outline-offset:2px;
+  border-radius:4px;
+}
+.tab:focus-visible{outline-offset:-3px;}
+
+/* Nutzer:innen, die reduzierte Bewegung eingestellt haben (Ablenkung, Migräne,
+   Schwindel), bekommen keine Übergänge/Animationen. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+}
 
 /* ── Lerntheke Iframe ────────────────────────────────────────────────────── */
 #view-lerntheke{width:100%;}
@@ -804,7 +830,7 @@ textarea.form-input{
           <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="••••••">
         </div>
         <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
-        <div class="login-error" id="login-error"></div>
+        <div class="login-error" id="login-error" role="status" aria-live="polite"></div>
       </div>
       <div class="login-week" id="login-week">
         <div class="login-week-head">
@@ -838,17 +864,17 @@ textarea.form-input{
     <button class="btn-sm" onclick="doLogout()">Abmelden</button>
   </div>
 
-  <div class="tabs" id="app-tabs">
-    <div class="tab active" id="tab-home" onclick="showHome()">🏠 Start</div>
-    <div class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</div>
-    <div class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</div>
-    <div class="tab" id="tab-talking-mathe" onclick="showSubjectTalking('mathe')">🗣️ Mathe-Talks</div>
-    <div class="tab" id="tab-talking-englisch" onclick="showSubjectTalking('englisch')">🗣️ Englisch-Talks</div>
-    <div class="tab" id="tab-talking-deutsch" onclick="showSubjectTalking('deutsch')">🗣️ Deutsch-Talks</div>
-    <div class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</div>
-    <div class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</div>
-    <div class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Lerngruppen-Übersicht</div>
-  </div>
+  <nav class="tabs" id="app-tabs" aria-label="Bereiche">
+    <button type="button" class="tab active" id="tab-home" onclick="showHome()">🏠 Start</button>
+    <button type="button" class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</button>
+    <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
+    <button type="button" class="tab" id="tab-talking-mathe" onclick="showSubjectTalking('mathe')">🗣️ Mathe-Talks</button>
+    <button type="button" class="tab" id="tab-talking-englisch" onclick="showSubjectTalking('englisch')">🗣️ Englisch-Talks</button>
+    <button type="button" class="tab" id="tab-talking-deutsch" onclick="showSubjectTalking('deutsch')">🗣️ Deutsch-Talks</button>
+    <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
+    <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
+    <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Lerngruppen-Übersicht</button>
+  </nav>
 
   <div id="view-lerntheke" style="width:100%;">
     <div id="picker-back-bar">
@@ -999,18 +1025,18 @@ textarea.form-input{
       <div style="font-size:17px;font-weight:800;margin-bottom:18px;">🔑 Passwort ändern</div>
       <div id="cpw-forced-msg" style="display:none;font-size:13px;color:var(--ink2);margin-bottom:14px;padding:10px 12px;background:#fef3c7;border-radius:8px;">Bitte lege jetzt ein eigenes Passwort fest, bevor du fortfährst.</div>
       <div class="form-group">
-        <label class="form-label">Altes Passwort</label>
+        <label class="form-label" for="cpw-old">Altes Passwort</label>
         <input class="form-input" id="cpw-old" type="password">
       </div>
       <div class="form-group">
-        <label class="form-label">Neues Passwort</label>
+        <label class="form-label" for="cpw-new">Neues Passwort</label>
         <input class="form-input" id="cpw-new" type="password">
       </div>
       <div class="form-group">
-        <label class="form-label">Wiederholen</label>
+        <label class="form-label" for="cpw-rep">Wiederholen</label>
         <input class="form-input" id="cpw-rep" type="password">
       </div>
-      <div id="cpw-msg"></div>
+      <div id="cpw-msg" role="status" aria-live="polite"></div>
       <div style="display:flex;gap:10px;margin-top:16px;">
         <button class="btn-cancel" id="cpw-cancel-btn" onclick="me.role==='admin'?showView('admin'):showHome()">Abbrechen</button>
         <button class="btn-act btn-blue" onclick="doChangePw()">Speichern</button>
@@ -1041,7 +1067,7 @@ textarea.form-input{
       Beispiel: <code>anna.mueller,Kreise24!</code>
     </div>
     <textarea class="form-input" id="bulk-txt" placeholder="anna.mueller,Kreise24!&#10;ben.schmidt,Kreise24!&#10;..."></textarea>
-    <div id="bulk-msg"></div>
+    <div id="bulk-msg" role="status" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-bulk')">Abbrechen</button>
       <button class="btn-act btn-green" onclick="doBulk()">Anlegen</button>
@@ -1054,14 +1080,14 @@ textarea.form-input{
   <div class="modal">
     <div class="modal-title" id="single-title">Schüler:in anlegen</div>
     <div class="form-group">
-      <label class="form-label">Benutzername</label>
+      <label class="form-label" for="s-user">Benutzername</label>
       <input class="form-input" id="s-user" placeholder="anna.mueller">
     </div>
     <div class="form-group">
-      <label class="form-label">Passwort</label>
+      <label class="form-label" for="s-pass">Passwort</label>
       <input class="form-input" id="s-pass" type="text" placeholder="Kreise24!">
     </div>
-    <div id="single-msg"></div>
+    <div id="single-msg" role="status" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-single')">Abbrechen</button>
       <button class="btn-act btn-green" onclick="doSingle()">Anlegen</button>
@@ -1075,7 +1101,7 @@ textarea.form-input{
     <div class="modal-title">Passwort zurücksetzen</div>
     <div class="modal-hint">Neues Passwort für <strong id="reset-name"></strong></div>
     <input class="form-input" id="reset-pw" type="text" placeholder="Neues Passwort">
-    <div id="reset-msg"></div>
+    <div id="reset-msg" role="status" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-reset')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="doReset()">Speichern</button>
@@ -1088,11 +1114,11 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="lzk-modal-title">LZK eintragen</div>
     <div class="form-group">
-      <label class="form-label">Datum</label>
+      <label class="form-label" for="lzk-modal-datum">Datum</label>
       <input class="form-input" id="lzk-modal-datum" type="date">
     </div>
     <div class="form-group">
-      <label class="form-label">Status</label>
+      <label class="form-label" for="lzk-modal-status">Status</label>
       <select class="form-input" id="lzk-modal-status">
         <option value="ausstehend">⏳ Ausstehend</option>
         <option value="bestanden">✓ Bestanden</option>
@@ -1100,8 +1126,8 @@ textarea.form-input{
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Kleeblätter</label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <label class="form-label" id="lzk-pokal-lbl">Kleeblätter</label>
+      <div role="group" aria-labelledby="lzk-pokal-lbl" style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🍀</button>
         <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🍀</button>
         <button class="lzk-pokal-btn" data-v="2" onclick="selectLzkPokal(2)">2 🍀</button>
@@ -1120,7 +1146,7 @@ textarea.form-input{
   <div class="modal" style="max-width:440px;">
     <div class="modal-title">Termin anlegen</div>
     <div class="form-group">
-      <label class="form-label">Halbjahr</label>
+      <label class="form-label" for="tslot-halbjahr">Halbjahr</label>
       <input class="form-input" id="tslot-halbjahr" placeholder="z.B. 2627_1">
     </div>
     <div class="form-group">
@@ -1130,13 +1156,13 @@ textarea.form-input{
     </div>
     <div id="tslot-single-fields">
       <div class="form-group">
-        <label class="form-label">Datum</label>
+        <label class="form-label" for="tslot-datum">Datum</label>
         <input class="form-input" id="tslot-datum" type="date">
       </div>
     </div>
     <div id="tslot-recurring-fields" style="display:none;">
       <div class="form-group">
-        <label class="form-label">Wochentag</label>
+        <label class="form-label" for="tslot-weekday">Wochentag</label>
         <select class="form-input" id="tslot-weekday">
           <option value="1">Montag</option>
           <option value="2">Dienstag</option>
@@ -1149,25 +1175,25 @@ textarea.form-input{
       </div>
       <div class="form-group" style="display:flex;gap:10px;">
         <div style="flex:1;">
-          <label class="form-label">Von</label>
+          <label class="form-label" for="tslot-von">Von</label>
           <input class="form-input" id="tslot-von" type="date">
         </div>
         <div style="flex:1;">
-          <label class="form-label">Bis</label>
+          <label class="form-label" for="tslot-bis">Bis</label>
           <input class="form-input" id="tslot-bis" type="date">
         </div>
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Uhrzeit</label>
+      <label class="form-label" for="tslot-uhrzeit">Uhrzeit</label>
       <input class="form-input" id="tslot-uhrzeit" type="time">
     </div>
     <div class="form-group">
-      <label class="form-label">Dauer (Minuten)</label>
+      <label class="form-label" for="tslot-dauer">Dauer (Minuten)</label>
       <input class="form-input" id="tslot-dauer" type="number" min="5" max="600" value="45">
     </div>
     <div class="form-group">
-      <label class="form-label">Ort</label>
+      <label class="form-label" for="tslot-ort">Ort</label>
       <input class="form-input" id="tslot-ort" placeholder="z.B. Mathe-Fachbüro M3/M4">
     </div>
     <div class="modal-actions">
@@ -1182,16 +1208,16 @@ textarea.form-input{
   <div class="modal" style="max-width:440px;">
     <div class="modal-title" id="tbook-title">Talk anmelden</div>
     <div class="form-group">
-      <label class="form-label">Termin</label>
+      <label class="form-label" for="tbook-slot">Termin</label>
       <select class="form-input" id="tbook-slot"></select>
     </div>
     <div class="form-group">
-      <label class="form-label">Thema</label>
+      <label class="form-label" for="tbook-thema">Thema</label>
       <input class="form-input" id="tbook-thema" placeholder="z.B. Wie funktioniert der Dreisatz?">
     </div>
     <div class="form-group">
-      <label class="form-label">Wen lädst du ein?</label>
-      <div id="tbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
+      <label class="form-label" id="tbook-cm-lbl">Wen lädst du ein?</label>
+      <div role="group" aria-labelledby="tbook-cm-lbl" id="tbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-book')">Abbrechen</button>
@@ -1219,7 +1245,7 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="trate-modal-title">Bewerten</div>
     <div class="form-group">
-      <label class="form-label">Status</label>
+      <label class="form-label" for="trate-modal-status">Status</label>
       <select class="form-input" id="trate-modal-status">
         <option value="ausstehend">⏳ Ausstehend</option>
         <option value="erledigt">✓ Hat stattgefunden</option>
@@ -1227,12 +1253,12 @@ textarea.form-input{
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Kleeblätter</label>
-      <div id="trate-modal-pokale" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <label class="form-label" id="trate-pokal-lbl">Kleeblätter</label>
+      <div role="group" aria-labelledby="trate-pokal-lbl" id="trate-modal-pokale" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
     </div>
     <div class="form-group">
-      <label class="form-label">Bewertung (optional)</label>
-      <div id="trate-modal-emojis" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <label class="form-label" id="trate-emoji-lbl">Bewertung (optional)</label>
+      <div role="group" aria-labelledby="trate-emoji-lbl" id="trate-modal-emojis" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-rate')">Abbrechen</button>
@@ -1268,26 +1294,26 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Termin verschieben</div>
     <div class="form-group">
-      <label class="form-label">Halbjahr</label>
+      <label class="form-label" for="tsedit-halbjahr">Halbjahr</label>
       <input class="form-input" id="tsedit-halbjahr" placeholder="z.B. 2627_1">
     </div>
     <div class="form-group">
-      <label class="form-label">Datum</label>
+      <label class="form-label" for="tsedit-datum">Datum</label>
       <input class="form-input" id="tsedit-datum" type="date">
     </div>
     <div class="form-group">
-      <label class="form-label">Uhrzeit</label>
+      <label class="form-label" for="tsedit-uhrzeit">Uhrzeit</label>
       <input class="form-input" id="tsedit-uhrzeit" type="time">
     </div>
     <div class="form-group">
-      <label class="form-label">Dauer (Minuten)</label>
+      <label class="form-label" for="tsedit-dauer">Dauer (Minuten)</label>
       <input class="form-input" id="tsedit-dauer" type="number" min="5" max="600" value="45">
     </div>
     <div class="form-group">
-      <label class="form-label">Ort</label>
+      <label class="form-label" for="tsedit-ort">Ort</label>
       <input class="form-input" id="tsedit-ort" placeholder="z.B. Mathe-Fachbüro M3/M4">
     </div>
-    <div id="tsedit-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:-8px;margin-bottom:8px;"></div>
+    <div id="tsedit-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:-8px;margin-bottom:8px;" role="status" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-slot-edit')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="submitTalkingSlotEdit()">Speichern</button>
@@ -1301,7 +1327,7 @@ textarea.form-input{
     <div class="modal-title" id="calbook-title">Buchen</div>
     <div id="calbook-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:12px;"></div>
     <div class="form-group">
-      <label class="form-label">Thema</label>
+      <label class="form-label" for="calbook-thema">Thema</label>
       <input class="form-input" id="calbook-thema" placeholder="Worum geht es?">
     </div>
     <div class="form-group">
@@ -1321,11 +1347,11 @@ textarea.form-input{
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Input-Termin freischalten</div>
     <div class="form-group">
-      <label class="form-label">Fach</label>
+      <label class="form-label" for="islot-subject">Fach</label>
       <select class="form-input" id="islot-subject" onchange="applyInputSlotSubjectDefaults()"></select>
     </div>
     <div class="form-group">
-      <label class="form-label">Lernbegleitung</label>
+      <label class="form-label" for="islot-teacher">Lernbegleitung</label>
       <select class="form-input" id="islot-teacher"></select>
     </div>
     <div class="form-group">
@@ -1334,22 +1360,22 @@ textarea.form-input{
       </label>
     </div>
     <div id="islot-single-fields">
-      <div class="form-group"><label class="form-label">Datum</label><input class="form-input" id="islot-datum" type="date"></div>
+      <div class="form-group"><label class="form-label" for="islot-datum">Datum</label><input class="form-input" id="islot-datum" type="date"></div>
     </div>
     <div id="islot-recurring-fields" style="display:none;">
-      <div class="form-group"><label class="form-label">Wochentag</label>
+      <div class="form-group"><label class="form-label" for="islot-weekday">Wochentag</label>
         <select class="form-input" id="islot-weekday">
           <option value="1">Montag</option><option value="2">Dienstag</option><option value="3">Mittwoch</option><option value="4">Donnerstag</option><option value="5">Freitag</option><option value="6">Samstag</option><option value="0">Sonntag</option>
         </select>
       </div>
       <div class="form-group" style="display:flex;gap:10px;">
-        <div style="flex:1;"><label class="form-label">Von</label><input class="form-input" id="islot-von" type="date"></div>
-        <div style="flex:1;"><label class="form-label">Bis</label><input class="form-input" id="islot-bis" type="date"></div>
+        <div style="flex:1;"><label class="form-label" for="islot-von">Von</label><input class="form-input" id="islot-von" type="date"></div>
+        <div style="flex:1;"><label class="form-label" for="islot-bis">Bis</label><input class="form-input" id="islot-bis" type="date"></div>
       </div>
     </div>
-    <div class="form-group"><label class="form-label">Uhrzeit</label><input class="form-input" id="islot-uhrzeit" type="time"></div>
-    <div class="form-group"><label class="form-label">Dauer (Minuten)</label><input class="form-input" id="islot-dauer" type="number" min="5" max="600" value="45"></div>
-    <div class="form-group"><label class="form-label">Ort</label><input class="form-input" id="islot-ort" placeholder="z.B. Mathe-Fachbüro"></div>
+    <div class="form-group"><label class="form-label" for="islot-uhrzeit">Uhrzeit</label><input class="form-input" id="islot-uhrzeit" type="time"></div>
+    <div class="form-group"><label class="form-label" for="islot-dauer">Dauer (Minuten)</label><input class="form-input" id="islot-dauer" type="number" min="5" max="600" value="45"></div>
+    <div class="form-group"><label class="form-label" for="islot-ort">Ort</label><input class="form-input" id="islot-ort" placeholder="z.B. Mathe-Fachbüro"></div>
     <div id="islot-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-input-slot')">Abbrechen</button>
@@ -1362,8 +1388,8 @@ textarea.form-input{
 <div class="overlay" id="modal-deadline">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Deadline eintragen</div>
-    <div class="form-group"><label class="form-label">Datum</label><input class="form-input" id="dl-datum" type="date"></div>
-    <div class="form-group"><label class="form-label">Titel</label><input class="form-input" id="dl-titel" placeholder="z.B. Abgabe Lernplakat"></div>
+    <div class="form-group"><label class="form-label" for="dl-datum">Datum</label><input class="form-input" id="dl-datum" type="date"></div>
+    <div class="form-group"><label class="form-label" for="dl-titel">Titel</label><input class="form-input" id="dl-titel" placeholder="z.B. Abgabe Lernplakat"></div>
     <div id="dl-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-deadline')">Abbrechen</button>
@@ -1378,12 +1404,12 @@ textarea.form-input{
     <div class="modal-title" id="iassign-title">Schüler:innen zuweisen</div>
     <div id="iassign-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:10px;"></div>
     <div class="form-group" id="iassign-thema-group">
-      <label class="form-label">Thema</label>
+      <label class="form-label" for="iassign-thema">Thema</label>
       <input class="form-input" id="iassign-thema" placeholder="z.B. Übungsaufgaben besprechen">
     </div>
     <div class="form-group">
-      <label class="form-label">Wen zuweisen?</label>
-      <div id="iassign-classmates" style="max-height:220px;overflow-y:auto;"></div>
+      <label class="form-label" id="iassign-cm-lbl">Wen zuweisen?</label>
+      <div role="group" aria-labelledby="iassign-cm-lbl" id="iassign-classmates" style="max-height:220px;overflow-y:auto;"></div>
     </div>
     <div id="iassign-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:8px;"></div>
     <div class="modal-actions">
@@ -1397,10 +1423,10 @@ textarea.form-input{
 <div class="overlay" id="modal-subject-settings">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="ssettings-title">Fach-Einstellungen</div>
-    <div class="form-group"><label class="form-label">Standard-Ort</label><input class="form-input" id="ssettings-ort" placeholder="z.B. Mathe-Fachbüro"></div>
-    <div class="form-group"><label class="form-label">Standard-Dauer (Minuten)</label><input class="form-input" id="ssettings-dauer" type="number" min="5" max="600"></div>
-    <div class="form-group"><label class="form-label">Pflicht: X mal präsentieren</label><input class="form-input" id="ssettings-pp" type="number" min="0" max="10"></div>
-    <div class="form-group"><label class="form-label">Pflicht: Y mal zuhören</label><input class="form-input" id="ssettings-pz" type="number" min="0" max="10"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-ort">Standard-Ort</label><input class="form-input" id="ssettings-ort" placeholder="z.B. Mathe-Fachbüro"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-dauer">Standard-Dauer (Minuten)</label><input class="form-input" id="ssettings-dauer" type="number" min="5" max="600"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-pp">Pflicht: X mal präsentieren</label><input class="form-input" id="ssettings-pp" type="number" min="0" max="10"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-pz">Pflicht: Y mal zuhören</label><input class="form-input" id="ssettings-pz" type="number" min="0" max="10"></div>
     <div id="ssettings-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-subject-settings')">Abbrechen</button>
@@ -2468,12 +2494,12 @@ function showView(v) {
     }
     if (id === 'talking') return; // eigene Aktiv-Markierung über showSubjectTalking() (3 Fach-Tabs, 1 View)
     const tab = document.getElementById('tab-' + id);
-    if (tab) tab.classList.toggle('active', isActive);
+    if (tab) { tab.classList.toggle('active', isActive); tab.setAttribute('aria-current', isActive ? 'page' : 'false'); }
   });
   // Picker gehört zum Lerntheke-Bereich, hat aber keinen eigenen Tab - Lerntheke-Tab mit hervorheben
   if (v === 'picker') {
     const tabLerntheke = document.getElementById('tab-lerntheke');
-    if (tabLerntheke) tabLerntheke.classList.add('active');
+    if (tabLerntheke) { tabLerntheke.classList.add('active'); tabLerntheke.setAttribute('aria-current', 'page'); }
   }
   // Show back-to-picker bar only when in lerntheke view with multiple options
   const backBar = document.getElementById('picker-back-bar');
@@ -3304,9 +3330,9 @@ function buildTalkingPickerSummaryHtml(data, subject) {
 function showSubjectTalking(key) {
   activeSubject = key;
   showView('talking');
-  document.querySelectorAll('[id^="tab-talking-"]').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-talking-"]').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-current', 'false'); });
   const tab = document.getElementById('tab-talking-' + key);
-  if (tab) tab.classList.add('active');
+  if (tab) { tab.classList.add('active'); tab.setAttribute('aria-current', 'page'); }
   const subj = subjectByKey(key);
   const headerText = document.getElementById('talking-header-text');
   if (headerText) headerText.textContent = subj.name + '-Talks';
@@ -4840,8 +4866,49 @@ function exportCSV() {
 }
 
 // ══ Helpers ═══════════════════════════════════════════════════════════════════
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+// Modal-Handling zentral, damit alle Dialoge dieselbe Tastaturbedienung haben:
+// Fokus wandert in den Dialog, Escape schliesst, danach zurueck zum Ausloeser.
+// Ohne das war ein Dialog per Tastatur praktisch nicht bedienbar - der Fokus blieb
+// im Hintergrund und es gab keine Moeglichkeit, ausser mit der Maus zu schliessen.
+let _modalReturnFocus = null;
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  _modalReturnFocus = document.activeElement;
+  el.classList.add('open');
+  const box = el.querySelector('.modal');
+  if (box) {
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    const title = box.querySelector('.modal-title');
+    if (title) {
+      if (!title.id) title.id = id + '-title';
+      box.setAttribute('aria-labelledby', title.id);
+    }
+    if (!box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
+    // Erstes sinnvoll bedienbares Element fokussieren, sonst den Dialog selbst.
+    const first = box.querySelector('input:not([type=hidden]):not([disabled]), select, textarea, button');
+    (first || box).focus();
+  }
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('open');
+  if (_modalReturnFocus && document.contains(_modalReturnFocus)) _modalReturnFocus.focus();
+  _modalReturnFocus = null;
+}
+
+// Escape schliesst den obersten offenen Dialog.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = [...document.querySelectorAll('.overlay.open')];
+  if (!open.length) return;
+  e.preventDefault();
+  closeModal(open[open.length - 1].id);
+});
 
 function showMsg(id, text, type) {
   const el = document.getElementById(id);
