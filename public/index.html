@@ -1600,6 +1600,16 @@ function lwMin(hhmm) {
   const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
   return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
 }
+// Anzeige "08:45–10:15": Ende aus Startzeit + Dauer (Default 45 Min, wie in der DB).
+// Bei unparsebarer Alt-Uhrzeit bleibt es beim Rohwert.
+function lwTimeRange(uhrzeit, dauer) {
+  const start = lwMin(uhrzeit);
+  if (start === null) return escHtml(uhrzeit || '');
+  const end = start + (parseInt(dauer, 10) || 45);
+  const hh = String(Math.floor(end / 60) % 24).padStart(2, '0');
+  const mm = String(end % 60).padStart(2, '0');
+  return `${escHtml(uhrzeit)}–${hh}:${mm}`;
+}
 function lwDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
@@ -1630,7 +1640,7 @@ function lwChip(s) {
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? 'schon gebucht' : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time"><span style="color:${color};">${lwIcon(s.typ)}</span>${escHtml(s.uhrzeit || '')} <span class="lw-chip-type">${typLabel}</span></div>
+    <div class="lw-chip-time"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
     <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${color};">${escHtml(s.subjectName || '')}</span> · ${s.booked ? 'gebucht' : 'frei'}</div>
   </div>`;
 }
@@ -1706,7 +1716,7 @@ async function loadLoginWeek() {
       const color = s.subjectColor || '#94a3b8';
       const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
-        <div class="lw-chip-time"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''} <span class="lw-chip-type">${typLabel}</span></div>
+        <div class="lw-chip-time"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''} <span class="lw-chip-type">${typLabel}</span></div>
         <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${color};">${escHtml(s.subjectName || '')}</span> · ${s.booked ? 'gebucht' : 'frei'}</div>
       </div>`;
     }).join('')}
@@ -2043,16 +2053,15 @@ function mwChip(s) {
   // (currentColor) mitzieht; fremd belegte bleiben bewusst neutral.
   const chipStyle = state === 'taken' ? '' : ` style="border-left-color:${color};color:${color};"`;
   const parts = [
-    s.uhrzeit || '',
     s.ort ? escHtml(s.ort) : '',
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean);
   return `<div class="lw-chip mw-${state}"${chipStyle}
     title="${escHtml([subj.name, typLabel, s.uhrzeit, s.ort, s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '', label].filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${escHtml(s.uhrzeit || '')} <span class="lw-chip-type">${typLabel}</span></div>
+    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
     <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>
       <span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};"> · ${label}</span></div>
-    ${parts.length > 1 ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">${parts.slice(1).join(' · ')}</div>` : ''}
+    ${parts.length ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">${parts.join(' · ')}</div>` : ''}
   </div>`;
 }
 
@@ -2078,11 +2087,32 @@ async function loadMyWeek() {
   });
   const dayStrs = dayDates.map(lwDateStr);
 
+  const weekSlots = (data.slots || []).filter(s => dayStrs.indexOf(s.datum) !== -1);
+
+  // Termine, die sich mit einer eigenen Buchung überschneiden, ausblenden: sie sind
+  // ohnehin nicht buchbar (der Server lehnt sie mit 409 ab, siehe hasScheduleConflict)
+  // und würden die Woche nur zumüllen. Offene Einladungen zählen NICHT als Blocker
+  // (noch keine Zusage) und werden selbst nie ausgeblendet - eine Überschneidung dort
+  // muss sichtbar bleiben, damit man bewusst ab- oder zusagen kann.
+  const busy = weekSlots.filter(s => mwState(s) === 'mine').map(s => ({
+    datum: s.datum,
+    von: lwMin(s.uhrzeit),
+    bis: (lwMin(s.uhrzeit) ?? 0) + (parseInt(s.dauer, 10) || 45),
+  })).filter(b => b.von !== null);
+
+  const visible = weekSlots.filter(s => {
+    const state = mwState(s);
+    if (state === 'mine' || state === 'invited') return true;
+    const von = lwMin(s.uhrzeit);
+    if (von === null) return true; // ohne Uhrzeit nicht beurteilbar -> lieber zeigen
+    const bis = von + (parseInt(s.dauer, 10) || 45);
+    return !busy.some(b => b.datum === s.datum && von < b.bis && b.von < bis);
+  });
+
   const cells = LW_BLOCKS.map(() => LW_DAY_NAMES.map(() => []));
   const extras = [];
-  (data.slots || []).forEach(s => {
+  visible.forEach(s => {
     const dayIdx = dayStrs.indexOf(s.datum);
-    if (dayIdx === -1) return; // andere Woche - hier bewusst ausgeblendet
     const start = lwMin(s.uhrzeit);
     const blockIdx = start === null ? -1 : LW_BLOCKS.findIndex(b => start >= lwMin(b.von) && start < lwMin(b.bis));
     if (blockIdx === -1) extras.push(s);
@@ -2090,8 +2120,9 @@ async function loadMyWeek() {
   });
   cells.forEach(row => row.forEach(list => list.sort((a, b) => (lwMin(a.uhrzeit) ?? 0) - (lwMin(b.uhrzeit) ?? 0))));
 
-  const mineCount = (data.slots || []).filter(s => dayStrs.indexOf(s.datum) !== -1 && ['mine','invited'].includes(mwState(s))).length;
-  const freeCount = (data.slots || []).filter(s => dayStrs.indexOf(s.datum) !== -1 && mwState(s) === 'free').length;
+  const mineCount = visible.filter(s => ['mine','invited'].includes(mwState(s))).length;
+  const freeCount = visible.filter(s => mwState(s) === 'free').length;
+  const hiddenCount = weekSlots.length - visible.length;
 
   const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) =>
     `<div class="lw-dayhead">${name}
@@ -2125,6 +2156,7 @@ async function loadMyWeek() {
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
       <span>belegt = von anderen gebucht</span>
+      ${hiddenCount ? `<span>${hiddenCount} Termin${hiddenCount === 1 ? '' : 'e'} ausgeblendet (überschneidet sich mit deinen)</span>` : ''}
     </div>
     ${extrasHtml}
   </div>`;
