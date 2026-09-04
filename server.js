@@ -2136,7 +2136,7 @@ app.get('/api/public/week', async (req, res) => {
         SELECT s.id, s.typ, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort,
                sub.id AS "subjectId", sub.key AS "subjectKey", sub.name AS "subjectName",
                sub.color AS "subjectColor",
-               (ts.id IS NOT NULL) AS booked
+               (ts.id IS NOT NULL) AS booked, ts.thema
         FROM talking_slots s
         LEFT JOIN subjects sub ON sub.id = s.subject_id
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id

@@ -1687,11 +1687,14 @@ function lwChip(s) {
   const color = s.subjectColor || '#94a3b8';
   const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
   const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
-  const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? 'schon gebucht' : 'frei buchbar'];
+  // Gebucht: Thema statt "gebucht" zeigen (kein Personenbezug, nur der Inhalt) - fällt auf
+  // "gebucht" zurück, falls (theoretisch) kein Thema gesetzt ist.
+  const metaText = s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht') : 'frei';
+  const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
     <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta">${s.booked ? 'gebucht' : 'frei'}</div>
+    <div class="lw-chip-meta">${metaText}</div>
   </div>`;
 }
 
@@ -1768,7 +1771,7 @@ async function loadLoginWeek() {
       const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
         <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''} <span class="lw-chip-type">${typLabel}</span></div>
-        <div class="lw-chip-meta">${s.booked ? 'gebucht' : 'frei'}</div>
+        <div class="lw-chip-meta">${s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht') : 'frei'}</div>
       </div>`;
     }).join('')}
     ${deadlines.map(d => `<div class="lw-chip" style="margin-bottom:3px;">
