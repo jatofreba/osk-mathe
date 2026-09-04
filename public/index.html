@@ -80,30 +80,39 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   min-height:100vh;padding:24px;
   background:var(--md-background);
 }
-/* Login-Seite: obere Zeile (Karte + Wochenübersicht), darunter Taskcards über die volle Breite. */
+/* Login-Seite: schmale Topbar (Branding + kompaktes Login), darunter die Wochenübersicht
+   und Taskcards jeweils über die volle Breite - der Plan ist der eigentliche Inhalt dieser
+   öffentlichen Seite, das Login tritt bewusst zurück. */
 .login-outer{
   display:flex;flex-direction:column;gap:20px;
   width:100%;max-width:1120px;
 }
-.login-layout{
-  display:flex;gap:24px;
-  align-items:flex-start;justify-content:center;
-  flex-wrap:wrap;width:100%;
-}
-.login-card{
+.login-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:20px;flex-wrap:wrap;
   background:var(--md-surface);
-  border-radius:28px;
-  padding:44px 40px;
-  width:100%;max-width:400px;
+  border-radius:20px;
+  padding:16px 24px;
   box-shadow:var(--md-elevation-3);
 }
-/* Wochenübersicht neben dem Login - bewusst ohne Namen (öffentlich sichtbar). */
+.login-brand{display:flex;align-items:center;gap:12px;}
+.login-brand .login-logo{font-size:28px;margin-bottom:0;}
+.login-brand-text .login-title{font-size:17px;margin-bottom:1px;}
+.login-brand-text .login-sub{font-size:12px;margin-bottom:0;}
+.login-form-compact{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  flex:1 1 320px;justify-content:flex-end;
+}
+.login-form-compact .form-input{width:auto;flex:1 1 130px;padding:9px 12px;font-size:14px;}
+.login-form-compact .btn-primary{width:auto;padding:9px 20px;white-space:nowrap;flex-shrink:0;}
+/* Wochenübersicht - bewusst ohne Namen (öffentlich sichtbar), jetzt über die volle Breite
+   der Seite statt neben dem Login eingezwängt. */
 .login-week{
   background:var(--md-surface);
   border-radius:28px;
   padding:26px 24px;
   box-shadow:var(--md-elevation-3);
-  flex:1 1 560px;max-width:660px;min-width:0;
+  width:100%;min-width:0;
 }
 .login-week-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .login-week-title{font-size:16px;font-weight:700;color:var(--md-on-surface);}
@@ -201,13 +210,13 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .login-taskcards iframe{width:100%;height:560px;border:none;border-radius:12px;display:block;background:var(--md-surface-container-low);}
 @media (max-width:1120px){
   #login-screen{align-items:flex-start;}
-  .login-outer{max-width:660px;}
-  .login-layout{flex-direction:column;align-items:center;}
-  .login-card{max-width:660px;}
-  .login-week{max-width:660px;width:100%;flex:1 1 auto;}
 }
 @media (max-width:600px){
   .login-taskcards iframe{height:420px;}
+  /* Kompaktes Login stapelt sich auf schmalen Handys zu vollbreiten Feldern statt
+     winziger 130px-Eingaben nebeneinander. */
+  .login-form-compact{justify-content:stretch;}
+  .login-form-compact .form-input,.login-form-compact .btn-primary{flex:1 1 100%;}
 }
 .login-logo{font-size:36px;margin-bottom:12px;}
 .login-title{
@@ -822,29 +831,27 @@ textarea.form-input{
 <!-- ══ LOGIN ══════════════════════════════════════════════════════════════════ -->
 <div id="login-screen">
   <div class="login-outer">
-    <div class="login-layout">
-      <div class="login-card">
-        <div class="login-logo">📐</div>
-        <div class="login-title"><strong>O</strong>rganisieren <strong>S</strong>elbst <strong>K</strong>önnen</div>
-        <div class="login-sub">Mittelstufe · Melde dich an um loszulegen</div>
-        <div class="form-group">
-          <label class="form-label" for="inp-user">Benutzername</label>
-          <input class="form-input" id="inp-user" autocomplete="username" placeholder="z.B. anna.mueller">
+    <div class="login-topbar">
+      <div class="login-brand">
+        <span class="login-logo">📐</span>
+        <div class="login-brand-text">
+          <div class="login-title"><strong>O</strong>rganisieren <strong>S</strong>elbst <strong>K</strong>önnen</div>
+          <div class="login-sub">Mittelstufe</div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="inp-pass">Passwort</label>
-          <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="••••••">
-        </div>
+      </div>
+      <div class="login-form-compact">
+        <input class="form-input" id="inp-user" autocomplete="username" placeholder="Benutzername" aria-label="Benutzername">
+        <input class="form-input" id="inp-pass" type="password" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort">
         <button class="btn-primary" id="btn-login" onclick="doLogin()">Anmelden →</button>
-        <div class="login-error" id="login-error" role="status" aria-live="polite"></div>
       </div>
-      <div class="login-week" id="login-week">
-        <div class="login-week-head">
-          <span class="login-week-title">📅 Fachbüro-Angebote</span>
-          <span class="login-week-sub" id="login-week-range"></span>
-        </div>
-        <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
+    </div>
+    <div class="login-error" id="login-error" role="status" aria-live="polite"></div>
+    <div class="login-week" id="login-week">
+      <div class="login-week-head">
+        <span class="login-week-title">📅 Fachbüro-Angebote</span>
+        <span class="login-week-sub" id="login-week-range"></span>
       </div>
+      <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
     </div>
     <div class="login-taskcards" id="login-taskcards" style="display:none;">
       <div class="login-week-head" style="margin-bottom:12px;">
@@ -1693,7 +1700,7 @@ function lwChip(s) {
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
+    <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}</div>
     <div class="lw-chip-meta">${metaText}</div>
   </div>`;
 }
@@ -1767,10 +1774,9 @@ async function loadLoginWeek() {
     <div class="lw-extra-title">Weitere Termine</div>
     ${extras.map(s => {
       const color = s.subjectColor || '#94a3b8';
-      const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
       const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
-        <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''} <span class="lw-chip-type">${typLabel}</span></div>
+        <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''}</div>
         <div class="lw-chip-meta">${s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht') : 'frei'}</div>
       </div>`;
     }).join('')}
