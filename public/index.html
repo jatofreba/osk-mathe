@@ -184,6 +184,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 }
 .mw-book-btn:hover{filter:brightness(1.08);}
 .mw-chip-status{font-weight:700;}
+/* Voller Fachname als Text in den Wochenkacheln - NICHT .lw-chip-subj
+   verwenden, das ist inzwischen das 14x14-Badge fuer den Fach-Buchstaben. */
+.mw-chip-subj{font-weight:600;}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -191,7 +194,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-chip.mw-invited{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
 .lw-chip.mw-invited .mw-chip-status{color:#854d0e;}
 .lw-chip.mw-taken{border-left-color:var(--md-outline-variant);}
-.lw-chip.mw-taken .lw-chip-subj,.lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
+.lw-chip.mw-taken .mw-chip-subj,.lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
 .mw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--md-on-surface-variant);}
 .mw-legend b{font-weight:700;}
 /* Teilnehmende in der Admin-Wochenansicht: wer ist bei welchem Termin dabei. */
@@ -812,6 +815,10 @@ textarea.form-input{
   transition:background .15s,color .15s;
 }
 .subject-btn.active{color:#fff;}
+/* Anmelde-Button trägt die Farbe des gerade gewählten Fachs (inline gesetzt),
+   damit erkennbar bleibt, wofür man sich anmeldet. Deaktiviert = neutral. */
+.btn-subject{color:#fff;border:1px solid transparent;}
+.btn-subject:disabled{background:var(--md-surface-container-low);color:var(--md-on-surface-variant);cursor:not-allowed;}
 .subject-btn:not(.active):hover{background:var(--md-surface-container-low);}
 .tsum-hj-title{font-size:12px;font-weight:700;margin:16px 0 6px;color:var(--ink);}
 .tsum-hj-title:first-of-type{margin-top:0;}
@@ -895,7 +902,7 @@ textarea.form-input{
     <button type="button" class="tab active" id="tab-home" onclick="showHome()">🏠 Start</button>
     <button type="button" class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</button>
     <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
-    <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(activeSubject || 'mathe')">🗣️ Talks</button>
+    <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(defaultSubjectKey())">🗣️ Talks</button>
     <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
     <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
     <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Lerngruppen-Übersicht</button>
@@ -1527,6 +1534,17 @@ function orderedSubjects() {
   copy.unshift(preferred);
   return copy;
 }
+// Key des persönlichen Standard-Fachs (Topbar-Auswahl der Admin-Person). Damit
+// öffnet der Talks-Tab direkt "seine" Fach-Maske. Ohne Präferenz - und für
+// Schüler:innen, die diese Einstellung nicht haben - das erste verfügbare Fach.
+function defaultSubjectKey() {
+  if (me && me.defaultSubjectId != null) {
+    const s = subjectsMeta.find(x => x.id === me.defaultSubjectId);
+    if (s) return s.key;
+  }
+  return (subjectsMeta[0] && subjectsMeta[0].key) || 'mathe';
+}
+
 async function setMyDefaultSubject(value) {
   const subjectId = value ? parseInt(value) : null;
   try {
@@ -2185,7 +2203,7 @@ function mwChip(s) {
 
   return `<div class="lw-chip mw-${state}"${chipStyle} title="${tooltip}">
     <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${color};">${escHtml(subj.name)}</span><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};"> · ${label}</span></div>
+    <div class="lw-chip-meta"><span class="mw-chip-subj" style="color:${color};">${escHtml(subj.name)}</span><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};"> · ${label}</span></div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
 }
@@ -2403,6 +2421,7 @@ async function showApp() {
   document.getElementById('bar-user').textContent = me.username;
   document.getElementById('bar-klasse').textContent = 'Lerngruppe ' + me.klasse;
   await loadSubjectsMeta();
+  activeSubject = defaultSubjectKey(); // persoenliches Standard-Fach als Startpunkt
 
   if (me.role === 'student' && me.kurs) {
     const barKurs = document.getElementById('bar-kurs');
@@ -4042,7 +4061,7 @@ function awChip(s) {
     s.thema ? 'Thema: ' + s.thema : '', s.booked ? 'gebucht' : 'frei'].filter(Boolean).join(' · '));
   return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}">
     <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>${isMine ? ' · <span class="mw-chip-status" style="color:' + color + ';">von dir</span>' : ''}${!s.booked ? ' · <span class="mw-chip-status">frei</span>' : ''}</div>
+    <div class="lw-chip-meta"><span class="mw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>${isMine ? ' · <span class="mw-chip-status" style="color:' + color + ';">von dir</span>' : ''}${!s.booked ? ' · <span class="mw-chip-status">frei</span>' : ''}</div>
     ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
     ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
   </div>`;
@@ -4414,7 +4433,9 @@ function renderTalkingStudent() {
     <div class="stats-row">${trophyCard}${progressCards}</div>
     <div class="admin-top" style="margin-top:16px;">
       <div class="admin-title" style="font-size:16px;">🗣️ Meine ${escHtml(subj.name)}-Talks im Detail</div>
-      <button class="btn-act btn-green" onclick="openBookSessionModal()" ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ ${escHtml(subj.name)}-Talk anmelden</button>
+      <button class="btn-act btn-subject" onclick="openBookSessionModal()"
+        style="${talkingOpenSlots.length ? `background:${subj.color};border-color:${subj.color};` : ''}"
+        ${!talkingOpenSlots.length ? 'disabled title="Keine offenen Termine verfügbar"' : ''}>+ ${escHtml(subj.name)}-Talk anmelden</button>
     </div>
     ${detailBlocks || `<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch kein ${escHtml(subj.name)}-Talk.</div>`}
   `;
