@@ -1516,8 +1516,11 @@ function subjOptionalP(subj, hj) { const v = subjTargetRaw(subj, hj, 'optionalPr
 function subjOptionalZ(subj, hj) { const v = subjTargetRaw(subj, hj, 'optionalZuhoeren');      return v != null ? v : 1; }
 // Halbjahre vor der Account-Erstellung nicht als "nichts gemacht" werten (Format sortiert
 // lexikografisch korrekt, siehe halbjahrCountsForUser() im Server).
-function hjCountsForUser(hj, firstHalbjahr) {
-  return !hj || !firstHalbjahr || hj >= firstHalbjahr;
+function hjCountsForUser(hj, firstHalbjahr, lastHalbjahr) {
+  if (!hj) return true;
+  if (firstHalbjahr && hj < firstHalbjahr) return false;
+  if (lastHalbjahr && hj > lastHalbjahr) return false;
+  return true;
 }
 // Fächer-Liste mit dem persönlichen Default-Fach der Admin-Person zuerst (me.defaultSubjectId,
 // über setMyDefaultSubject() gewählt) - Rest bleibt in der natürlichen Reihenfolge dahinter.
@@ -4215,9 +4218,11 @@ function renderHalbjahr() {
   const isSubjNothing = (sd, isMathe, b) => !sd.talksPresented && !sd.talksListened && !sd.inputParticipated
     && !(isMathe && (b.stationsCompleted || (b.lzk||[]).filter(l=>l.status==='bestanden').length));
 
-  // Accounts, die es im gewählten Halbjahr noch gar nicht gab, tauchen dort nicht auf -
-  // sonst würde ihre "Inaktivität" in einer Zeit gewertet, in der sie noch nicht existierten.
-  const studentsInHj = hjData.students.filter(s => hjCountsForUser(hjSelected, s.firstHalbjahr));
+  // Nur Accounts zeigen, die es im gewählten Halbjahr auch gab: vor der Erstellung würde sonst
+  // "Inaktivität" gewertet, die niemand haben konnte - und nach dem Passiv-Setzen wäre es
+  // umgekehrt falsch, die Person weiter als "nichts los" zu führen. Vergangene Halbjahre, in
+  // denen sie aktiv dabei war, bleiben dagegen vollständig erhalten.
+  const studentsInHj = hjData.students.filter(s => hjCountsForUser(hjSelected, s.firstHalbjahr, s.lastHalbjahr));
   const sections = orderedSubjects().map(subj => {
     const isMathe = subj.key === 'mathe';
     let nothingCount = 0;

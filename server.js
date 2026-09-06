@@ -104,6 +104,17 @@ async function initDB() {
         ALTER TABLE users ADD COLUMN aktiv BOOLEAN NOT NULL DEFAULT true;
       END IF;
     END $$;
+    -- Zeitpunkt des Passiv-Setzens (2026-09-04): Gegenstück zu created_at. Ohne diesen Stempel
+    -- ließe sich "war damals dabei" nicht von "ist inzwischen raus" unterscheiden - die Person
+    -- wäre rückwirkend aus allen Halbjahren verschwunden. NULL = aktiv.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='passiv_seit') THEN
+        ALTER TABLE users ADD COLUMN passiv_seit TIMESTAMPTZ;
+      END IF;
+    END $$;
+    -- Altbestand: wer schon passiv ist, aber noch keinen Stempel hat, bekommt den aktuellen
+    -- Zeitpunkt - damit zählt die Vergangenheit weiter und erst ab jetzt nicht mehr.
+    UPDATE users SET passiv_seit = NOW() WHERE aktiv = false AND passiv_seit IS NULL;
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lerntheke_access' AND column_name='kurs') THEN
         ALTER TABLE lerntheke_access ADD COLUMN kurs VARCHAR(1) DEFAULT NULL;
@@ -564,13 +575,17 @@ function halbjahrForDate(d) {
   return String(startYear).slice(-2) + String(startYear + 1).slice(-2) + '_' + sem;
 }
 
-// Halbjahre, in denen ein Account noch gar nicht existierte, dürfen nicht als "nichts gemacht"
-// gewertet werden (2026-09-04). Das Format "<StartJJ><EndJJ>_<1|2>" sortiert lexikografisch
-// korrekt ("2526_2" < "2627_1" < "2627_2"), deshalb reicht ein String-Vergleich.
-function halbjahrCountsForUser(hj, createdAt) {
+// Ein Halbjahr zählt für eine Person nur, wenn ihr Account damals schon existierte UND noch
+// nicht passiv gesetzt war (2026-09-04). Das Format "<StartJJ><EndJJ>_<1|2>" sortiert
+// lexikografisch korrekt ("2526_2" < "2627_1" < "2627_2"), deshalb reichen String-Vergleiche.
+// Das Halbjahr des Passiv-Setzens zählt noch mit - erst ab dem Folgehalbjahr ist Schluss.
+function halbjahrCountsForUser(hj, createdAt, passivSeit) {
   if (!hj) return false;
   const first = halbjahrForDate(createdAt);
-  return !first || hj >= first;
+  if (first && hj < first) return false;
+  const last = halbjahrForDate(passivSeit);
+  if (last && hj > last) return false;
+  return true;
 }
 
 // Vorgaben je Fach+Halbjahr auflösen: Zeile aus subject_halbjahr_targets, sonst Fach-Standard.
@@ -1565,7 +1580,13 @@ app.post('/api/admin/set-aktiv', requireAdmin, async (req, res) => {
     if (typeof aktiv !== 'boolean') return res.status(400).json({ error: 'Ungültig' });
     const u = await pool.query('SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role=$3', [userId, req.session.klasse, 'student']);
     if (!u.rows.length) return res.status(403).json({ error: 'Nicht gefunden' });
-    await pool.query('UPDATE users SET aktiv=$1 WHERE id=$2', [aktiv, userId]);
+    // passiv_seit merkt sich den Zeitpunkt: beim Passiv-Setzen wird er gesetzt (ein bereits
+    // vorhandener Stempel bleibt stehen), beim Reaktivieren wieder geleert.
+    await pool.query(
+      `UPDATE users SET aktiv=$1, passiv_seit = CASE WHEN $1 THEN NULL ELSE COALESCE(passiv_seit, NOW()) END
+       WHERE id=$2`,
+      [aktiv, userId]
+    );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1605,11 +1626,12 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     const [subjRes, targetRows, meRow] = await Promise.all([
       pool.query('SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects WHERE key=$1', [subjectKey]),
       pool.query('SELECT subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren FROM subject_halbjahr_targets'),
-      pool.query('SELECT created_at FROM users WHERE id=$1', [uid]),
+      pool.query('SELECT created_at, passiv_seit FROM users WHERE id=$1', [uid]),
     ]);
     if (!subjRes.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
     const subject = subjRes.rows[0];
     const myCreatedAt = meRow.rows[0] ? meRow.rows[0].created_at : null;
+    const myPassivSeit = meRow.rows[0] ? meRow.rows[0].passiv_seit : null;
     const [presenting, invitations, slotHalbjahre] = await Promise.all([
       pool.query(`
         SELECT ts.id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji",
@@ -1643,10 +1665,11 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     ]);
 
     const accepted = invitations.rows.filter(i => i.status === 'angenommen');
-    // Halbjahre vor der Account-Erstellung zählen nicht mit - sonst hätte eine später
-    // dazugekommene Person von Anfang an ein unerreichbares Pflicht-Maximum.
+    // Halbjahre vor der Account-Erstellung und nach dem Passiv-Setzen zählen nicht mit - sonst
+    // hätte eine später dazugekommene Person von Anfang an ein unerreichbares Pflicht-Maximum,
+    // und bei einer passiv gesetzten Person würde es mit jedem neuen Halbjahr weiterwachsen.
     const myHalbjahre = slotHalbjahre.rows.map(r => r.halbjahr)
-      .filter(hj => halbjahrCountsForUser(hj, myCreatedAt));
+      .filter(hj => halbjahrCountsForUser(hj, myCreatedAt, myPassivSeit));
     const trophies = computeTalkingTrophies(myHalbjahre, presenting.rows, accepted,
       buildTargetsResolver(subject, targetRows.rows));
 
@@ -2111,11 +2134,12 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
 async function halbjahrOverview(klasse, onlyUid) {
   const uidFilter = onlyUid ? ' AND u.id = $2' : '';
   const params = onlyUid ? [klasse, onlyUid] : [klasse];
-  // Passive Schüler:innen nur aus der Admin-Gesamtübersicht ausblenden (onlyUid fehlt) - der
-  // Selbst-Aufruf einer einzelnen Person (/api/my-halbjahr) bleibt davon unberührt.
-  const aktivFilter = onlyUid ? '' : ' AND aktiv=true';
+  // Passive Schüler:innen werden hier NICHT mehr hart ausgefiltert - sonst verschwände auch
+  // ihre Vergangenheit aus den Halbjahren, in denen sie aktiv dabei waren. Stattdessen liefert
+  // die Route firstHalbjahr/lastHalbjahr mit; das Frontend blendet sie nur in den Halbjahren
+  // aus, die vor der Account-Erstellung oder nach dem Passiv-Setzen liegen.
   const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
-    pool.query(`SELECT id, username, created_at FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    pool.query(`SELECT id, username, created_at, passiv_seit FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
       SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -2223,11 +2247,13 @@ async function halbjahrOverview(klasse, onlyUid) {
   return {
     halbjahre: [...halbjahre].sort().reverse(),
     subjects: subjectsRows.rows.map(s => ({ key: s.key, name: s.name, color: s.color })),
-    // firstHalbjahr = Halbjahr der Account-Erstellung; frühere Halbjahre blendet das Frontend
-    // aus, statt sie als "nichts los" zu werten (der Account gab es damals noch nicht).
+    // firstHalbjahr = Halbjahr der Account-Erstellung, lastHalbjahr = Halbjahr des Passiv-Setzens
+    // (null solange aktiv). Das Frontend zeigt die Person nur in diesem Zeitraum an, statt sie
+    // davor/danach als "nichts los" zu werten bzw. rückwirkend ganz verschwinden zu lassen.
     students: students.rows.map(s => ({
       id: s.id, username: s.username,
       firstHalbjahr: halbjahrForDate(s.created_at),
+      lastHalbjahr: s.passiv_seit ? halbjahrForDate(s.passiv_seit) : null,
       byHalbjahr: byUser[s.id] || {},
     })),
   };
