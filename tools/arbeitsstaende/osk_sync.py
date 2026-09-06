@@ -14,10 +14,15 @@ Der Zugriff läuft über einen ganz normalen Admin-Login der App (HTTPS), nicht
 über die Datenbank. Ein Admin-Konto sieht immer genau SEINE Lerngruppe -- für
 mehrere Lerngruppen entsprechend mehrere Konten in der Konfiguration angeben.
 
+Umgekehrt lassen sich aus der Excel-Liste die Konten fuer den Bulk-Import
+erzeugen (--bulk-liste) oder direkt anlegen (--bulk-anlegen).
+
 Aufruf:
     python3 osk_sync.py                      # nutzt osk_sync_config.json
     python3 osk_sync.py --config andere.json
     python3 osk_sync.py --dry-run            # nichts schreiben, nur berichten
+    python3 osk_sync.py --bulk-liste         # Konten-Liste zum Einfuegen erzeugen
+    python3 osk_sync.py --bulk-anlegen       # Konten direkt ueber die App anlegen
 
 Abhängigkeiten: openpyxl (wie die Arbeitsstände-App selbst). Der Rest ist
 Python-Standardbibliothek.
@@ -117,6 +122,14 @@ class AppClient:
     def halbjahr_uebersicht(self) -> dict:
         return self._get("/api/admin/halbjahr-uebersicht")
 
+    def bulk_create(self, konten: List[dict]) -> dict:
+        """Legt Schüler:innen-Konten an. Die App setzt dabei immer die Lerngruppe
+        DES ANGEMELDETEN Admin-Kontos und die Rolle 'student'. Bereits
+        vorhandene Benutzernamen werden serverseitig still übersprungen und
+        tauchen in der Antwort nur als 'skipped' auf.
+        """
+        return self._post("/api/admin/bulk-create", {"students": konten})
+
 
 # ══ Daten aus der App aufbereiten ═════════════════════════════════════════════
 
@@ -160,8 +173,14 @@ class AppDaten:
         # vorn, was in dieser Datei niemand erwartet.
 
 
-def hole_daten(config: dict) -> AppDaten:
+def hole_daten(config: dict) -> Tuple[AppDaten, Dict[str, AppClient]]:
+    """Liefert die Auswertung und die angemeldeten Sitzungen je Lerngruppe.
+
+    Die Sitzungen werden für das Anlegen von Konten weiterverwendet -- so muss
+    man sich nicht zweimal anmelden.
+    """
     daten = AppDaten()
+    sitzungen: Dict[str, AppClient] = {}
     for konto in config["accounts"]:
         benutzer = konto["username"]
         passwort = konto.get("password")
@@ -176,8 +195,41 @@ def hole_daten(config: dict) -> AppDaten:
         anzahl = len(payload.get("students", []))
         print(f"  {benutzer}: Lerngruppe {klasse}, {anzahl} Schüler:innen")
         daten.uebernehmen(klasse, payload)
+        sitzungen[klasse] = client
     daten.sortiere()
-    return daten
+    return daten, sitzungen
+
+
+# ══ Konten anlegen (Excel -> App) ═════════════════════════════════════════════
+
+def bulk_liste(ohne_konto: List[Tuple[str, str]], passwort: str) -> List[dict]:
+    """Baut die Liste der anzulegenden Konten aus den Personen ohne App-Konto.
+
+    Personen, deren Kurzname leer bliebe (z.B. Blattname ohne Nachnamen),
+    werden ausgelassen -- sie bekaemen sonst einen unbrauchbaren Benutzernamen.
+    """
+    konten = []
+    for blatt, account in sorted(ohne_konto):
+        if not account:
+            continue
+        teile = blatt.split(" ", 1)
+        konten.append({
+            "username": account,
+            "password": passwort,
+            "_name": blatt,
+            "_vorname": teile[0],
+            "_nachname": teile[1] if len(teile) > 1 else "",
+        })
+    return konten
+
+
+def schreibe_bulk_datei(konten: List[dict], pfad: str):
+    """Schreibt das Format, das der Bulk-Dialog der App erwartet:
+    eine Zeile je Konto, 'benutzername,passwort'.
+    """
+    with open(pfad, "w", encoding="utf-8") as f:
+        for k in konten:
+            f.write(f"{k['username']},{k['password']}\n")
 
 
 # ══ Excel: lesen, zuordnen, schreiben ═════════════════════════════════════════
@@ -375,6 +427,16 @@ def main(argv=None):
     p.add_argument("--config", default=STANDARD_CONFIG)
     p.add_argument("--dry-run", action="store_true",
                    help="nur auswerten und berichten, nichts speichern")
+    p.add_argument("--bulk-liste", nargs="?", const="bulk_konten.txt", metavar="DATEI",
+                   help="Konten für fehlende Personen als Textdatei ausgeben "
+                        "(Format des Bulk-Dialogs: benutzername,passwort)")
+    p.add_argument("--bulk-anlegen", action="store_true",
+                   help="diese Konten direkt über die App anlegen (schreibt auf dem Server!)")
+    p.add_argument("--passwort", metavar="PW",
+                   help="Start-Passwort für die neuen Konten (sonst Abfrage)")
+    p.add_argument("--lerngruppe", metavar="LG",
+                   help="in welche Lerngruppe angelegt wird, wenn mehrere Admin-Konten "
+                        "konfiguriert sind")
     args = p.parse_args(argv)
 
     config = lade_config(args.config)
@@ -383,7 +445,7 @@ def main(argv=None):
         raise SystemExit(f"Excel-Datei '{excel_pfad}' nicht gefunden.")
 
     print("Melde mich an der App an …")
-    daten = hole_daten(config)
+    daten, sitzungen = hole_daten(config)
 
     print(f"Öffne {excel_pfad} …")
     # keep_vba erhält die Makros der .xlsm-Datei; ohne das wären sie nach dem
@@ -417,6 +479,58 @@ def main(argv=None):
         print("App-Konten ohne Personenblatt:")
         for acc in unbenutzt:
             print(f"  {acc} (Lerngruppe {daten.nach_account[acc]['klasse']})")
+
+    # ── Konten anlegen (Excel -> App) ────────────────────────────────────────
+    if args.bulk_liste or args.bulk_anlegen:
+        passwort = args.passwort
+        if not passwort:
+            passwort = getpass.getpass("Start-Passwort für die neuen Konten: ")
+        if len(passwort) < 4:
+            raise SystemExit("Start-Passwort muss mindestens 4 Zeichen haben.")
+
+        konten = bulk_liste(ohne_konto, passwort)
+        print()
+        print(f"Anzulegende Konten: {len(konten)}")
+        for k in konten[:10]:
+            print(f"  {k['username']:<12} {k['_name']}")
+        if len(konten) > 10:
+            print(f"  … und {len(konten) - 10} weitere")
+
+        if not konten:
+            print("Nichts anzulegen -- alle Personen haben bereits ein Konto.")
+        elif args.bulk_liste:
+            schreibe_bulk_datei(konten, args.bulk_liste)
+            print()
+            print(f"Liste geschrieben: {args.bulk_liste}")
+            print("Inhalt in der App unter 'Mehrere anlegen' einfügen -- oder "
+                  "stattdessen --bulk-anlegen nutzen.")
+        elif args.bulk_anlegen:
+            # Die App legt immer in die Lerngruppe des angemeldeten Kontos an,
+            # deshalb muss bei mehreren Konten klar sein, welche gemeint ist.
+            if args.lerngruppe:
+                if args.lerngruppe not in sitzungen:
+                    raise SystemExit(f"Keine Anmeldung für Lerngruppe '{args.lerngruppe}'. "
+                                     f"Verfügbar: {', '.join(sorted(sitzungen))}")
+                ziel = args.lerngruppe
+            elif len(sitzungen) == 1:
+                ziel = next(iter(sitzungen))
+            else:
+                raise SystemExit("Mehrere Lerngruppen angemeldet -- bitte mit "
+                                 f"--lerngruppe angeben ({', '.join(sorted(sitzungen))}).")
+
+            print()
+            antwort = input(f"{len(konten)} Konten in Lerngruppe {ziel} anlegen? [j/N] ")
+            if antwort.strip().lower() not in ("j", "ja"):
+                print("Abgebrochen -- nichts angelegt.")
+                return 0
+            ergebnis = sitzungen[ziel].bulk_create(
+                [{"username": k["username"], "password": k["password"]} for k in konten])
+            print(f"Angelegt: {ergebnis.get('created', 0)}, "
+                  f"übersprungen: {ergebnis.get('skipped', 0)} "
+                  f"(bereits vorhanden oder ungültig)")
+            print("Hinweis: alle neuen Konten haben dasselbe Start-Passwort. "
+                  "Lass es die Schüler:innen beim ersten Login ändern.")
+        return 0
 
     if args.dry_run:
         print()

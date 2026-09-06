@@ -72,6 +72,44 @@ Zwei Fälle brauchen deine Aufmerksamkeit, das Skript meldet beide:
 
 Umgekehrt werden App-Konten gemeldet, zu denen es kein Personenblatt gibt.
 
+## Umgekehrter Weg: Konten aus der Excel-Liste anlegen
+
+Für den Start eines Schuljahres lassen sich die Konten aus der Excel-Liste
+erzeugen. Grundlage sind genau die Personen, für die es **noch kein** App-Konto
+gibt -- wer schon eins hat, wird nicht angefasst.
+
+```
+# 1) Liste erzeugen und ansehen (schreibt nichts auf dem Server)
+python3 osk_sync.py --bulk-liste --passwort "Start2627!"
+
+# 2a) Inhalt von bulk_konten.txt in der App unter "Mehrere anlegen" einfügen
+# 2b) ODER direkt anlegen lassen:
+python3 osk_sync.py --bulk-anlegen --passwort "Start2627!"
+```
+
+Ohne `--passwort` fragt das Skript danach (Minimum 4 Zeichen). Die erzeugte
+Datei hat genau das Format des Bulk-Dialogs:
+
+```
+an.be,Start2627!
+ju.mu,Start2627!
+```
+
+`--bulk-anlegen` fragt vor dem Schreiben nach einer Bestätigung und meldet
+danach, wie viele Konten angelegt und wie viele übersprungen wurden
+(übersprungen = Benutzername existiert bereits).
+
+**Lerngruppe:** Die App legt neue Konten immer in der Lerngruppe des
+angemeldeten Admin-Kontos an. Sind mehrere Konten konfiguriert, musst du mit
+`--lerngruppe M3M4` sagen, welche gemeint ist -- sonst bricht das Skript ab,
+statt zu raten.
+
+**Zum Start-Passwort:** Alle neuen Konten bekommen dasselbe. Das ist für einen
+einmaligen Rutsch praktikabel, heißt aber auch: bis zur ersten Änderung könnte
+sich jede:r mit dem Namensschema und diesem Passwort bei anderen anmelden.
+Deshalb ein Passwort wählen, das nur für diesen Zweck gilt, und die
+Schüler:innen es beim ersten Login ändern lassen (🔑 in der Kopfzeile).
+
 ## Wichtig: Zusammenspiel mit der Arbeitsstände-App
 
 Die Arbeitsstände-App löscht beim Speichern **jedes Blatt, das weder „Namen"
