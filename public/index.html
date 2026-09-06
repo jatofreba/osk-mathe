@@ -184,6 +184,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 }
 .mw-book-btn:hover{filter:brightness(1.08);}
 .mw-chip-status{font-weight:700;}
+/* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
+   so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
+.lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
 .lw-chip.mw-mine{border-left-width:4px;box-shadow:inset 0 0 0 1.5px currentColor;}
 .lw-chip.mw-invited{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
 .lw-chip.mw-invited .mw-chip-status{color:#854d0e;}
@@ -420,6 +423,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .cal-wrap{max-width:940px;margin:0 auto;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
 .cal-title{font-size:20px;font-weight:800;display:flex;align-items:center;gap:8px;color:#1d4ed8;}
+.cal-subtitle{font-size:12.5px;color:var(--md-on-surface-variant);margin-top:2px;}
 .cal-nav{display:flex;align-items:center;gap:10px;}
 .cal-nav-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--md-outline-variant);background:var(--md-surface);font-size:18px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s;}
 .cal-nav-btn:hover{background:#eff6ff;border-color:#93c5fd;}
@@ -799,6 +803,16 @@ textarea.form-input{
 .tsum-header{background:linear-gradient(135deg,#fde4ef,#f6c9de);border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
 .tsum-header-title{font-size:15px;font-weight:800;color:#7c3f78;letter-spacing:.2px;display:flex;align-items:center;gap:8px;}
 .tsum-header-legend{font-size:10px;color:#8a5a80;text-align:right;line-height:1.6;white-space:nowrap;}
+/* Fach-Umschalter im Kopf der Talks-Ansicht (ersetzt die früheren drei Fach-Tabs). */
+.subject-switch{display:flex;gap:6px;flex-wrap:wrap;}
+.subject-btn{
+  font-family:inherit;font-size:12.5px;font-weight:700;
+  padding:5px 14px;border-radius:99px;cursor:pointer;
+  background:var(--md-surface);border:1.5px solid;
+  transition:background .15s,color .15s;
+}
+.subject-btn.active{color:#fff;}
+.subject-btn:not(.active):hover{background:var(--md-surface-container-low);}
 .tsum-hj-title{font-size:12px;font-weight:700;margin:16px 0 6px;color:var(--ink);}
 .tsum-hj-title:first-of-type{margin-top:0;}
 .tsum-block-title{font-size:11.5px;font-weight:700;color:#6d4a99;margin:8px 0 4px;}
@@ -881,9 +895,7 @@ textarea.form-input{
     <button type="button" class="tab active" id="tab-home" onclick="showHome()">🏠 Start</button>
     <button type="button" class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</button>
     <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
-    <button type="button" class="tab" id="tab-talking-mathe" onclick="showSubjectTalking('mathe')">🗣️ Mathe-Talks</button>
-    <button type="button" class="tab" id="tab-talking-englisch" onclick="showSubjectTalking('englisch')">🗣️ Englisch-Talks</button>
-    <button type="button" class="tab" id="tab-talking-deutsch" onclick="showSubjectTalking('deutsch')">🗣️ Deutsch-Talks</button>
+    <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(activeSubject || 'mathe')">🗣️ Talks</button>
     <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
     <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
     <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Lerngruppen-Übersicht</button>
@@ -979,8 +991,9 @@ textarea.form-input{
           <circle cx="26" cy="15" r="1.8" fill="#7c3f78"/>
           <path d="M31 3l1.1 2.7L35 7l-2.9 1.1L31 11l-1.1-2.9L27 7l2.9-1.3z" fill="#f6c945" stroke="#c99a1f" stroke-width="0.6" stroke-linejoin="round"/>
         </svg>
-        <span id="talking-header-text">Mathe-Talks</span>
+        <span id="talking-header-text">Talks</span>
       </div>
+      <div class="subject-switch" id="talking-subject-switch" role="group" aria-label="Fach wählen"></div>
     </div>
     <div id="talking-student" style="display:none;"></div>
     <div id="talking-admin" style="display:none;"></div>
@@ -989,7 +1002,10 @@ textarea.form-input{
   <div id="view-calendar">
     <div class="cal-wrap">
       <div class="cal-head">
-        <div class="cal-title">📅 Mein Kalender</div>
+        <div>
+          <div class="cal-title">📅 Mein Kalender</div>
+          <div class="cal-subtitle" id="cal-subtitle"></div>
+        </div>
         <div class="cal-nav">
           <button class="cal-nav-btn" onclick="calShiftMonth(-1)" title="Vorheriger Monat">‹</button>
           <div class="cal-month" id="cal-month-label"></div>
@@ -2126,16 +2142,34 @@ function mwChip(s) {
   // Eigene Termine tragen die Fach-Farbe als Textfarbe, damit der Inset-Rahmen
   // (currentColor) mitzieht; fremd belegte bleiben bewusst neutral.
   const chipStyle = state === 'taken' ? '' : ` style="border-left-color:${color};color:${color};"`;
-  const parts = [
+  const neutral = state === 'taken';
+  // Rohwerte sammeln und EINMAL escapen - lwTimeRange() escaped bereits selbst und
+  // liefert nur HH:MM–HH:MM, wird hier deshalb nicht nochmal durchgereicht.
+  const tooltip = escHtml([subj.name, typLabel, s.uhrzeit, s.ort,
+    s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '', label]
+    .filter(Boolean).join(' · '));
+
+  // Von anderen belegte Termine sind für mich nicht handlungsrelevant - sie stehen
+  // nur da, damit die Woche nicht fälschlich frei aussieht. Deshalb bekommen sie
+  // nur Zeit + "belegt"; Ort und Lernbegleitung bleiben im Tooltip. Das nimmt viel
+  // Dichte aus dem Raster, ohne Information zu verlieren.
+  if (neutral) {
+    return `<div class="lw-chip mw-taken" title="${tooltip}">
+      <div class="lw-chip-time" style="color:var(--md-on-surface-variant);"><span>${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+      <div class="lw-chip-meta">${escHtml(subj.name)} · belegt</div>
+    </div>`;
+  }
+
+  // Ort und Lernbegleitung in EINER Zeile (vorher konnte daraus eine dritte werden).
+  const meta = [
     s.ort ? escHtml(s.ort) : '',
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
-  ].filter(Boolean);
-  return `<div class="lw-chip mw-${state}"${chipStyle}
-    title="${escHtml([subj.name, typLabel, s.uhrzeit, s.ort, s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '', label].filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>
-      <span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};"> · ${label}</span></div>
-    ${parts.length ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">${parts.join(' · ')}</div>` : ''}
+  ].filter(Boolean).join(' · ');
+
+  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tooltip}">
+    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
+    <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${color};">${escHtml(subj.name)}</span><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};"> · ${label}</span></div>
+    ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
 }
 
@@ -2231,6 +2265,7 @@ async function loadMyWeek() {
       <span>frei = noch buchbar</span>
       <span>belegt = von anderen gebucht</span>
       ${hiddenCount ? `<span>${hiddenCount} Termin${hiddenCount === 1 ? '' : 'e'} ausgeblendet (überschneidet sich mit deinen)</span>` : ''}
+      <span>Buchen und Einladungen beantworten geht im Kalender.</span>
     </div>
     ${extrasHtml}
   </div>`;
@@ -2523,7 +2558,6 @@ function showView(v) {
       el.style.display = isActive ? 'flex' : 'none';
       el.style.flex = isActive ? '1' : '';
     }
-    if (id === 'talking') return; // eigene Aktiv-Markierung über showSubjectTalking() (3 Fach-Tabs, 1 View)
     const tab = document.getElementById('tab-' + id);
     if (tab) { tab.classList.toggle('active', isActive); tab.setAttribute('aria-current', isActive ? 'page' : 'false'); }
   });
@@ -2545,7 +2579,7 @@ function showView(v) {
   } else {
     clearInterval(adminRefreshTimer);
   }
-  if (v === 'talking') loadTalkingSessions();
+  if (v === 'talking') { renderSubjectSwitch(); loadTalkingSessions(); }
   if (v === 'calendar') loadCalendar();
   if (v === 'halbjahr') loadHalbjahr();
   if (v === 'klasse') loadKlasse();
@@ -3363,17 +3397,32 @@ function buildTalkingPickerSummaryHtml(data, subject) {
 
 // Klick auf einen der drei Fach-Talks-Tabs: merkt sich das Fach, zeigt die (gemeinsame)
 // Talks-View, markiert nur den angeklickten Tab als aktiv (die anderen beiden Fach-Tabs nicht).
+// Ein gemeinsamer Talks-Tab; das Fach wird INNERHALB der Ansicht umgeschaltet.
+// Vorher gab es je Fach einen eigenen Tab - das waren drei Menüeinträge für ein
+// Konzept, und jedes weitere Fach hätte einen vierten ergeben.
 function showSubjectTalking(key) {
   activeSubject = key;
   showView('talking');
-  document.querySelectorAll('[id^="tab-talking-"]').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-current', 'false'); });
-  const tab = document.getElementById('tab-talking-' + key);
-  if (tab) { tab.classList.add('active'); tab.setAttribute('aria-current', 'page'); }
   const subj = subjectByKey(key);
   const headerText = document.getElementById('talking-header-text');
   if (headerText) headerText.textContent = subj.name + '-Talks';
   const header = document.getElementById('talking-header');
   if (header) header.style.background = `linear-gradient(135deg, ${subj.colorBg}, ${subj.color}33)`;
+  renderSubjectSwitch();
+}
+
+// Fach-Umschalter im Kopf der Talks-Ansicht. aria-pressed macht für Screenreader
+// hörbar, welches Fach gerade aktiv ist (Farbe allein reicht nicht).
+function renderSubjectSwitch() {
+  const el = document.getElementById('talking-subject-switch');
+  if (!el) return;
+  const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
+  el.innerHTML = list.map(s => {
+    const on = s.key === activeSubject;
+    return `<button type="button" class="subject-btn${on ? ' active' : ''}" aria-pressed="${on}"
+      style="${on ? `background:${s.color};border-color:${s.color};` : `color:${s.color};border-color:${s.color}66;`}"
+      onclick="showSubjectTalking('${s.key}')">${escHtml(s.name)}</button>`;
+  }).join('');
 }
 
 async function loadTalkingSessions() {
@@ -3435,6 +3484,13 @@ async function loadCalendar() {
   } catch(e) { calData = { slots: [], deadlines: [] }; }
   const adminActions = document.getElementById('cal-admin-actions');
   if (adminActions) adminActions.style.display = (me && me.role === 'admin') ? 'flex' : 'none';
+  // Rollen der beiden Terminansichten benennen: die Startseite zeigt den Überblick
+  // ("Meine Woche"), gebucht und geantwortet wird hier im Kalender. Ohne diesen
+  // Hinweis war nicht erkennbar, wofür man welche Ansicht nimmt.
+  const calSub = document.getElementById('cal-subtitle');
+  if (calSub) calSub.textContent = (me && me.role === 'admin')
+    ? 'Alle Termine der Lerngruppe – hier legst du Input-Termine und Deadlines an.'
+    : 'Hier buchst du freie Termine und beantwortest Einladungen. Deinen Wochenüberblick findest du unter „Start".';
   renderAdminWeek(); renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
 }
 
@@ -3910,11 +3966,13 @@ function awChip(s) {
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean);
 
-  return `<div class="lw-chip mw-${state}"${chipStyle}>
+  const tip = escHtml([subj.name, typLabel, s.uhrzeit, s.ort,
+    s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
+    s.thema ? 'Thema: ' + s.thema : '', s.booked ? 'gebucht' : 'frei'].filter(Boolean).join(' · '));
+  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}">
     <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
     <div class="lw-chip-meta"><span class="lw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>${isMine ? ' · <span class="mw-chip-status" style="color:' + color + ';">von dir</span>' : ''}${!s.booked ? ' · <span class="mw-chip-status">frei</span>' : ''}</div>
-    ${meta.length ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">${meta.join(' · ')}</div>` : ''}
-    ${s.thema ? `<div class="lw-chip-meta" style="color:var(--md-on-surface-variant);">„${escHtml(s.thema)}"</div>` : ''}
+    ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
     ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
   </div>`;
 }
