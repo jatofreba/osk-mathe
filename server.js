@@ -240,8 +240,23 @@ async function initDB() {
       default_dauer          INTEGER NOT NULL DEFAULT 45,
       pflicht_praesentieren  INTEGER NOT NULL DEFAULT 1,
       pflicht_zuhoeren       INTEGER NOT NULL DEFAULT 2,
+      optional_praesentieren INTEGER NOT NULL DEFAULT 2,
+      optional_zuhoeren      INTEGER NOT NULL DEFAULT 1,
       created_at             TIMESTAMPTZ DEFAULT NOW()
     );
+    -- Freiwillige Zusatz-Plätze je Fach (2026-09-04): wie viele Talks/Zuhör-Termine über die
+    -- Pflicht hinaus angeboten werden. Defaults 2/1 bilden exakt das bisher hartcodierte
+    -- Frontend-Verhalten ab (Präsentieren: 1 Pflicht + 2 Zusatz, Zuhören: 2 Pflicht + 1 Zusatz).
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='optional_praesentieren') THEN
+        ALTER TABLE subjects ADD COLUMN optional_praesentieren INTEGER NOT NULL DEFAULT 2;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='optional_zuhoeren') THEN
+        ALTER TABLE subjects ADD COLUMN optional_zuhoeren INTEGER NOT NULL DEFAULT 1;
+      END IF;
+    END $$;
     INSERT INTO subjects (key, name, color, color_bg, default_ort, default_dauer) VALUES
       ('mathe',    'Mathe',    '#2563eb', '#eff6ff', 'Mathe-Fachbüro',    45),
       ('englisch', 'Englisch', '#eab308', '#fefce8', 'Englisch-Fachbüro', 45),
@@ -1148,7 +1163,9 @@ app.get('/api/subjects', requireLogin, async (req, res) => {
     const r = await pool.query(`
       SELECT id, key, name, color, color_bg AS "colorBg", default_ort AS "defaultOrt",
              default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
-             pflicht_zuhoeren AS "pflichtZuhoeren"
+             pflicht_zuhoeren AS "pflichtZuhoeren",
+             optional_praesentieren AS "optionalPraesentieren",
+             optional_zuhoeren AS "optionalZuhoeren"
       FROM subjects ORDER BY id
     `);
     res.json(r.rows);
@@ -1158,13 +1175,18 @@ app.get('/api/subjects', requireLogin, async (req, res) => {
 // Nur die vom Admin konfigurierbaren Default-Werte (Name/Farbe/Key bleiben fest).
 app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
   try {
-    const { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren } = req.body;
+    const { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
+            optionalPraesentieren, optionalZuhoeren } = req.body;
     const dauer = Math.min(600, Math.max(5, parseInt(defaultDauer) || 45));
     const pp = Math.min(10, Math.max(0, parseInt(pflichtPraesentieren)));
     const pz = Math.min(10, Math.max(0, parseInt(pflichtZuhoeren)));
+    const op = Math.min(10, Math.max(0, parseInt(optionalPraesentieren)));
+    const oz = Math.min(10, Math.max(0, parseInt(optionalZuhoeren)));
     const r = await pool.query(
-      `UPDATE subjects SET default_ort=$1, default_dauer=$2, pflicht_praesentieren=$3, pflicht_zuhoeren=$4 WHERE id=$5 RETURNING id`,
-      [defaultOrt || '', dauer, isNaN(pp) ? 1 : pp, isNaN(pz) ? 2 : pz, req.params.id]
+      `UPDATE subjects SET default_ort=$1, default_dauer=$2, pflicht_praesentieren=$3, pflicht_zuhoeren=$4,
+                           optional_praesentieren=$5, optional_zuhoeren=$6 WHERE id=$7 RETURNING id`,
+      [defaultOrt || '', dauer, isNaN(pp) ? 1 : pp, isNaN(pz) ? 2 : pz,
+       isNaN(op) ? 2 : op, isNaN(oz) ? 1 : oz, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });

@@ -1438,8 +1438,15 @@ textarea.form-input{
     <div class="modal-title" id="ssettings-title">Fach-Einstellungen</div>
     <div class="form-group"><label class="form-label" for="ssettings-ort">Standard-Ort</label><input class="form-input" id="ssettings-ort" placeholder="z.B. Mathe-Fachbüro"></div>
     <div class="form-group"><label class="form-label" for="ssettings-dauer">Standard-Dauer (Minuten)</label><input class="form-input" id="ssettings-dauer" type="number" min="5" max="600"></div>
+    <div style="font-size:12px;font-weight:700;color:var(--md-on-surface-variant);margin:4px 0 8px;">Vorgaben pro Halbjahr</div>
     <div class="form-group"><label class="form-label" for="ssettings-pp">Pflicht: X mal präsentieren</label><input class="form-input" id="ssettings-pp" type="number" min="0" max="10"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-op">Freiwillig zusätzlich: präsentieren</label><input class="form-input" id="ssettings-op" type="number" min="0" max="10"></div>
     <div class="form-group"><label class="form-label" for="ssettings-pz">Pflicht: Y mal zuhören</label><input class="form-input" id="ssettings-pz" type="number" min="0" max="10"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-oz">Freiwillig zusätzlich: zuhören</label><input class="form-input" id="ssettings-oz" type="number" min="0" max="10"></div>
+    <div style="font-size:11.5px;color:var(--md-on-surface-variant);margin-bottom:12px;line-height:1.4;">
+      Die Übersichtskarten der Schüler:innen zeigen genau so viele Felder: Pflicht grau, freiwillig weiß.
+      Wer mehr macht als vorgesehen, bekommt trotzdem weitere Felder (und Kleeblätter) dazu.
+    </div>
     <div id="ssettings-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-subject-settings')">Abbrechen</button>
@@ -1468,6 +1475,13 @@ async function loadSubjectsMeta() {
 }
 function subjectByKey(key) { return subjectsMeta.find(s => s.key === key) || { key, name: key, color: '#2563eb', colorBg: '#eff6ff', defaultOrt: '', defaultDauer: 45 }; }
 function subjectById(id) { return subjectsMeta.find(s => s.id === id) || subjectByKey('mathe'); }
+// Vorgaben je Fach pro Halbjahr (von der Fachlernbegleitung über die Fach-Einstellungen gesetzt):
+// wie viele Talks/Zuhör-Termine Pflicht sind und wie viele freiwillig obendrauf angeboten werden.
+// Die Fallbacks entsprechen dem früher hartcodierten Verhalten (1+2 präsentieren, 2+1 zuhören).
+function subjPflichtP(subj)  { return subj && subj.pflichtPraesentieren  != null ? subj.pflichtPraesentieren  : 1; }
+function subjPflichtZ(subj)  { return subj && subj.pflichtZuhoeren       != null ? subj.pflichtZuhoeren       : 2; }
+function subjOptionalP(subj) { return subj && subj.optionalPraesentieren != null ? subj.optionalPraesentieren : 2; }
+function subjOptionalZ(subj) { return subj && subj.optionalZuhoeren      != null ? subj.optionalZuhoeren      : 1; }
 // Fächer-Liste mit dem persönlichen Default-Fach der Admin-Person zuerst (me.defaultSubjectId,
 // über setMyDefaultSubject() gewählt) - Rest bleibt in der natürlichen Reihenfolge dahinter.
 function orderedSubjects() {
@@ -3249,12 +3263,14 @@ function talkingGroupByHalbjahrFull(presenting, invitations) {
   }));
 }
 // Tier-System wie bei den Lerntheken-Karten (grau/grün/blau/lila = t1-t4): grau = in Arbeit,
-// Pflicht erfüllt (1 Vortrag + 2 Zuhören erledigt) = grün, +1 Bonus-Talk = Rare (blau), +2 Bonus-Talks = Epic (lila).
+// Pflicht erfüllt = grün, +1 Bonus-Talk = Rare (blau), +2 Bonus-Talks = Epic (lila).
+// Die Pflicht-Schwellen kommen seit 2026-09-04 aus den Fach-Einstellungen (subj), vorher fest 1/2.
 // Kein sichtbares Badge/Banner mehr (fand der Nutzer hässlich) - nur noch farbiger Kartenrand
 // (.tt-tier-N) + Tooltip (title-Attribut) als dezenter Hinweis.
-function talkTier(presentDone, listenDone) {
-  if (!(presentDone >= 1 && listenDone >= 2)) return 1;
-  const bonus = Math.max(0, presentDone - 1) + Math.max(0, listenDone - 2);
+function talkTier(presentDone, listenDone, subj) {
+  const pflichtP = subjPflichtP(subj), pflichtZ = subjPflichtZ(subj);
+  if (!(presentDone >= pflichtP && listenDone >= pflichtZ)) return 1;
+  const bonus = Math.max(0, presentDone - pflichtP) + Math.max(0, listenDone - pflichtZ);
   if (bonus >= 2) return 4;
   if (bonus >= 1) return 3;
   return 2;
@@ -3301,14 +3317,17 @@ function buildTalkingPickerSummaryHtml(data, subject) {
     </div>`;
   };
 
+  // Spaltenzahl = Vorgaben des Fachs (Pflicht grau + freiwillig weiß); wer mehr gemacht hat
+  // als vorgesehen, bekommt trotzdem alle eigenen Termine angezeigt.
+  const pflichtP = subjPflichtP(subject), pflichtZ = subjPflichtZ(subject);
   const blocks = groups.map(g => {
-    const presentCols = Math.max(3, g.presenting.length);
-    const listenCols = Math.max(3, g.listening.length);
-    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(g.presenting[idx], idx === 0)).join('');
-    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(g.listening[idx], idx < 2)).join('');
+    const presentCols = Math.max(pflichtP + subjOptionalP(subject), g.presenting.length);
+    const listenCols = Math.max(pflichtZ + subjOptionalZ(subject), g.listening.length);
+    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentCell(g.presenting[idx], idx < pflichtP)).join('');
+    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenCell(g.listening[idx], idx < pflichtZ)).join('');
     const pDone = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const aDone = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
-    const tier = talkTier(pDone, aDone);
+    const tier = talkTier(pDone, aDone, subject);
     return `
       <div class="tsum-hj-title" title="${TALK_TIER_TEXT[tier]}">Halbjahr ${escHtml(g.halbjahr)}</div>
       <div class="tsum-block-title">🎤 Meine ${escHtml(subject.name)}-Talks:</div>
@@ -3735,8 +3754,10 @@ function openSubjectSettingsModal() {
   document.getElementById('ssettings-title').textContent = `⚙ ${subj.name}-Einstellungen`;
   document.getElementById('ssettings-ort').value = subj.defaultOrt || '';
   document.getElementById('ssettings-dauer').value = subj.defaultDauer || 45;
-  document.getElementById('ssettings-pp').value = subj.pflichtPraesentieren != null ? subj.pflichtPraesentieren : 1;
-  document.getElementById('ssettings-pz').value = subj.pflichtZuhoeren != null ? subj.pflichtZuhoeren : 2;
+  document.getElementById('ssettings-pp').value = subjPflichtP(subj);
+  document.getElementById('ssettings-op').value = subjOptionalP(subj);
+  document.getElementById('ssettings-pz').value = subjPflichtZ(subj);
+  document.getElementById('ssettings-oz').value = subjOptionalZ(subj);
   document.getElementById('ssettings-error').style.display = 'none';
   openModal('modal-subject-settings');
 }
@@ -3750,13 +3771,17 @@ async function submitSubjectSettings() {
   const defaultDauer = parseInt(document.getElementById('ssettings-dauer').value) || 45;
   const pflichtPraesentieren = parseInt(document.getElementById('ssettings-pp').value);
   const pflichtZuhoeren = parseInt(document.getElementById('ssettings-pz').value);
+  const optionalPraesentieren = parseInt(document.getElementById('ssettings-op').value);
+  const optionalZuhoeren = parseInt(document.getElementById('ssettings-oz').value);
   const r = await fetch(`/api/admin/subjects/${subj.id}`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren })
+    body: JSON.stringify({ defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
+                           optionalPraesentieren, optionalZuhoeren })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Speichern.'; errEl.style.display = 'block'; return; }
-  Object.assign(subj, { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren });
+  Object.assign(subj, { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
+                        optionalPraesentieren, optionalZuhoeren });
   closeModal('modal-subject-settings');
 }
 
@@ -4154,17 +4179,18 @@ function renderTalkingStudent() {
       <div class="stat-lbl">🍀 ${escHtml(subj.name)}-Talk-Kleeblätter</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
+  const pflichtP = subjPflichtP(subj), pflichtZ = subjPflichtZ(subj);
   const progressCards = groupsFull.length ? groupsFull.map(g => {
     const p = g.presenting.filter(s => s.presentedStatus === 'erledigt').length;
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
-    const tier = talkTier(p, a);
+    const tier = talkTier(p, a, subj);
     const hjTrophies = talkingMine.trophies?.byHalbjahr?.[g.halbjahr];
     const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🍀 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
     return `
       <div class="stat-card tt-tier-${tier}" title="${TALK_TIER_TEXT[tier]}">
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
-        <div style="margin-top:6px;font-size:14px;">🎤 ${p}/1 gehalten${p > 1 ? ` (+${p - 1} freiwillig)` : ''}</div>
-        <div style="margin-top:2px;font-size:14px;">👂 ${a}/2 angehört</div>
+        <div style="margin-top:6px;font-size:14px;">🎤 ${Math.min(p, pflichtP)}/${pflichtP} gehalten${p > pflichtP ? ` (+${p - pflichtP} freiwillig)` : ''}</div>
+        <div style="margin-top:2px;font-size:14px;">👂 ${Math.min(a, pflichtZ)}/${pflichtZ} angehört${a > pflichtZ ? ` (+${a - pflichtZ} freiwillig)` : ''}</div>
         ${trophyLine}
       </div>`;
   }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch kein ${escHtml(subj.name)}-Talk</div></div>`;
@@ -4223,12 +4249,12 @@ function renderTalkingStudent() {
   };
 
   const detailBlocks = groupsFull.map((g, idx) => {
-    // Voreingestellt immer 3 Spalten sichtbar (Pflicht + freiwillige Platzhalter), genau wie
-    // auf der Picker-Karte - wächst erst dynamisch, wenn tatsächlich mehr als 3 belegt sind.
-    const presentCols = Math.max(3, g.presenting.length);
-    const listenCols = Math.max(3, g.listening.length);
-    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentDetailCell(g.presenting[idx], idx === 0)).join('');
-    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenDetailCell(g.listening[idx], idx < 2)).join('');
+    // Spaltenzahl = Vorgaben des Fachs (Pflicht grau + freiwillig weiß), genau wie auf der
+    // Picker-Karte - wächst dynamisch, wenn jemand mehr macht als vorgesehen.
+    const presentCols = Math.max(pflichtP + subjOptionalP(subj), g.presenting.length);
+    const listenCols = Math.max(pflichtZ + subjOptionalZ(subj), g.listening.length);
+    const presentRow = Array.from({ length: presentCols }, (_, idx) => presentDetailCell(g.presenting[idx], idx < pflichtP)).join('');
+    const listenRow = Array.from({ length: listenCols }, (_, idx) => listenDetailCell(g.listening[idx], idx < pflichtZ)).join('');
     const body = `
       <div class="tsum-block-title">🎤 Meine ${escHtml(subj.name)}-Talks:</div>
       <div class="tsum-table">
