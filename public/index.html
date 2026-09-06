@@ -190,8 +190,13 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-chip.mw-mine{border-left-width:4px;box-shadow:inset 0 0 0 1.5px currentColor;}
 .lw-chip.mw-invited{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
 .lw-chip.mw-invited .mw-chip-status{color:#854d0e;}
+/* "belegt": nur der Rahmen ist neutral, Fach-Badge und -Symbol bleiben farbig -
+   man kann sich ueber die Lernbegleitung noch dazubuchen. */
 .lw-chip.mw-taken{border-left-color:var(--md-outline-variant);}
 .lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
+/* Terminkonflikt: der einzige Zustand, der wirklich komplett ausgegraut wird. */
+.lw-chip.mw-conflict{border-left-color:var(--md-outline-variant);opacity:.55;}
+.lw-chip.mw-conflict .mw-chip-status{color:var(--md-on-surface-variant);}
 .mw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--md-on-surface-variant);}
 .mw-legend b{font-weight:700;}
 /* Teilnehmende in der Admin-Wochenansicht: wer ist bei welchem Termin dabei. */
@@ -2159,6 +2164,9 @@ async function showHome() {
 function mwState(s) {
   if (s.mineAsPresenter || (s.mineAsListener && s.myInvitationStatus === 'angenommen')) return 'mine';
   if (s.mineAsListener && s.myInvitationStatus === 'eingeladen') return 'invited';
+  // _conflict wird in loadMyWeek() gesetzt: der Termin ueberschneidet sich mit einer
+  // eigenen Buchung und ist deshalb fuer mich nicht belegbar (Server: 409).
+  if (s._conflict) return 'conflict';
   if (!s.booked) return 'free';
   return 'taken';
 }
@@ -2170,12 +2178,16 @@ function mwChip(s) {
   const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
   const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const label = {
-    mine:    '✓ von dir gebucht',
-    invited: '✉ Einladung offen',
-    free:    'frei',
-    taken:   'belegt',
+    mine:     '✓ von dir gebucht',
+    invited:  '✉ Einladung offen',
+    free:     'frei',
+    taken:    'belegt',
+    conflict: '✕ Terminkonflikt',
   }[state];
-  const neutral = state === 'taken';
+  // Komplett ausgegraut wird NUR der Terminkonflikt - dort ist wirklich nichts zu
+  // holen. Fremd belegte Termine behalten Fach-Badge und -Symbol in Fachfarbe:
+  // man kann sich ueber die Lernbegleitung noch dazubuchen.
+  const neutral = state === 'conflict';
   // Fach nur als Buchstaben-Badge, Talk/Input nur als Piktogramm - kein Fliesstext.
   // Damit dadurch nichts verloren geht, tragen die Kacheln die volle Information
   // in title (Maus) UND aria-label (Screenreader).
@@ -2196,7 +2208,8 @@ function mwChip(s) {
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean).join(' · ');
 
-  return `<div class="lw-chip mw-${state}"${neutral ? '' : ` style="border-left-color:${color};color:${color};"`} ${desc}>
+  const chipStyle = (neutral || state === 'taken') ? '' : ` style="border-left-color:${color};color:${color};"`;
+  return `<div class="lw-chip mw-${state}"${chipStyle} ${desc}>
     <div class="lw-chip-time" style="color:${neutral ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
     <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
@@ -2227,25 +2240,27 @@ async function loadMyWeek() {
 
   const weekSlots = (data.slots || []).filter(s => dayStrs.indexOf(s.datum) !== -1);
 
-  // Termine, die sich mit einer eigenen Buchung überschneiden, ausblenden: sie sind
-  // ohnehin nicht buchbar (der Server lehnt sie mit 409 ab, siehe hasScheduleConflict)
-  // und würden die Woche nur zumüllen. Offene Einladungen zählen NICHT als Blocker
-  // (noch keine Zusage) und werden selbst nie ausgeblendet - eine Überschneidung dort
-  // muss sichtbar bleiben, damit man bewusst ab- oder zusagen kann.
+  // Termine, die sich mit einer eigenen Buchung ueberschneiden, werden NICHT mehr
+  // ausgeblendet, sondern ausgegraut angezeigt: so sieht man, dass es das Angebot
+  // gibt und warum es fuer einen selbst nicht in Frage kommt. Offene Einladungen
+  // zaehlen NICHT als Blocker (noch keine Zusage) und werden nie als Konflikt
+  // markiert - dort muss man bewusst ab- oder zusagen koennen.
   const busy = weekSlots.filter(s => mwState(s) === 'mine').map(s => ({
     datum: s.datum,
     von: lwMin(s.uhrzeit),
     bis: (lwMin(s.uhrzeit) ?? 0) + (parseInt(s.dauer, 10) || 45),
   })).filter(b => b.von !== null);
 
-  const visible = weekSlots.filter(s => {
-    const state = mwState(s);
-    if (state === 'mine' || state === 'invited') return true;
+  weekSlots.forEach(s => {
+    s._conflict = false;
+    const base = mwState(s);
+    if (base === 'mine' || base === 'invited') return;
     const von = lwMin(s.uhrzeit);
-    if (von === null) return true; // ohne Uhrzeit nicht beurteilbar -> lieber zeigen
+    if (von === null) return; // ohne Uhrzeit nicht beurteilbar
     const bis = von + (parseInt(s.dauer, 10) || 45);
-    return !busy.some(b => b.datum === s.datum && von < b.bis && b.von < bis);
+    s._conflict = busy.some(b => b.datum === s.datum && von < b.bis && b.von < bis);
   });
+  const visible = weekSlots;
 
   const cells = LW_BLOCKS.map(() => LW_DAY_NAMES.map(() => []));
   const extras = [];
@@ -2260,7 +2275,7 @@ async function loadMyWeek() {
 
   const mineCount = visible.filter(s => ['mine','invited'].includes(mwState(s))).length;
   const freeCount = visible.filter(s => mwState(s) === 'free').length;
-  const hiddenCount = weekSlots.length - visible.length;
+  const conflictCount = visible.filter(s => mwState(s) === 'conflict').length;
 
   const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) =>
     `<div class="lw-dayhead">${name}
@@ -2297,7 +2312,7 @@ async function loadMyWeek() {
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
       <span>belegt = von anderen gebucht – mitmachen? Sprich die Lernbegleitung an, sie kann dich dazunehmen</span>
-      ${hiddenCount ? `<span>${hiddenCount} Termin${hiddenCount === 1 ? '' : 'e'} ausgeblendet (überschneidet sich mit deinen)</span>` : ''}
+      ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
       <span>Buchen und Einladungen beantworten geht im Kalender.</span>
     </div>
     ${extrasHtml}
@@ -4066,10 +4081,14 @@ function awChip(s) {
   const statusHtml = isMine
     ? `<span class="mw-chip-status" style="color:${color};">von dir</span>`
     : (!s.booked ? '<span class="mw-chip-status">frei</span>' : '');
+  // Thema mit anzeigen (nicht nur im Tooltip): es sagt auf einen Blick, worum es
+  // in dem Termin geht - und danach fragen Schueler:innen, wenn sie dazu wollen.
+  const themaHtml = s.booked && s.thema ? `„${escHtml(s.thema)}“` : '';
+  const line2 = [statusHtml, themaHtml].filter(Boolean).join(' · ');
 
   return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}" aria-label="${tip}">
     <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
-    ${statusHtml ? `<div class="lw-chip-meta">${statusHtml}</div>` : ''}
+    ${line2 ? `<div class="lw-chip-meta">${line2}</div>` : ''}
     ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
     ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
   </div>`;
