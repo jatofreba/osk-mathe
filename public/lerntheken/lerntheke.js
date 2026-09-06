@@ -2,7 +2,7 @@
 // Constants (KEY, META, CONTENT, etc.) are defined inline in each HTML file
 
 
-// ── Pokal-System ──────────────────────────────────────────────────────────────
+// ── Kleeblatt-System ──────────────────────────────────────────────────────────
 function trophyCount(done, req, total) {
   if (done < req || total <= 0) return 0;
   const extra = total - req;
@@ -12,10 +12,13 @@ function trophyCount(done, req, total) {
   if (done >= t2)    return 2;
   return 1;
 }
+// Die frueheren Stufen bronze/silber/gold entstanden durch CSS-Filter auf dem
+// goldenen Pokal-Emoji. Beim Kleeblatt funktioniert das nicht (sepia/grayscale
+// auf Gruen ergibt Schlammtoene) - und die Stufe steckt ohnehin schon in der
+// ANZAHL der gefuellten Kleeblaetter. Daher nur noch erreicht//nicht erreicht.
 function trophyHtml(count) {
-  const cls = ['locked','bronze','silver','gold'];
   return '<div class="trophy-bar">' +
-    [1,2,3].map(i => '<span class="trophy-icon ' + (count>=i ? cls[i] : 'locked') + '">🏆</span>').join('') +
+    [1,2,3].map(i => '<span class="trophy-icon ' + (count>=i ? 'earned' : 'locked') + '">🍀</span>').join('') +
   '</div>';
 }
 
@@ -221,10 +224,14 @@ function buildGrid(stats){
   const groups=activeGroups().filter(g=>GROUPS[g]&&stats[g]&&stats[g].total>0);
   if(!groups.length){gridEl.innerHTML='';return;}
 
+  // Stufen ueber die Anzahl der Kleeblaetter erklaeren (vorher ueber Metallfarben,
+  // die es beim Kleeblatt nicht mehr gibt).
+  const kleeblatt=n=>`<span class="trophy-bar">${[1,2,3].map(i=>
+    `<span class="trophy-icon ${i<=n?'earned':'locked'}">🍀</span>`).join('')}</span>`;
   const trophyLegend=`<div class="trophy-legend">
-    <span class="trophy-icon bronze">🏆</span> Pflichtaufgaben erledigt &nbsp;·&nbsp;
-    <span class="trophy-icon silver">🏆</span> ca. ⅓ der Zusatzaufgaben &nbsp;·&nbsp;
-    <span class="trophy-icon gold">🏆</span> alle Aufgaben erledigt
+    ${kleeblatt(1)} Pflichtaufgaben erledigt &nbsp;·&nbsp;
+    ${kleeblatt(2)} ca. ⅓ der Zusatzaufgaben &nbsp;·&nbsp;
+    ${kleeblatt(3)} alle Aufgaben erledigt
   </div>`;
   gridEl.innerHTML=trophyLegend+groups.map(g=>{
     const all=META.filter(s=>s&&s.group===g);
@@ -282,10 +289,10 @@ function buildGrid(stats){
       if(g!=='Basis'&&g!=='Aufbau')return'';
       const d=lzkInfo&&lzkInfo.datum?new Date(lzkInfo.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
       const isoD=lzkInfo&&lzkInfo.datum?lzkInfo.datum.slice(0,10):'';
-      // Pokal-Anzeige für LZK
+      // Kleeblatt-Anzeige für LZK
       const pk=st.lzkPokale||0;
       const pokalHtml=lzkInfo&&lzkInfo.status==='bestanden'?
-        `<span class="lzk-pokale">${[1,2,3].map(i=>`<span class="lzk-pokal ${i<=pk?'earned':''}">🏆</span>`).join('')}</span>`:'';
+        `<span class="lzk-pokale">${[1,2,3].map(i=>`<span class="lzk-pokal ${i<=pk?'earned':''}">🍀</span>`).join('')}</span>`:'';
       if(lzkInfo&&lzkInfo.status==='bestanden') return`<div class="lzk-row">
         <span class="lzk-badge lzk-bestanden">🏅 ${g}-LZK bestanden${d?' · '+d:''}</span>${pokalHtml}</div>`;
       if(lzkInfo&&lzkInfo.status==='nicht_bestanden') return`<div class="lzk-row">
@@ -387,7 +394,7 @@ function buildOverview(){
     if(KURS==='G'||!hasAufbau){
       if(basisLzkOk){
         lzkEl.className='lzk-status aufbau';
-        lzkEl.innerHTML='<span class="lzk-status-icon">🏆</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Sehr gut – du hast alles für diesen Baustein geschafft!</div>';
+        lzkEl.innerHTML='<span class="lzk-status-icon">🍀</span><div class="lzk-status-text"><strong>Basis-LZK bestanden!</strong>Sehr gut – du hast alles für diesen Baustein geschafft!</div>';
       } else if(basisBereit){
         lzkEl.className='lzk-status basis';
         lzkEl.innerHTML='<span class="lzk-status-icon">✅</span><div class="lzk-status-text"><strong>Bereit für die Basis-LZK!</strong>'+terminHint('Basis',stats['Basis']&&stats['Basis'].lzk)+'</div>';
