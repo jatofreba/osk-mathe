@@ -184,9 +184,6 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 }
 .mw-book-btn:hover{filter:brightness(1.08);}
 .mw-chip-status{font-weight:700;}
-/* Voller Fachname als Text in den Wochenkacheln - NICHT .lw-chip-subj
-   verwenden, das ist inzwischen das 14x14-Badge fuer den Fach-Buchstaben. */
-.mw-chip-subj{font-weight:600;}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -194,7 +191,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-chip.mw-invited{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
 .lw-chip.mw-invited .mw-chip-status{color:#854d0e;}
 .lw-chip.mw-taken{border-left-color:var(--md-outline-variant);}
-.lw-chip.mw-taken .mw-chip-subj,.lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
+.lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
 .mw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--md-on-surface-variant);}
 .mw-legend b{font-weight:700;}
 /* Teilnehmende in der Admin-Wochenansicht: wer ist bei welchem Termin dabei. */
@@ -4062,9 +4059,19 @@ function awChip(s) {
   const tip = escHtml([subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
     s.thema ? 'Thema: ' + s.thema : '', s.booked ? 'gebucht' : 'frei'].filter(Boolean).join(' · '));
-  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}">
-    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta"><span class="mw-chip-subj" style="color:${state === 'taken' ? 'var(--md-on-surface-variant)' : color};">${escHtml(subj.name)}</span>${isMine ? ' · <span class="mw-chip-status" style="color:' + color + ';">von dir</span>' : ''}${!s.booked ? ' · <span class="mw-chip-status">frei</span>' : ''}</div>
+  // Fach nur als Buchstaben-Badge, Talk/Input nur als Piktogramm - analog zur
+  // Ansicht vor dem Login. Die volle Information steckt in title + aria-label.
+  const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
+  const neutral = state === 'taken';
+  const badge = `<span class="lw-chip-subj" style="background:${neutral ? 'var(--md-outline-variant)' : color};">${escHtml(subjLetter)}</span>`;
+  const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
+  const statusHtml = isMine
+    ? `<span class="mw-chip-status" style="color:${color};">von dir</span>`
+    : (!s.booked ? '<span class="mw-chip-status">frei</span>' : '');
+
+  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}" aria-label="${tip}">
+    <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    ${statusHtml ? `<div class="lw-chip-meta">${statusHtml}</div>` : ''}
     ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
     ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
   </div>`;
@@ -4128,6 +4135,9 @@ function renderAdminWeek() {
     ${weekSlots.length
       ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
          <div class="mw-legend">
+           <span>Buchstabe/Farbe = Fach</span>
+           <span>${lwIcon('talk')} Talk</span>
+           <span>${lwIcon('input')} Input</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>✓ zugesagt</span>
            <span>⏳ eingeladen, noch offen</span>
