@@ -5,3 +5,8 @@ node_modules/
 package-lock.json
 stations_out.txt
 .claude/
+
+# Zugangsdaten fuer den Excel-Abgleich (osk_sync.py) - nie einchecken
+osk_sync_config.json
+tools/arbeitsstaende/osk_sync_config.json
+__pycache__/
