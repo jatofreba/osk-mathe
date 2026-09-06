@@ -2180,30 +2180,25 @@ function mwChip(s) {
   // Damit dadurch nichts verloren geht, tragen die Kacheln die volle Information
   // in title (Maus) UND aria-label (Screenreader).
   const full = [subj.name, typLabel, s.uhrzeit, s.ort,
-    s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '', label]
+    s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
+    s.booked && s.thema ? 'Thema: ' + s.thema : '', label]
     .filter(Boolean).join(' · ');
   const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
   const badge = `<span class="lw-chip-subj" style="background:${neutral ? 'var(--md-outline-variant)' : color};">${escHtml(subjLetter)}</span>`;
   const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
 
-  // Von anderen belegte Termine sind fuer mich nicht handlungsrelevant - sie stehen
-  // nur da, damit die Woche nicht faelschlich frei aussieht. Deshalb ohne Ort und
-  // Lernbegleitung; beides bleibt im Tooltip.
-  if (neutral) {
-    return `<div class="lw-chip mw-taken" ${desc}>
-      <div class="lw-chip-time" style="color:var(--md-on-surface-variant);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
-      <div class="lw-chip-meta">belegt</div>
-    </div>`;
-  }
-
+  // Thema steht bei gebuchten Terminen hinter dem Status in derselben Zeile: auch
+  // bei fremd belegten kann man sich nachtraeglich dazubuchen, indem man die
+  // Lernbegleitung anspricht - dafuer braucht man Thema UND Lernbegleitung.
+  const thema = s.booked && s.thema ? ` · „${escHtml(s.thema)}“` : '';
   const meta = [
     s.ort ? escHtml(s.ort) : '',
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean).join(' · ');
 
-  return `<div class="lw-chip mw-${state}" style="border-left-color:${color};color:${color};" ${desc}>
-    <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
-    <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span></div>
+  return `<div class="lw-chip mw-${state}"${neutral ? '' : ` style="border-left-color:${color};color:${color};"`} ${desc}>
+    <div class="lw-chip-time" style="color:${neutral ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
 }
@@ -2301,7 +2296,7 @@ async function loadMyWeek() {
       <span>${lwIcon('input')} Input</span>
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
-      <span>belegt = von anderen gebucht</span>
+      <span>belegt = von anderen gebucht – mitmachen? Sprich die Lernbegleitung an, sie kann dich dazunehmen</span>
       ${hiddenCount ? `<span>${hiddenCount} Termin${hiddenCount === 1 ? '' : 'e'} ausgeblendet (überschneidet sich mit deinen)</span>` : ''}
       <span>Buchen und Einladungen beantworten geht im Kalender.</span>
     </div>
