@@ -257,6 +257,18 @@ async function initDB() {
         ALTER TABLE subjects ADD COLUMN optional_zuhoeren INTEGER NOT NULL DEFAULT 1;
       END IF;
     END $$;
+    -- Vorgaben je Fach UND Halbjahr (2026-09-04): die subjects-Spalten bleiben der Standard,
+    -- hier stehen nur abweichende Halbjahre. Fehlt ein Halbjahr hier, gilt der Fach-Standard.
+    CREATE TABLE IF NOT EXISTS subject_halbjahr_targets (
+      subject_id             INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+      halbjahr               TEXT NOT NULL,
+      pflicht_praesentieren  INTEGER NOT NULL DEFAULT 1,
+      pflicht_zuhoeren       INTEGER NOT NULL DEFAULT 2,
+      optional_praesentieren INTEGER NOT NULL DEFAULT 2,
+      optional_zuhoeren      INTEGER NOT NULL DEFAULT 1,
+      updated_at             TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (subject_id, halbjahr)
+    );
     INSERT INTO subjects (key, name, color, color_bg, default_ort, default_dauer) VALUES
       ('mathe',    'Mathe',    '#2563eb', '#eff6ff', 'Mathe-Fachbüro',    45),
       ('englisch', 'Englisch', '#eab308', '#fefce8', 'Englisch-Fachbüro', 45),
@@ -431,12 +443,16 @@ const TALKING_STATUS_VALUES = ['ausstehend', 'erledigt', 'nicht_erledigt'];
 // (beliebig viele weitere Vorträge/Zuhör-Termine) zählt nur zum Max, wenn tatsächlich
 // angemeldet. Von /api/talking-sessions/mine und /api/leaderboard gemeinsam genutzt,
 // damit "Meine Pokale" und die Rangliste nie auseinanderlaufen.
-function computeTalkingTrophies(halbjahre, presenting, listening, pflichtP, pflichtZ) {
-  pflichtP = pflichtP == null ? 1 : pflichtP;
-  pflichtZ = pflichtZ == null ? 2 : pflichtZ;
+// targetsFor: (halbjahr) => { pflichtP, pflichtZ } - seit 2026-09-04 können die Vorgaben je
+// Halbjahr abweichen (subject_halbjahr_targets), deshalb keine festen Zahlen mehr.
+function computeTalkingTrophies(halbjahre, presenting, listening, targetsFor) {
+  const resolve = typeof targetsFor === 'function' ? targetsFor : () => ({});
   let earned = 0, max = 0;
   const byHalbjahr = {};
   halbjahre.forEach(hj => {
+    const t = resolve(hj) || {};
+    const pflichtP = t.pflichtP == null ? 1 : t.pflichtP;
+    const pflichtZ = t.pflichtZ == null ? 2 : t.pflichtZ;
     let hjEarned = 0, hjMax = 0;
     const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
@@ -546,6 +562,27 @@ function halbjahrForDate(d) {
   else if (m === 1) { startYear = y - 1; sem = 1; }
   else { startYear = y - 1; sem = 2; }
   return String(startYear).slice(-2) + String(startYear + 1).slice(-2) + '_' + sem;
+}
+
+// Halbjahre, in denen ein Account noch gar nicht existierte, dürfen nicht als "nichts gemacht"
+// gewertet werden (2026-09-04). Das Format "<StartJJ><EndJJ>_<1|2>" sortiert lexikografisch
+// korrekt ("2526_2" < "2627_1" < "2627_2"), deshalb reicht ein String-Vergleich.
+function halbjahrCountsForUser(hj, createdAt) {
+  if (!hj) return false;
+  const first = halbjahrForDate(createdAt);
+  return !first || hj >= first;
+}
+
+// Vorgaben je Fach+Halbjahr auflösen: Zeile aus subject_halbjahr_targets, sonst Fach-Standard.
+// `overrides` = Zeilen aus subject_halbjahr_targets (subject_id, halbjahr, ...).
+function buildTargetsResolver(subjectRow, overrides) {
+  const byHj = {};
+  (overrides || []).forEach(o => {
+    if (Number(o.subject_id) !== Number(subjectRow.id)) return;
+    byHj[o.halbjahr] = { pflichtP: o.pflicht_praesentieren, pflichtZ: o.pflicht_zuhoeren };
+  });
+  const std = { pflichtP: subjectRow.pflichtP, pflichtZ: subjectRow.pflichtZ };
+  return (hj) => byHj[hj] || std;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -1160,35 +1197,81 @@ app.post('/api/korrektur/reset', requireLogin, async (req, res) => {
 
 app.get('/api/subjects', requireLogin, async (req, res) => {
   try {
-    const r = await pool.query(`
-      SELECT id, key, name, color, color_bg AS "colorBg", default_ort AS "defaultOrt",
-             default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
-             pflicht_zuhoeren AS "pflichtZuhoeren",
-             optional_praesentieren AS "optionalPraesentieren",
-             optional_zuhoeren AS "optionalZuhoeren"
-      FROM subjects ORDER BY id
-    `);
-    res.json(r.rows);
+    const [r, ov] = await Promise.all([
+      pool.query(`
+        SELECT id, key, name, color, color_bg AS "colorBg", default_ort AS "defaultOrt",
+               default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
+               pflicht_zuhoeren AS "pflichtZuhoeren",
+               optional_praesentieren AS "optionalPraesentieren",
+               optional_zuhoeren AS "optionalZuhoeren"
+        FROM subjects ORDER BY id
+      `),
+      pool.query(`
+        SELECT subject_id AS "subjectId", halbjahr,
+               pflicht_praesentieren AS "pflichtPraesentieren",
+               pflicht_zuhoeren AS "pflichtZuhoeren",
+               optional_praesentieren AS "optionalPraesentieren",
+               optional_zuhoeren AS "optionalZuhoeren"
+        FROM subject_halbjahr_targets ORDER BY halbjahr
+      `),
+    ]);
+    // Abweichende Vorgaben je Halbjahr direkt am Fach mitliefern - die Felder heißen genauso
+    // wie die Fach-Standardwerte, damit das Frontend einheitlich nachschlagen kann.
+    const rows = r.rows.map(s => ({ ...s, halbjahrTargets: {} }));
+    const byId = {};
+    rows.forEach(s => { byId[s.id] = s; });
+    ov.rows.forEach(o => {
+      const s = byId[o.subjectId];
+      if (!s) return;
+      s.halbjahrTargets[o.halbjahr] = {
+        pflichtPraesentieren: o.pflichtPraesentieren, pflichtZuhoeren: o.pflichtZuhoeren,
+        optionalPraesentieren: o.optionalPraesentieren, optionalZuhoeren: o.optionalZuhoeren,
+      };
+    });
+    res.json(rows);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
 // Nur die vom Admin konfigurierbaren Default-Werte (Name/Farbe/Key bleiben fest).
+// Ort/Dauer gelten immer fach-weit. Die vier Vorgaben-Zahlen gelten je nach `halbjahr`:
+// leer = Fach-Standard, gesetzt = nur für dieses Halbjahr (subject_halbjahr_targets).
+// `reset: true` + halbjahr entfernt die Abweichung wieder, danach gilt dort der Standard.
 app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
   try {
     const { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
-            optionalPraesentieren, optionalZuhoeren } = req.body;
+            optionalPraesentieren, optionalZuhoeren, halbjahr, reset } = req.body;
     const dauer = Math.min(600, Math.max(5, parseInt(defaultDauer) || 45));
     const pp = Math.min(10, Math.max(0, parseInt(pflichtPraesentieren)));
     const pz = Math.min(10, Math.max(0, parseInt(pflichtZuhoeren)));
     const op = Math.min(10, Math.max(0, parseInt(optionalPraesentieren)));
     const oz = Math.min(10, Math.max(0, parseInt(optionalZuhoeren)));
-    const r = await pool.query(
-      `UPDATE subjects SET default_ort=$1, default_dauer=$2, pflicht_praesentieren=$3, pflicht_zuhoeren=$4,
-                           optional_praesentieren=$5, optional_zuhoeren=$6 WHERE id=$7 RETURNING id`,
-      [defaultOrt || '', dauer, isNaN(pp) ? 1 : pp, isNaN(pz) ? 2 : pz,
-       isNaN(op) ? 2 : op, isNaN(oz) ? 1 : oz, req.params.id]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const hj = (halbjahr || '').trim();
+
+    const exists = await pool.query('SELECT id FROM subjects WHERE id=$1', [req.params.id]);
+    if (!exists.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+
+    await pool.query(`UPDATE subjects SET default_ort=$1, default_dauer=$2 WHERE id=$3`,
+      [defaultOrt || '', dauer, req.params.id]);
+
+    if (!hj) {
+      await pool.query(
+        `UPDATE subjects SET pflicht_praesentieren=$1, pflicht_zuhoeren=$2,
+                             optional_praesentieren=$3, optional_zuhoeren=$4 WHERE id=$5`,
+        [isNaN(pp) ? 1 : pp, isNaN(pz) ? 2 : pz, isNaN(op) ? 2 : op, isNaN(oz) ? 1 : oz, req.params.id]
+      );
+    } else if (reset) {
+      await pool.query('DELETE FROM subject_halbjahr_targets WHERE subject_id=$1 AND halbjahr=$2',
+        [req.params.id, hj]);
+    } else {
+      await pool.query(`
+        INSERT INTO subject_halbjahr_targets
+          (subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren, optional_praesentieren, optional_zuhoeren)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (subject_id, halbjahr) DO UPDATE
+          SET pflicht_praesentieren=$3, pflicht_zuhoeren=$4,
+              optional_praesentieren=$5, optional_zuhoeren=$6, updated_at=NOW()
+      `, [req.params.id, hj, isNaN(pp) ? 1 : pp, isNaN(pz) ? 2 : pz, isNaN(op) ? 2 : op, isNaN(oz) ? 1 : oz]);
+    }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1217,8 +1300,8 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       return 1;
     }
 
-    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes] = await Promise.all([
-      pool.query(`SELECT id, username, kurs, klasse FROM users WHERE role='student' AND aktiv=true`),
+    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes, hjTargetsRes] = await Promise.all([
+      pool.query(`SELECT id, username, kurs, klasse, created_at FROM users WHERE role='student' AND aktiv=true`),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
       pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
       pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
@@ -1236,6 +1319,7 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       `),
       pool.query(`SELECT DISTINCT klasse, halbjahr, subject_id AS "subjectId" FROM talking_slots WHERE typ='talk'`),
       pool.query(`SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
+      pool.query(`SELECT subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren FROM subject_halbjahr_targets`),
     ]);
 
     const progByUser = {};
@@ -1293,12 +1377,15 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       const uPres = tsPresByUser[u.id] || [];
       const uListen = tsListenByUser[u.id] || [];
       Object.keys(subjectThresholds).map(Number).forEach(subjectId => {
-        const hjs = tsHalbjahreByKlasseSubject[u.klasse + '|' + subjectId] || [];
+        // Nur Halbjahre, in denen dieser Account schon existierte (sonst unerreichbares Maximum).
+        const hjs = (tsHalbjahreByKlasseSubject[u.klasse + '|' + subjectId] || [])
+          .filter(hj => halbjahrCountsForUser(hj, u.created_at));
         if (!hjs.length) return; // dieses Fach hat in der Klasse (noch) keine Talk-Slots -> nichts zu zählen
         const th = subjectThresholds[subjectId];
         const subPres = uPres.filter(r => r.subjectId === subjectId);
         const subListen = uListen.filter(r => r.subjectId === subjectId);
-        const t = computeTalkingTrophies(hjs, subPres, subListen, th.pflichtP, th.pflichtZ);
+        const t = computeTalkingTrophies(hjs, subPres, subListen,
+          buildTargetsResolver({ id: subjectId, pflichtP: th.pflichtP, pflichtZ: th.pflichtZ }, hjTargetsRes.rows));
         pokale += t.earned; ownMax += t.max;
       });
       return { username: u.username, pokale, ownMax };
@@ -1488,7 +1575,7 @@ app.post('/api/admin/set-aktiv', requireAdmin, async (req, res) => {
 app.get('/api/classmates', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, username FROM users WHERE role=$1 AND klasse=$2 AND id != $3 AND aktiv=true ORDER BY username',
+      'SELECT id, username, created_at AS "createdAt" FROM users WHERE role=$1 AND klasse=$2 AND id != $3 AND aktiv=true ORDER BY username',
       ['student', req.session.klasse, req.session.userId]
     );
     res.json(r.rows);
@@ -1515,9 +1602,14 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
   try {
     const uid = req.session.userId;
     const subjectKey = req.query.subject || 'mathe';
-    const subjRes = await pool.query('SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects WHERE key=$1', [subjectKey]);
+    const [subjRes, targetRows, meRow] = await Promise.all([
+      pool.query('SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects WHERE key=$1', [subjectKey]),
+      pool.query('SELECT subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren FROM subject_halbjahr_targets'),
+      pool.query('SELECT created_at FROM users WHERE id=$1', [uid]),
+    ]);
     if (!subjRes.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
     const subject = subjRes.rows[0];
+    const myCreatedAt = meRow.rows[0] ? meRow.rows[0].created_at : null;
     const [presenting, invitations, slotHalbjahre] = await Promise.all([
       pool.query(`
         SELECT ts.id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji",
@@ -1551,7 +1643,12 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     ]);
 
     const accepted = invitations.rows.filter(i => i.status === 'angenommen');
-    const trophies = computeTalkingTrophies(slotHalbjahre.rows.map(r => r.halbjahr), presenting.rows, accepted, subject.pflichtP, subject.pflichtZ);
+    // Halbjahre vor der Account-Erstellung zählen nicht mit - sonst hätte eine später
+    // dazugekommene Person von Anfang an ein unerreichbares Pflicht-Maximum.
+    const myHalbjahre = slotHalbjahre.rows.map(r => r.halbjahr)
+      .filter(hj => halbjahrCountsForUser(hj, myCreatedAt));
+    const trophies = computeTalkingTrophies(myHalbjahre, presenting.rows, accepted,
+      buildTargetsResolver(subject, targetRows.rows));
 
     res.json({
       presenting: presenting.rows,
@@ -2018,7 +2115,7 @@ async function halbjahrOverview(klasse, onlyUid) {
   // Selbst-Aufruf einer einzelnen Person (/api/my-halbjahr) bleibt davon unberührt.
   const aktivFilter = onlyUid ? '' : ' AND aktiv=true';
   const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
-    pool.query(`SELECT id, username FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    pool.query(`SELECT id, username, created_at FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
       SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -2126,7 +2223,13 @@ async function halbjahrOverview(klasse, onlyUid) {
   return {
     halbjahre: [...halbjahre].sort().reverse(),
     subjects: subjectsRows.rows.map(s => ({ key: s.key, name: s.name, color: s.color })),
-    students: students.rows.map(s => ({ id: s.id, username: s.username, byHalbjahr: byUser[s.id] || {} })),
+    // firstHalbjahr = Halbjahr der Account-Erstellung; frühere Halbjahre blendet das Frontend
+    // aus, statt sie als "nichts los" zu werten (der Account gab es damals noch nicht).
+    students: students.rows.map(s => ({
+      id: s.id, username: s.username,
+      firstHalbjahr: halbjahrForDate(s.created_at),
+      byHalbjahr: byUser[s.id] || {},
+    })),
   };
 }
 
