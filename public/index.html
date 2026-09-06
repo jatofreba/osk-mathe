@@ -2168,42 +2168,42 @@ function mwChip(s) {
   const subj = subjectById(s.subjectId);
   const color = subj.color || '#94a3b8';
   const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
+  const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const label = {
     mine:    '✓ von dir gebucht',
     invited: '✉ Einladung offen',
     free:    'frei',
     taken:   'belegt',
   }[state];
-  // Eigene Termine tragen die Fach-Farbe als Textfarbe, damit der Inset-Rahmen
-  // (currentColor) mitzieht; fremd belegte bleiben bewusst neutral.
-  const chipStyle = state === 'taken' ? '' : ` style="border-left-color:${color};color:${color};"`;
   const neutral = state === 'taken';
-  // Rohwerte sammeln und EINMAL escapen - lwTimeRange() escaped bereits selbst und
-  // liefert nur HH:MM–HH:MM, wird hier deshalb nicht nochmal durchgereicht.
-  const tooltip = escHtml([subj.name, typLabel, s.uhrzeit, s.ort,
+  // Fach nur als Buchstaben-Badge, Talk/Input nur als Piktogramm - kein Fliesstext.
+  // Damit dadurch nichts verloren geht, tragen die Kacheln die volle Information
+  // in title (Maus) UND aria-label (Screenreader).
+  const full = [subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '', label]
-    .filter(Boolean).join(' · '));
+    .filter(Boolean).join(' · ');
+  const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
+  const badge = `<span class="lw-chip-subj" style="background:${neutral ? 'var(--md-outline-variant)' : color};">${escHtml(subjLetter)}</span>`;
+  const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
 
-  // Von anderen belegte Termine sind für mich nicht handlungsrelevant - sie stehen
-  // nur da, damit die Woche nicht fälschlich frei aussieht. Deshalb bekommen sie
-  // nur Zeit + "belegt"; Ort und Lernbegleitung bleiben im Tooltip. Das nimmt viel
-  // Dichte aus dem Raster, ohne Information zu verlieren.
+  // Von anderen belegte Termine sind fuer mich nicht handlungsrelevant - sie stehen
+  // nur da, damit die Woche nicht faelschlich frei aussieht. Deshalb ohne Ort und
+  // Lernbegleitung; beides bleibt im Tooltip.
   if (neutral) {
-    return `<div class="lw-chip mw-taken" title="${tooltip}">
-      <div class="lw-chip-time" style="color:var(--md-on-surface-variant);"><span>${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}</div>
-      <div class="lw-chip-meta">${escHtml(subj.name)} · belegt</div>
+    return `<div class="lw-chip mw-taken" ${desc}>
+      <div class="lw-chip-time" style="color:var(--md-on-surface-variant);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+      <div class="lw-chip-meta">belegt</div>
     </div>`;
   }
 
-  // Ort und Lernbegleitung in EINER Zeile (vorher konnte daraus eine dritte werden).
   const meta = [
     s.ort ? escHtml(s.ort) : '',
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean).join(' · ');
 
-  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tooltip}">
-    <div class="lw-chip-time" style="color:var(--md-on-surface);"><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)} <span class="lw-chip-type">${typLabel}</span></div>
-    <div class="lw-chip-meta"><span class="mw-chip-subj" style="color:${color};">${escHtml(subj.name)}</span><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};"> · ${label}</span></div>
+  return `<div class="lw-chip mw-${state}" style="border-left-color:${color};color:${color};" ${desc}>
+    <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span></div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
 }
@@ -2296,6 +2296,9 @@ async function loadMyWeek() {
     </div>
     <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
     <div class="mw-legend">
+      <span>Buchstabe/Farbe = Fach</span>
+      <span>${lwIcon('talk')} Talk</span>
+      <span>${lwIcon('input')} Input</span>
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
       <span>belegt = von anderen gebucht</span>
