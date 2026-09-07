@@ -1071,15 +1071,29 @@ class App(tk.Tk):
         self._detail_anzeigen()
 
         self._markiere_ungespeichert()
+
+        # Beide Richtungen benennen, damit nichts unbemerkt fehlt:
+        # Personen ohne Konto bekommen keine Zahlen, und Konten ohne Person in
+        # der Liste werden gar nicht ausgewertet (z.B. Tippfehler im Alias,
+        # Zugezogene oder Abgaenge).
+        zugeordnet = {t[3] for t in treffer}
+        verwaist = sorted(set(daten.nach_account) - zugeordnet)
+
         text = (f"{zeilen} Zeilen im Blatt 'App-Daten' aktualisiert "
                 f"(Lerngruppe {klasse}, nur Mathe).\n"
                 f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n\n"
                 f"Noch speichern nicht vergessen.")
-        if ohne:
-            text += (f"\n\nOhne passendes Konto ({len(ohne)}):\n"
-                     + "\n".join(ohne[:10]))
-            if len(ohne) > 10:
-                text += f"\n... und {len(ohne) - 10} weitere"
+
+        def _liste(titel, eintraege, grenze=10):
+            if not eintraege:
+                return ""
+            teil = f"\n\n{titel} ({len(eintraege)}):\n" + "\n".join(eintraege[:grenze])
+            if len(eintraege) > grenze:
+                teil += f"\n... und {len(eintraege) - grenze} weitere"
+            return teil
+
+        text += _liste("Personen ohne passendes Konto -- ohne Zahlen", ohne)
+        text += _liste("App-Konten ohne Person in der Liste -- nicht ausgewertet", verwaist)
         messagebox.showinfo("Ergebnisse abrufen", text)
 
     # ------------------------------------------------------------------
