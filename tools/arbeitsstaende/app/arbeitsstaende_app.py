@@ -527,12 +527,20 @@ class App(tk.Tk):
         self.status_leiste = ttk.Label(self, text="Keine Datei geladen.", anchor="w", padding=4)
         self.status_leiste.pack(fill="x", side="bottom")
 
+        self._letzte_quelle = None
         # Weiterarbeiten, wo zuletzt aufgehoert wurde.
         self._zuletzt_oeffnen()
 
     # ------------------------------------------------------------------
     # Datei-Aktionen
     # ------------------------------------------------------------------
+    @staticmethod
+    def _als_json_pfad(pfad: str) -> str:
+        """Arbeitsdateien sind immer `.json`. Eine andere Endung wird ersetzt,
+        damit niemand versehentlich wieder in einer Excel-Mappe landet -- die
+        wird ausschliesslich auf Nachfrage geschrieben (Als Excel exportieren)."""
+        return pfad if ist_json_pfad(pfad) else os.path.splitext(pfad)[0] + ".json"
+
     def _arbeitsdatei_merken(self):
         """Merkt sich, woran gerade gearbeitet wird -- beim naechsten Start
         wird genau diese Datei wieder geoeffnet. Excel muss also nur ein
@@ -562,8 +570,15 @@ class App(tk.Tk):
         self._liste_aktualisieren()
         self._detail_leeren()
         self.ungespeichert = False
-        self._aktualisiere_titel()
         hinweis = f" -- {len(warnungen)} Hinweis(e) beim Laden" if warnungen else ""
+        if not ist_json_pfad(pfad):
+            # Aus einer aelteren Sitzung stammt hier noch eine Excel-Mappe.
+            # Sie wird gelesen, aber nicht weiterbeschrieben: beim ersten
+            # Speichern legt die Anwendung die Arbeitsdatei an.
+            self.az.dateipfad = None
+            self._letzte_quelle = pfad
+            hinweis += " -- beim Speichern wird eine Arbeitsdatei (.json) angelegt"
+        self._aktualisiere_titel()
         self.status_leiste.config(
             text=f"Geladen: {pfad} ({len(self.az.students)} Personen){hinweis}")
 
@@ -615,6 +630,9 @@ class App(tk.Tk):
             self._datei_laden(pfad)
 
     def _datei_laden(self, pfad: str):
+        # Herkunft merken: wird die Frage nach der Arbeitsdatei abgebrochen,
+        # schlaegt "Speichern" spaeter denselben Ordner vor.
+        self._letzte_quelle = pfad
         try:
             warnungen = self.az.laden(pfad)
         except Exception as e:
@@ -643,10 +661,10 @@ class App(tk.Tk):
         ziel = filedialog.asksaveasfilename(
             title="Arbeitsdatei anlegen (auch für die automatische Sicherung alle 5 Min.)",
             initialdir=os.path.dirname(vorschlag), initialfile=os.path.basename(vorschlag),
-            defaultextension=".json",
-            filetypes=[("Arbeitsstände", "*.json"), ("Excel-Datei", "*.xlsx")])
+            defaultextension=".json", filetypes=[("Arbeitsstände", "*.json")])
 
         if ziel:
+            ziel = self._als_json_pfad(ziel)
             self.az.dateipfad = ziel
             try:
                 self.az.speichern(ziel)
@@ -666,7 +684,10 @@ class App(tk.Tk):
         self._aktualisiere_titel()
 
     def speichern(self) -> bool:
-        if not self.az.dateipfad:
+        # In Excel-Mappen wird nie von selbst geschrieben -- sie sind reines
+        # Import-/Exportformat. Steht (noch) keine Arbeitsdatei fest, wird
+        # hier eine angelegt.
+        if not self.az.dateipfad or not ist_json_pfad(self.az.dateipfad):
             return self.speichern_unter()
         try:
             self.az.speichern(self.az.dateipfad)
@@ -674,17 +695,23 @@ class App(tk.Tk):
             messagebox.showerror("Fehler beim Speichern", str(e))
             return False
         self.ungespeichert = False
+        self._arbeitsdatei_merken()
         self._aktualisiere_titel()
         self.status_leiste.config(text=f"Gespeichert: {self.az.dateipfad}")
         return True
 
     def speichern_unter(self) -> bool:
+        vorschlag = self._als_json_pfad(
+            self.az.dateipfad or getattr(self, "_letzte_quelle", None)
+            or "Arbeitsstaende.json")
         pfad = filedialog.asksaveasfilename(
-            title="Speichern unter",
-            defaultextension=".json",
-            filetypes=[("Arbeitsstände", "*.json"), ("Excel-Datei", "*.xlsx")])
+            title="Arbeitsdatei speichern unter",
+            initialdir=os.path.dirname(vorschlag) or None,
+            initialfile=os.path.basename(vorschlag),
+            defaultextension=".json", filetypes=[("Arbeitsstände", "*.json")])
         if not pfad:
             return False
+        pfad = self._als_json_pfad(pfad)
         try:
             self.az.speichern(pfad)
         except Exception as e:
@@ -723,12 +750,14 @@ class App(tk.Tk):
         self.status_leiste.config(text=f"Als Excel exportiert: {pfad}")
 
     def _autosave_tick(self):
-        if self.ungespeichert and self.az.dateipfad:
+        if (self.ungespeichert and self.az.dateipfad
+                and ist_json_pfad(self.az.dateipfad)):
             try:
                 self.az.speichern(self.az.dateipfad)
                 self.ungespeichert = False
                 self._aktualisiere_titel()
                 zeit = datetime.now().strftime("%H:%M")
+                self._arbeitsdatei_merken()
                 self.status_leiste.config(text=f"Automatisch gespeichert um {zeit} Uhr -- {self.az.dateipfad}")
             except Exception as e:
                 self.status_leiste.config(text=f"⚠ Automatisches Speichern fehlgeschlagen: {e}")

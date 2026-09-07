@@ -172,8 +172,14 @@ gemeldet statt zu stören.
 
 ## Automatische Sicherung
 
+- **In Excel-Dateien schreibt die Anwendung nie von selbst.** Gespeichert
+  wird ausschließlich in die `.json`-Arbeitsdatei; eine `.xlsx` entsteht nur,
+  wenn du sie über *Als Excel exportieren…* anforderst. Auch "Speichern" und
+  "Speichern unter…" legen immer eine `.json` an -- gibst du dort eine andere
+  Endung ein, wird sie ersetzt.
 - Brichst du beim Import die Frage nach der Arbeitsdatei ab, wird nichts
-  vorgemerkt; "Speichern" fragt dann beim nächsten Mal erneut danach.
+  vorgemerkt; "Speichern" fragt dann beim nächsten Mal erneut danach und
+  schlägt den Ordner der importierten Datei vor.
 - Ab dann läuft eine **automatische Sicherung alle 5 Minuten** im
   Hintergrund, sobald es etwas Ungespeichertes gibt -- lautlos, ohne
   Rückfrage. Die Statuszeile unten zeigt jeweils Uhrzeit und Zieldatei; falls
