@@ -16,6 +16,7 @@ from typing import List
 
 from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
+    halbjahr_fuer_datum, halbjahr_optionen,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App (Anmeldung, Auswertung, Konten anlegen).
@@ -57,7 +58,7 @@ class BausteinDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-        b = baustein or Baustein()
+        b = baustein or Baustein(halbjahr=halbjahr_fuer_datum())
         felder = [
             ("Baustein", "name", "entry_or_combo", vorlage_namen),
             ("Status", "status", "combo", STATUS_OPTIONEN),
@@ -66,7 +67,7 @@ class BausteinDialog(tk.Toplevel):
             ("LZK-Note 1", "lzk_note_1", "entry", None),
             ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
             ("LZK-Note 2", "lzk_note_2", "entry", None),
-            ("Halbjahr", "halbjahr", "entry", None),
+            ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
             ("Bemerkung", "bemerkung", "text", None),
         ]
 

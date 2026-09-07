@@ -55,6 +55,41 @@ def _to_date(value):
     return None
 
 
+# Halbjahre werden genauso gebildet wie in der Lerntheken-App (server.js,
+# halbjahrForDate): Schuljahr laeuft ab August, Format "<StartJJ><EndJJ>_<1|2>".
+# Der Januar zaehlt noch zum ERSTEN Halbjahr des im August gestarteten Jahres.
+def halbjahr_fuer_datum(d: Optional[date] = None) -> str:
+    d = d or date.today()
+    m, y = d.month, d.year
+    if m >= 8:
+        start, sem = y, 1
+    elif m == 1:
+        start, sem = y - 1, 1
+    else:
+        start, sem = y - 1, 2
+    return f"{str(start)[-2:]}{str(start + 1)[-2:]}_{sem}"
+
+
+def halbjahr_optionen(zusaetzlich=(), jahre_zurueck: int = 3, jahre_vor: int = 1):
+    """Auswahlliste fuer das Halbjahr-Feld, neueste zuerst.
+
+    `zusaetzlich` nimmt Werte auf, die schon in der Datei stehen -- sonst waere
+    ein alter oder von Hand gesetzter Wert im Dropdown nicht enthalten und beim
+    Bearbeiten still verloren.
+    """
+    heute = date.today()
+    startjahr = heute.year if heute.month >= 8 else heute.year - 1
+    optionen = []
+    for jahr in range(startjahr - jahre_zurueck, startjahr + jahre_vor + 1):
+        for sem in (1, 2):
+            optionen.append(f"{str(jahr)[-2:]}{str(jahr + 1)[-2:]}_{sem}")
+    for wert in zusaetzlich:
+        wert = (wert or "").strip()
+        if wert and wert not in optionen:
+            optionen.append(wert)
+    return sorted(set(optionen), reverse=True)
+
+
 def alias_vorschlag(vorname: str, nachname: str) -> str:
     """Vorschlag fuer den Lerntheken-Alias: erste 2 Buchstaben des Vornamens,
     Punkt, erste 2 Buchstaben des Nachnamens -- "Anton Berger" -> "an.be".
