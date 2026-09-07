@@ -35,6 +35,15 @@ def fmt_datum(d):
     return d.strftime("%d.%m.%Y")
 
 
+def _mit_bemerkung(text, bemerkung):
+    """Datum und zugehoerige Bemerkung in einer Zelle -- spart eine Spalte
+    in der ohnehin breiten Baustein-Tabelle."""
+    bemerkung = (bemerkung or "").strip()
+    if not bemerkung:
+        return text
+    return f"{text} · {bemerkung}" if text else bemerkung
+
+
 def parse_datum(text):
     text = (text or "").strip()
     if not text:
@@ -65,8 +74,10 @@ class BausteinDialog(tk.Toplevel):
             ("Bausteinarbeit", "bausteinarbeit", "entry", None),
             ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
             ("LZK-Note 1", "lzk_note_1", "entry", None),
+            ("Bemerkung zur LZK 1", "lzk_bem_1", "entry", None),
             ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
             ("LZK-Note 2", "lzk_note_2", "entry", None),
+            ("Bemerkung zur LZK 2", "lzk_bem_2", "entry", None),
             ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
             ("Bemerkung", "bemerkung", "text", None),
         ]
@@ -392,20 +403,22 @@ class App(tk.Tk):
         ttk.Label(links, text="Sortiert nach Jahrgangsstufe, innerhalb der Stufe alphabetisch.",
                   font=("", 10, "italic")).pack(fill="x", pady=(0, 4))
 
-        self.liste = ttk.Treeview(links, columns=("jahrgang", "deadline", "baustein", "kursung", "fb"),
+        self.liste = ttk.Treeview(links, columns=("jahrgang", "deadline", "anlass", "baustein", "kursung", "fb"),
                                    show="tree headings", height=20)
         # Klick auf einen Spaltenkopf sortiert die Liste danach, erneuter Klick
         # kehrt die Richtung um. Standard bleibt Jahrgangsstufe + Nachname.
         self._liste_sortierung = None       # None = Standardsortierung
         self._liste_umgekehrt = False
         for spalte, titel in (("#0", "Name"), ("jahrgang", "Jgst."),
-                              ("deadline", "Deadline"), ("baustein", "Baustein"),
+                              ("deadline", "Deadline"), ("anlass", "Anlass"),
+                              ("baustein", "Baustein"),
                               ("kursung", "Kurs"), ("fb", "FB zuletzt")):
             self.liste.heading(spalte, text=titel,
                                command=lambda sp=spalte: self._liste_sortieren(sp))
         self.liste.column("#0", width=125)
         self.liste.column("jahrgang", width=40, anchor="center")
         self.liste.column("deadline", width=95, anchor="center")
+        self.liste.column("anlass", width=110)
         self.liste.column("baustein", width=100)
         self.liste.column("kursung", width=35, anchor="center")
         self.liste.column("fb", width=115, anchor="center")
@@ -436,6 +449,8 @@ class App(tk.Tk):
         self.f_hjnote = tk.StringVar()
         self.f_alias = tk.StringVar()
         self.f_letzter_besuch = tk.StringVar()
+        self.f_deadline = tk.StringVar()
+        self.f_deadline_bem = tk.StringVar()
 
         self.name_label = ttk.Label(kopf, text="–", font=("", 14, "bold"))
         self.name_label.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
@@ -458,7 +473,18 @@ class App(tk.Tk):
         ttk.Label(kopf, text="(Benutzername in der Lerntheken-App)",
                   foreground="#666").grid(row=3, column=2, columnspan=2, sticky="w", pady=(4, 0))
 
-        for var in (self.f_kursung, self.f_jahrgang, self.f_hjnote, self.f_alias):
+        # Frei setzbare Frist neben den LZK-Terminen -- z.B. eine Abgabe oder
+        # etwas, das mitgebracht werden muss. Der Anlass steht in der Liste
+        # direkt neben dem Datum, damit im Gespraech sofort klar ist, worum es geht.
+        ttk.Label(kopf, text="Sonstige Deadline").grid(row=4, column=0, sticky="e", padx=4, pady=(4, 0))
+        ttk.Entry(kopf, textvariable=self.f_deadline, width=14).grid(row=4, column=1, sticky="w", pady=(4, 0))
+        ttk.Label(kopf, text="Anlass").grid(row=4, column=2, sticky="e", padx=4, pady=(4, 0))
+        ttk.Entry(kopf, textvariable=self.f_deadline_bem, width=24).grid(row=4, column=3, sticky="w", pady=(4, 0))
+        self.deadline_hinweis = ttk.Label(kopf, text="", foreground="#a00")
+        self.deadline_hinweis.grid(row=5, column=1, columnspan=3, sticky="w")
+
+        for var in (self.f_kursung, self.f_jahrgang, self.f_hjnote, self.f_alias,
+                    self.f_deadline, self.f_deadline_bem):
             var.trace_add("write", lambda *a: self._kopf_uebernehmen())
 
         baustein_rahmen = ttk.LabelFrame(rechts, text="Bausteine", padding=8)
@@ -688,12 +714,15 @@ class App(tk.Tk):
             baustein, _ = self.az.berechne_status(student)
             return (0, str(baustein).lower()) if baustein else (1, "")
         if spalte == "deadline":
-            _, deadline = self.az.berechne_status(student)
+            deadline, _ = self.az.deadline_info(student, heute)
             if isinstance(deadline, date):
                 return (0, deadline)
-            if deadline == "Frist vereinbaren!":
-                return (1, heute)      # direkt hinter den echten Terminen
+            if deadline:
+                return (1, heute)      # Hinweistext direkt hinter den echten Terminen
             return (2, date.min)
+        if spalte == "anlass":
+            _, anlass = self.az.deadline_info(student, heute)
+            return (0, anlass.lower()) if anlass else (1, "")
         return (0, student.nachname.lower())
 
     def _liste_aktualisieren(self):
@@ -710,13 +739,16 @@ class App(tk.Tk):
         for s in personen:
             if suche and suche not in s.voller_name.lower():
                 continue
-            baustein, deadline = self.az.berechne_status(s)
-            if deadline == "Frist vereinbaren!":
-                deadline_text = deadline
-                tag = "dringend"
-            elif isinstance(deadline, date):
+            baustein, _ = self.az.berechne_status(s)
+            # Angezeigt wird die naechste Frist ueberhaupt -- LZK oder frei
+            # gesetzte Deadline -- mit ihrem Anlass in der Spalte daneben.
+            deadline, anlass = self.az.deadline_info(s, heute)
+            if isinstance(deadline, date):
                 deadline_text = fmt_datum(deadline)
                 tag = "dringend" if deadline < heute else "bevorstehend"
+            elif deadline:
+                deadline_text = str(deadline)
+                tag = "dringend"
             else:
                 deadline_text = ""
                 tag = ""
@@ -724,7 +756,8 @@ class App(tk.Tk):
             fb_symbol = self._fb_symbol(s, heute)
             fb_text = f"{fb_symbol} {fmt_datum(s.letzter_besuch_fb)}" if s.fb_besuche else f"{fb_symbol} nie"
             self.liste.insert("", "end", iid=s.voller_name, text=s.voller_name,
-                               values=(jahrgang_text, deadline_text, baustein, s.kursung, fb_text),
+                               values=(jahrgang_text, deadline_text, anlass, baustein,
+                                       s.kursung, fb_text),
                                tags=(tag,) if tag else ())
         vorhanden = set(self.liste.get_children())
         neue_markierung = [m for m in markierung if m in vorhanden]
@@ -826,6 +859,9 @@ class App(tk.Tk):
         self.f_hjnote.set("")
         self.f_alias.set("")
         self.f_letzter_besuch.set("")
+        self.f_deadline.set("")
+        self.f_deadline_bem.set("")
+        self.deadline_hinweis.config(text="")
         self.tabelle.delete(*self.tabelle.get_children())
 
     def _detail_anzeigen(self):
@@ -840,6 +876,9 @@ class App(tk.Tk):
         self.f_hjnote.set(s.hj_note or "")
         self.f_alias.set(s.alias or "")
         self.f_letzter_besuch.set(fmt_datum(s.letzter_besuch_fb))
+        self.f_deadline.set(fmt_datum(s.sonstige_deadline))
+        self.f_deadline_bem.set(s.sonstige_deadline_bemerkung or "")
+        self.deadline_hinweis.config(text="")
         self._laden_sperre = False
 
         self.tabelle.delete(*self.tabelle.get_children())
@@ -860,8 +899,10 @@ class App(tk.Tk):
                 tags.append(b.status)
             self.tabelle.insert("", "end", iid=str(i), text=b.name,
                                  values=(b.status, b.bausteinarbeit,
-                                         fmt_datum(b.lzk_datum_1), b.lzk_note_1,
-                                         fmt_datum(b.lzk_datum_2), b.lzk_note_2,
+                                         _mit_bemerkung(fmt_datum(b.lzk_datum_1), b.lzk_bem_1),
+                                         b.lzk_note_1,
+                                         _mit_bemerkung(fmt_datum(b.lzk_datum_2), b.lzk_bem_2),
+                                         b.lzk_note_2,
                                          b.halbjahr, b.bemerkung),
                                  tags=tuple(tags))
 
@@ -908,6 +949,19 @@ class App(tk.Tk):
             pass
         s.hj_note = self.f_hjnote.get()
         s.alias = self.f_alias.get().strip().lower()
+        s.sonstige_deadline_bemerkung = self.f_deadline_bem.get().strip()
+        # Beim Tippen ist das Datum zwischendurch unvollstaendig; solange wird
+        # der bisherige Wert einfach behalten und der Hinweis angezeigt.
+        roh = self.f_deadline.get().strip()
+        if not roh:
+            s.sonstige_deadline = None
+            self.deadline_hinweis.config(text="")
+        else:
+            try:
+                s.sonstige_deadline = parse_datum(roh)
+                self.deadline_hinweis.config(text="")
+            except ValueError:
+                self.deadline_hinweis.config(text="Datum bitte als TT.MM.JJJJ")
         self._markiere_ungespeichert()
         self._liste_aktualisieren()
         self.liste.selection_set(s.voller_name)
