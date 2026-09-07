@@ -126,6 +126,24 @@ class AppClient:
     def halbjahr_uebersicht(self) -> dict:
         return self._get("/api/admin/halbjahr-uebersicht")
 
+    def studierende(self) -> List[dict]:
+        """Aktueller Stand je Schueler:in: aktiv-Kennzeichen, kompletter
+        Fortschritt (welche Stationen erledigt sind) und alle LZK-Eintraege.
+
+        Wichtig gegenueber der Halbjahr-Uebersicht: die zaehlt Stationen ueber
+        station_events, und die werden erst SEIT Einfuehrung des Loggings
+        geschrieben -- fuer laenger bestehende Konten ist das leer. Der hier
+        gelieferte Fortschritt ist dagegen der tatsaechliche Gesamtstand.
+        """
+        return self._get("/api/admin/students")
+
+    def lerntheken_meta(self) -> List[dict]:
+        """Alle Lerntheken mit key, Titel und Stationszahl."""
+        try:
+            return self._get("/api/lerntheken-meta") or []
+        except Exception:
+            return []
+
     def lerntheken_titel(self) -> Dict[str, str]:
         """{Fortschritts-Key: Titel}, z.B. {"lerntheke_kreise_v11": "Kreise und Zylinder"}.
 

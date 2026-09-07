@@ -1161,17 +1161,37 @@ class App(tk.Tk):
         # Je Halbjahr eine Zeile pro bearbeiteter Lerntheke (mit LZK-Terminen und
         # Bearbeitungszeitraum) sowie eine fuer Talks/Input. Wiederholte Abrufe
         # frischen diese Zeilen auf, statt sie zu haeufen.
-        titel = client.lerntheken_titel()
+        lerntheken = client.lerntheken_meta()
+        try:
+            konten = client.studierende()
+        except Exception as e:
+            messagebox.showerror("Ergebnisse abrufen", f"Abruf fehlgeschlagen:\n{e}")
+            return
+        # Passiv gesetzte Konten bleiben aussen vor -- sie sollen weder Zahlen
+        # liefern noch als "nicht zuordenbar" gemeldet werden.
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+        inaktiv = sorted((k.get("username") or "").lower()
+                         for k in konten if not k.get("aktiv", True))
+
         stand = datetime.now().strftime("%d.%m.%Y")
         nach_alias = {st.alias.strip().lower(): st
                       for st in self.az.students if st.alias.strip()}
         neu = akt = 0
+        ohne_daten = []
         for _, _, _, alias in treffer:
             student = nach_alias.get(alias)
-            if not student:
+            konto = je_konto.get(alias)
+            if not student or not konto:
+                if student and alias not in je_konto:
+                    ohne_daten.append(f"{student.voller_name} ({alias})")
                 continue
             n, a = lt_zeilen_aktualisieren(
-                student, daten.nach_account[alias]["byHalbjahr"], titel, stand)
+                student,
+                daten.nach_account.get(alias, {}).get("byHalbjahr", {}),
+                konto.get("all_progress") or {},
+                konto.get("lzk") or [],
+                lerntheken, stand)
             neu += n
             akt += a
         self._detail_anzeigen()
@@ -1199,7 +1219,9 @@ class App(tk.Tk):
             return teil
 
         text += _liste("Personen ohne passendes Konto -- ohne Zahlen", ohne)
-        text += _liste("App-Konten ohne Person in der Liste -- nicht ausgewertet", verwaist)
+        text += _liste("Konto passiv gesetzt -- uebersprungen", ohne_daten)
+        text += _liste("App-Konten ohne Person in der Liste -- nicht ausgewertet",
+                       [v for v in verwaist if v not in inaktiv])
         messagebox.showinfo("Ergebnisse abrufen", text)
 
     # ------------------------------------------------------------------

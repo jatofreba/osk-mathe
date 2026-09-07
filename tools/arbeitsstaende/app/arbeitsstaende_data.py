@@ -8,6 +8,7 @@ testen (siehe test_arbeitsstaende_data.py).
 """
 from __future__ import annotations
 
+import json
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -109,73 +110,85 @@ def _fmt_kurz(datum) -> str:
     return d.strftime("%d.%m.%Y") if d else ""
 
 
-def lt_lerntheke_zeilen(bucket: dict, titel_je_key: dict):
-    """Baut je bearbeiteter Lerntheke einen Eintrag fuer EIN Halbjahr.
+def _erledigte_stationen(progress: dict, key: str) -> int:
+    """Anzahl erledigter Stationen aus dem Fortschritt einer Lerntheke.
 
-    Rueckgabe: Liste von dicts mit name, lzk1/lzk2 (Datum), status, bemerkung.
-    Grundlage sind die LZK-Eintraege und die einzelnen Stations-Ereignisse; beide
-    verweisen ueber denselben Fortschritts-Key auf die Lerntheke.
+    Der Wert ist ein JSON-Array mit den IDs der erledigten Stationen; Abgabe-
+    und Zwischenspeicher-Schluessel gehoeren nicht dazu.
     """
-    je_lerntheke = {}
+    roh = (progress or {}).get(key)
+    if not roh:
+        return 0
+    if isinstance(roh, str):
+        try:
+            roh = json.loads(roh)
+        except ValueError:
+            return 0
+    return len(roh) if isinstance(roh, list) else 0
 
-    for ev in bucket.get("stationDetails") or []:
-        key = ev.get("progress_key")
-        if not key:
-            continue
-        eintrag = je_lerntheke.setdefault(key, {"stationen": 0, "tage": [], "lzk": []})
-        eintrag["stationen"] += 1
-        d = _to_date(ev.get("datum"))
-        if d:
-            eintrag["tage"].append(d)
 
-    for l in bucket.get("lzk") or []:
-        key = l.get("lerntheke")
-        if not key:
-            continue
-        je_lerntheke.setdefault(key, {"stationen": 0, "tage": [], "lzk": []})["lzk"].append(l)
+def lt_lerntheke_zeilen(progress: dict, lzk_liste, lerntheken, aktuelles_hj: str):
+    """Eine Zeile je Lerntheke, an der tatsaechlich gearbeitet wurde.
+
+    Grundlage ist der GESAMTSTAND (erledigte Stationen aus dem Fortschritt) plus
+    die LZK-Eintraege -- nicht das Stations-Ereignislog, das erst seit seiner
+    Einfuehrung Daten hat.
+
+    Halbjahr-Zuordnung: das Halbjahr der (frueheren) LZK, sonst das laufende --
+    fuer den reinen Stationsfortschritt gibt es kein Datum.
+    """
+    lzk_je_lerntheke = {}
+    for l in lzk_liste or []:
+        lzk_je_lerntheke.setdefault(l.get("lerntheke"), []).append(l)
 
     zeilen = []
-    for key, info in je_lerntheke.items():
-        name = titel_je_key.get(key, key)
-        basis = next((l for l in info["lzk"] if l.get("typ") == "Basis"), None)
-        aufbau = next((l for l in info["lzk"] if l.get("typ") == "Aufbau"), None)
+    for lt in lerntheken:
+        key = lt.get("key")
+        if not key:
+            continue
+        erledigt = _erledigte_stationen(progress, key)
+        lzks = lzk_je_lerntheke.get(key, [])
+        if not erledigt and not lzks:
+            continue                      # nie angefasst -> keine Zeile
+
+        basis = next((l for l in lzks if l.get("typ") == "Basis"), None)
+        aufbau = next((l for l in lzks if l.get("typ") == "Aufbau"), None)
 
         teile = []
-        if info["stationen"]:
-            zeitraum = ""
-            if info["tage"]:
-                von, bis = min(info["tage"]), max(info["tage"])
-                zeitraum = (f" ({von.strftime('%d.%m.%Y')})" if von == bis
-                            else f" ({von.strftime('%d.%m.')}–{bis.strftime('%d.%m.%Y')})")
-            teile.append(f"{info['stationen']} Stationen{zeitraum}")
+        if erledigt:
+            gesamt = lt.get("total") or 0
+            teile.append(f"{erledigt} von {gesamt} Stationen erledigt" if gesamt
+                         else f"{erledigt} Stationen erledigt")
         for l in (basis, aufbau):
             if not l:
                 continue
             stand = {"bestanden": "bestanden",
-                     "nicht_bestanden": "nicht bestanden"}.get(l.get("status"), "offen")
+                     "nicht_bestanden": "nicht bestanden"}.get(l.get("status"), "geplant")
             pk = l.get("pokale") or 0
             teile.append(f"{l.get('typ')}-LZK {stand}"
                          + (f", {pk} Kleeblaetter" if pk else "")
                          + (f" ({_fmt_kurz(l.get('datum'))})" if l.get("datum") else ""))
 
-        # Status aus den Daten ableiten -- nur beim ANLEGEN gesetzt, siehe unten.
         if aufbau and aufbau.get("status") == "bestanden":
             status = "Abgeschlossen"
-        elif any(l.get("status") == "nicht_bestanden" for l in info["lzk"]):
+        elif any(l.get("status") == "nicht_bestanden" for l in lzks):
             status = "Nicht bestanden"
-        elif info["stationen"] or info["lzk"]:
-            status = "In Bearbeitung"
         else:
-            status = "Ausstehend"
+            status = "In Bearbeitung"
+
+        # Halbjahr aus dem juengsten LZK-Datum, sonst das laufende Halbjahr.
+        daten = [_to_date(l.get("datum")) for l in lzks if l.get("datum")]
+        halbjahr = halbjahr_fuer_datum(max(d for d in daten if d)) if any(daten) else aktuelles_hj
 
         zeilen.append({
-            "name": name,
+            "name": lt.get("title") or key,
+            "halbjahr": halbjahr,
             "lzk_datum_1": _to_date(basis.get("datum")) if basis else None,
             "lzk_datum_2": _to_date(aufbau.get("datum")) if aufbau else None,
             "status": status,
-            "bemerkung": " · ".join(teile) if teile else "bearbeitet",
+            "bemerkung": " · ".join(teile),
         })
-    zeilen.sort(key=lambda z: z["name"])
+    zeilen.sort(key=lambda z: (z["halbjahr"], z["name"]))
     return zeilen
 
 
@@ -200,17 +213,17 @@ def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
     return ", ".join(teile)
 
 
-def lt_zeilen_aktualisieren(student, by_halbjahr: dict, titel_je_key: dict,
-                            stand: str = ""):
-    """Traegt die App-Ergebnisse als Bausteinzeilen ein: je Halbjahr eine Zeile
-    pro bearbeiteter Lerntheke sowie eine fuer Talks/Input.
+def lt_zeilen_aktualisieren(student, by_halbjahr: dict, progress: dict,
+                            lzk_liste, lerntheken, stand: str = ""):
+    """Traegt die App-Ergebnisse als Bausteinzeilen ein.
+
+    Je bearbeiteter Lerntheke eine Zeile (Gesamtstand + LZK) und je Halbjahr
+    eine fuer Talks/Input.
 
     Angefasst werden ausschliesslich Zeilen mit LT_MARKER in der Bemerkung.
     Von Hand gepflegte Bausteine bleiben unberuehrt -- auch namensgleiche.
-
-    Beim Aktualisieren werden Status und die Noten-Felder NICHT ueberschrieben:
-    Noten traegt die Lernbegleitung ein, und einen von Hand angepassten Status
-    soll ein Abruf nicht wieder zurueckdrehen.
+    Noten und ein manuell geaenderter Status werden nie ueberschrieben: Noten
+    traegt die Lernbegleitung ein, die App kennt keine.
     """
     neu = aktualisiert = 0
 
@@ -233,12 +246,13 @@ def lt_zeilen_aktualisieren(student, by_halbjahr: dict, titel_je_key: dict,
                 lzk_datum_1=lzk1, lzk_datum_2=lzk2, bemerkung=text))
             neu += 1
 
-    for hj in sorted(by_halbjahr.keys()):
-        bucket = by_halbjahr[hj] or {}
-        for z in lt_lerntheke_zeilen(bucket, titel_je_key):
-            _setze(z["name"], hj, z["bemerkung"], z["status"],
-                   z["lzk_datum_1"], z["lzk_datum_2"])
-        talk = lt_talk_zeile(bucket)
+    aktuelles_hj = halbjahr_fuer_datum()
+    for z in lt_lerntheke_zeilen(progress, lzk_liste, lerntheken, aktuelles_hj):
+        _setze(z["name"], z["halbjahr"], z["bemerkung"], z["status"],
+               z["lzk_datum_1"], z["lzk_datum_2"])
+
+    for hj in sorted((by_halbjahr or {}).keys()):
+        talk = lt_talk_zeile(by_halbjahr[hj] or {})
         if talk:
             _setze(f"{LT_TALK_NAME} {hj}", hj, talk, "Sonstiges")
 
