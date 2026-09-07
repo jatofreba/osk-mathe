@@ -78,6 +78,40 @@ Danach reicht ein Doppelklick auf diese Datei.
   Download, kein Umbenennen nötig. **Speichern unter…** für eine Kopie oder
   den allerersten Speichervorgang.
 
+## Verbindung zur Lerntheken-App (Menü „Lerntheken-App")
+
+Jede Person hat im Kopfbereich ein Feld **Lerntheken-Alias** -- ihren
+Benutzernamen in der Lerntheken-App (im Namen-Blatt Spalte C). Er ist die
+Verbindung zwischen beiden Systemen und wird gepflegt, nicht jedes Mal neu
+geraten: aus `Anton Berger` und `Anna Bergmann` würde beide Male `an.be`, und
+Namen ändern sich.
+
+- **Bearbeiten → Fehlende Lerntheken-Aliasse ergänzen…** füllt leere Felder mit
+  dem Vorschlag „2 Buchstaben Vorname . 2 Buchstaben Nachname" (`an.be`;
+  Umlaute werden umgeschrieben, `Jürgen Müller` → `ju.mu`). Schon gefüllte
+  Felder bleiben. Wenn zwei Personen denselben Vorschlag ergäben, wird das
+  **gemeldet und nicht vergeben** -- sonst hätten beide denselben Zugang.
+- **Lerntheken-App → Einstellungen…**: Adresse der App und Admin-Benutzername.
+  Das Passwort wird nicht gespeichert, sondern bei jeder Aktion abgefragt.
+- **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Input, Kleeblätter,
+  Stationen und LZK und schreibt sie als Blatt **„App-Daten"** in die geöffnete
+  Mappe -- eine Zeile je Person und Halbjahr, je Fach eigene Spalten. Danach
+  noch speichern.
+- **Lerntheken-App → Konten anlegen…**: legt Zugänge für alle Personen an, die
+  einen Alias haben, aber noch kein Konto. Mit Vorschau und Rückfrage;
+  bestehende Konten werden nicht angefasst.
+- **Lerntheken-App → Aliasse exportieren…**: Textdatei `alias,passwort` zum
+  Einfügen im Bulk-Dialog der Weboberfläche.
+
+Ein Admin-Konto sieht immer **genau seine Lerngruppe**, und neue Konten
+entstehen dort. Für eine andere Lerngruppe in den Einstellungen das passende
+Admin-Konto eintragen.
+
+Alle neu angelegten Konten bekommen dasselbe Start-Passwort. Wähle eins, das
+nur dafür gilt, und lass es die Schüler:innen beim ersten Login ändern.
+
+Blätter, deren Name mit `App-` beginnt, werden beim Speichern nicht angetastet.
+
 ## Speichern und automatische Sicherung
 
 - **Beim Öffnen** fragt die App einmal, unter welchem Namen deine Änderungen
