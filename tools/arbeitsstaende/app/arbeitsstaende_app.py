@@ -825,13 +825,13 @@ class App(tk.Tk):
         automatisch aufgeloest, sondern gemeldet -- sonst bekaemen zwei Personen
         stillschweigend denselben Zugang.
         """
-        if not self.daten.students:
+        if not self.az.students:
             messagebox.showinfo("Aliasse", "Keine Personen vorhanden.")
             return
 
-        vergeben = {s.alias.strip().lower() for s in self.daten.students if s.alias.strip()}
+        vergeben = {s.alias.strip().lower() for s in self.az.students if s.alias.strip()}
         ergaenzt, konflikte = [], []
-        for s in self.daten.students:
+        for s in self.az.students:
             if s.alias.strip():
                 continue
             vorschlag = alias_vorschlag(s.vorname, s.nachname)
@@ -864,8 +864,8 @@ class App(tk.Tk):
         """Schreibt die Liste fuer den Bulk-Import der Lerntheken-App:
         eine Zeile je Person, "alias,passwort".
         """
-        ohne = [s for s in self.daten.students if not s.alias.strip()]
-        mit = [s for s in self.daten.students if s.alias.strip()]
+        ohne = [s for s in self.az.students if not s.alias.strip()]
+        mit = [s for s in self.az.students if s.alias.strip()]
         if not mit:
             messagebox.showwarning(
                 "Aliasse exportieren",
@@ -968,13 +968,13 @@ class App(tk.Tk):
     def _lt_paare(self):
         """(vorname, nachname, alias) aller Personen mit gepflegtem Alias."""
         return [(s.vorname, s.nachname, s.alias.strip().lower())
-                for s in self.daten.students if s.alias.strip()]
+                for s in self.az.students if s.alias.strip()]
 
     def app_ergebnisse_abrufen(self):
         """Holt die Auswertung aus der Lerntheken-App und legt sie als Blatt
         'App-Daten' in die geöffnete Datei.
         """
-        if not self.daten.students:
+        if not self.az.students:
             messagebox.showinfo("Ergebnisse abrufen", "Keine Personen vorhanden.")
             return
         paare = self._lt_paare()
@@ -984,7 +984,7 @@ class App(tk.Tk):
                 "Keine Lerntheken-Aliasse gepflegt.\n\nZuerst 'Bearbeiten -> "
                 "Fehlende Lerntheken-Aliasse ergänzen…' benutzen.")
             return
-        if self.daten._wb is None:
+        if self.az._wb is None:
             messagebox.showwarning(
                 "Ergebnisse abrufen",
                 "Bitte die Datei zuerst speichern -- die Ergebnisse werden als "
@@ -1019,7 +1019,7 @@ class App(tk.Tk):
                 "Stimmen die Aliasse mit den Benutzernamen in der App überein?")
             return
 
-        zeilen = osk_sync.schreibe_app_daten(self.daten._wb, treffer, daten)
+        zeilen = osk_sync.schreibe_app_daten(self.az._wb, treffer, daten)
         self._markiere_ungespeichert()
         text = (f"{zeilen} Zeilen im Blatt 'App-Daten' aktualisiert "
                 f"(Lerngruppe {klasse}).\n\nNoch speichern nicht vergessen.")

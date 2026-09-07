@@ -111,6 +111,49 @@ Die Anwendung löscht beim Speichern grundsätzlich Blätter, die sie nicht kenn
 Blätter, die mit **`App-`** beginnen, sind davon ausgenommen — „App-Daten" und
 „App-Zuordnung" überstehen also ein Speichern aus der Anwendung.
 
+## Abgleich mit OneDrive
+
+Gestartet wird die Anwendung aus dem OneDrive-Ordner:
+
+```
+C:\Users\jbath\OneDrive - OSK Offene Schule Köln gGmbH\Unterricht\MatheM3M4\Organisation
+```
+
+`sync_to_onedrive.sh` kopiert die Anwendung aus dem Repo dorthin. Das passiert
+**automatisch nach jedem Commit, Merge und Branch-Wechsel** über Git-Hooks.
+Von Hand geht es auch:
+
+```
+sh tools/arbeitsstaende/sync_to_onedrive.sh
+```
+
+Es wird nur **kopiert, nie gespiegelt**: Dateien, die es nur in OneDrive gibt --
+etwa `osk_einstellungen.json` mit Adresse und Admin-Benutzername oder
+`__pycache__` --, bleiben unangetastet. Unveränderte Dateien werden nicht
+angefasst, damit OneDrive nicht unnötig synchronisiert.
+
+`osk_sync.py` gehört zwingend dazu: `arbeitsstaende_app.py` importiert sie beim
+Start, ohne sie startet die Anwendung nicht.
+
+**Hooks auf einem anderen Rechner einrichten** (sie liegen in `.git/hooks` und
+sind deshalb nicht im Repository):
+
+```sh
+for h in post-commit post-merge post-checkout; do
+  cat > ".git/hooks/$h" <<'HOOK'
+#!/bin/sh
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -f "$ROOT/tools/arbeitsstaende/sync_to_onedrive.sh" ] || exit 0
+sh "$ROOT/tools/arbeitsstaende/sync_to_onedrive.sh" || true
+HOOK
+  chmod +x ".git/hooks/$h"
+done
+```
+
+Anderer Zielordner? Über die Umgebungsvariable `OSK_APP_ZIEL`. Fehlt der Ordner
+ganz (anderer Rechner, kein OneDrive), läuft das Skript still durch, damit
+Commits nicht daran scheitern.
+
 ## Datenschutz
 
 Es werden personenbezogene Schülerdaten verarbeitet. Die Anwendung spricht
