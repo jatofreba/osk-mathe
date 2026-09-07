@@ -973,11 +973,18 @@ class App(tk.Tk):
         """Meldet sich an der Lerntheken-App an. Gibt (client, klasse) oder None."""
         cfg = self._lt_einstellungen_laden()
         if not cfg.get("base_url") or not cfg.get("username"):
-            messagebox.showwarning(
-                "Lerntheken-App",
-                "Zuerst unter 'Lerntheken-App -> Einstellungen…' die Adresse "
-                "und den Admin-Benutzernamen eintragen.")
-            return None
+            # Nicht in ein anderes Menue verweisen, sondern gleich hier anbieten --
+            # sonst muss man die Aktion abbrechen, woanders etwas eintragen und
+            # von vorn anfangen.
+            if not messagebox.askyesno(
+                    "Lerntheken-App",
+                    "Die Zugangsdaten für die Lerntheken-App fehlen noch.\n\n"
+                    "Jetzt eintragen?"):
+                return None
+            self.app_einstellungen()
+            cfg = self._lt_einstellungen_laden()
+            if not cfg.get("base_url") or not cfg.get("username"):
+                return None
         passwort = simpledialog.askstring(
             "Anmeldung",
             f"Passwort für '{cfg['username']}':", show="*", parent=self)
