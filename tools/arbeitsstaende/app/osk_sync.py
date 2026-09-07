@@ -126,6 +126,22 @@ class AppClient:
     def halbjahr_uebersicht(self) -> dict:
         return self._get("/api/admin/halbjahr-uebersicht")
 
+    def lerntheken_titel(self) -> Dict[str, str]:
+        """{Fortschritts-Key: Titel}, z.B. {"lerntheke_kreise_v11": "Kreise und Zylinder"}.
+
+        LZK-Eintraege und Stations-Ereignisse referenzieren die Lerntheke ueber
+        diesen Key; fuer lesbare Bausteinnamen braucht es die Zuordnung zum Titel.
+        """
+        try:
+            meta = self._get("/api/lerntheken-meta")
+        except Exception:
+            return {}
+        titel = {}
+        for lt in meta or []:
+            if lt.get("key"):
+                titel[lt["key"]] = lt.get("title") or lt["key"]
+        return titel
+
 
 # ══ Daten aus der App aufbereiten ═════════════════════════════════════════════
 

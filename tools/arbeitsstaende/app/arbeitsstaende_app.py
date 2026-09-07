@@ -394,12 +394,15 @@ class App(tk.Tk):
 
         self.liste = ttk.Treeview(links, columns=("jahrgang", "deadline", "baustein", "kursung", "fb"),
                                    show="tree headings", height=20)
-        self.liste.heading("#0", text="Name")
-        self.liste.heading("jahrgang", text="Jgst.")
-        self.liste.heading("deadline", text="Deadline")
-        self.liste.heading("baustein", text="Baustein")
-        self.liste.heading("kursung", text="Kurs")
-        self.liste.heading("fb", text="FB zuletzt")
+        # Klick auf einen Spaltenkopf sortiert die Liste danach, erneuter Klick
+        # kehrt die Richtung um. Standard bleibt Jahrgangsstufe + Nachname.
+        self._liste_sortierung = None       # None = Standardsortierung
+        self._liste_umgekehrt = False
+        for spalte, titel in (("#0", "Name"), ("jahrgang", "Jgst."),
+                              ("deadline", "Deadline"), ("baustein", "Baustein"),
+                              ("kursung", "Kurs"), ("fb", "FB zuletzt")):
+            self.liste.heading(spalte, text=titel,
+                               command=lambda sp=spalte: self._liste_sortieren(sp))
         self.liste.column("#0", width=125)
         self.liste.column("jahrgang", width=40, anchor="center")
         self.liste.column("deadline", width=95, anchor="center")
@@ -463,14 +466,18 @@ class App(tk.Tk):
 
         spalten = ("status", "bausteinarbeit", "lzk1", "note1", "lzk2", "note2", "halbjahr", "bemerkung")
         self.tabelle = ttk.Treeview(baustein_rahmen, columns=spalten, show="tree headings", height=12)
-        self.tabelle.heading("#0", text="Baustein")
+        self.tabelle.heading("#0", text="Baustein",
+                             command=lambda: self._bausteine_sortieren("#0"))
+        self._bausteine_sortierung = None      # None = Reihenfolge wie in der Datei
+        self._bausteine_umgekehrt = False
         for key, text, width in [
             ("status", "Status", 110), ("bausteinarbeit", "Bausteinarbeit", 140),
             ("lzk1", "LZK 1", 90), ("note1", "Note", 55),
             ("lzk2", "LZK 2", 90), ("note2", "Note", 55),
             ("halbjahr", "HJ", 65), ("bemerkung", "Bemerkung", 260),
         ]:
-            self.tabelle.heading(key, text=text)
+            self.tabelle.heading(key, text=text,
+                                 command=lambda sp=key: self._bausteine_sortieren(sp))
             self.tabelle.column(key, width=width)
         self.tabelle.column("#0", width=170)
         self.tabelle.pack(fill="both", expand=True)
@@ -478,6 +485,9 @@ class App(tk.Tk):
 
         for status, farbe in STATUS_FARBEN.items():
             self.tabelle.tag_configure(status, background=f"#{farbe}")
+        # Der gerade bearbeitete Baustein (naechster LZK-Termin bzw. offene Frist)
+        # wird zusaetzlich hervorgehoben -- er ist beim Gespraech der Einstieg.
+        self.tabelle.tag_configure("aktuell", font=("", 10, "bold"))
 
         baustein_btns = ttk.Frame(baustein_rahmen)
         baustein_btns.pack(fill="x", pady=(6, 0))
@@ -650,12 +660,54 @@ class App(tk.Tk):
             return "🟡"
         return "🔴"
 
+    def _liste_sortieren(self, spalte):
+        """Spaltenkopf angeklickt: danach sortieren, bei erneutem Klick umkehren.
+        Ein dritter Klick stellt die Standardsortierung wieder her."""
+        if self._liste_sortierung != spalte:
+            self._liste_sortierung, self._liste_umgekehrt = spalte, False
+        elif not self._liste_umgekehrt:
+            self._liste_umgekehrt = True
+        else:
+            self._liste_sortierung, self._liste_umgekehrt = None, False
+        self._liste_aktualisieren()
+
+    def _spalten_key(self, student: Student, spalte):
+        """Sortierschluessel je Spalte. Leere Werte kommen ans Ende, damit eine
+        fehlende Angabe die Reihenfolge nicht zufaellig durcheinanderbringt."""
+        heute = date.today()
+        if spalte == "#0":
+            return (0, student.nachname.lower(), student.vorname.lower())
+        if spalte == "jahrgang":
+            return (0, student.jahrgangsstufe) if student.jahrgangsstufe is not None else (1, 0)
+        if spalte == "kursung":
+            return (0, student.kursung) if student.kursung else (1, "")
+        if spalte == "fb":
+            letzter = student.fb_besuche[-1] if student.fb_besuche else None
+            return (0, letzter) if letzter else (1, date.min)
+        if spalte == "baustein":
+            baustein, _ = self.az.berechne_status(student)
+            return (0, str(baustein).lower()) if baustein else (1, "")
+        if spalte == "deadline":
+            _, deadline = self.az.berechne_status(student)
+            if isinstance(deadline, date):
+                return (0, deadline)
+            if deadline == "Frist vereinbaren!":
+                return (1, heute)      # direkt hinter den echten Terminen
+            return (2, date.min)
+        return (0, student.nachname.lower())
+
     def _liste_aktualisieren(self):
         markierung = self.liste.selection()
         self.liste.delete(*self.liste.get_children())
         suche = self.suche_var.get().strip().lower()
         heute = date.today()
-        for s in sorted(self.az.students, key=self._sortier_key):
+        if self._liste_sortierung:
+            personen = sorted(self.az.students,
+                              key=lambda st: self._spalten_key(st, self._liste_sortierung),
+                              reverse=self._liste_umgekehrt)
+        else:
+            personen = sorted(self.az.students, key=self._sortier_key)
+        for s in personen:
             if suche and suche not in s.voller_name.lower():
                 continue
             baustein, deadline = self.az.berechne_status(s)
@@ -791,13 +843,59 @@ class App(tk.Tk):
         self._laden_sperre = False
 
         self.tabelle.delete(*self.tabelle.get_children())
-        for i, b in enumerate(s.bausteine):
+        aktueller, _ = self.az.berechne_status(s)
+
+        # Anzeige-Reihenfolge; die iid bleibt der echte Listenindex, damit
+        # Bearbeiten und Entfernen weiterhin die richtige Zeile treffen.
+        eintraege = list(enumerate(s.bausteine))
+        if self._bausteine_sortierung:
+            eintraege.sort(key=lambda p: self._baustein_key(p[1], self._bausteine_sortierung),
+                           reverse=self._bausteine_umgekehrt)
+
+        for i, b in eintraege:
+            tags = []
+            if aktueller and b.name == aktueller:
+                tags.append("aktuell")
+            if b.status in STATUS_FARBEN:
+                tags.append(b.status)
             self.tabelle.insert("", "end", iid=str(i), text=b.name,
                                  values=(b.status, b.bausteinarbeit,
                                          fmt_datum(b.lzk_datum_1), b.lzk_note_1,
                                          fmt_datum(b.lzk_datum_2), b.lzk_note_2,
                                          b.halbjahr, b.bemerkung),
-                                 tags=(b.status,) if b.status in STATUS_FARBEN else ())
+                                 tags=tuple(tags))
+
+    def _baustein_key(self, b: Baustein, spalte):
+        """Sortierschluessel je Spalte. Leere Werte ans Ende."""
+        def txt(wert):
+            wert = (wert or "").strip().lower()
+            return (0, wert) if wert else (1, "")
+        if spalte == "#0":
+            return txt(b.name)
+        if spalte == "status":
+            return txt(b.status)
+        if spalte == "bausteinarbeit":
+            return txt(b.bausteinarbeit)
+        if spalte == "halbjahr":
+            return txt(b.halbjahr)
+        if spalte == "bemerkung":
+            return txt(b.bemerkung)
+        if spalte in ("note1", "note2"):
+            return txt(b.lzk_note_1 if spalte == "note1" else b.lzk_note_2)
+        if spalte in ("lzk1", "lzk2"):
+            d = b.lzk_datum_1 if spalte == "lzk1" else b.lzk_datum_2
+            return (0, d) if d else (1, date.min)
+        return txt(b.name)
+
+    def _bausteine_sortieren(self, spalte):
+        """Spaltenkopf angeklickt: sortieren, umkehren, zurueck zur Dateireihenfolge."""
+        if self._bausteine_sortierung != spalte:
+            self._bausteine_sortierung, self._bausteine_umgekehrt = spalte, False
+        elif not self._bausteine_umgekehrt:
+            self._bausteine_umgekehrt = True
+        else:
+            self._bausteine_sortierung, self._bausteine_umgekehrt = None, False
+        self._detail_anzeigen()
 
     def _kopf_uebernehmen(self):
         if getattr(self, "_laden_sperre", False) or not self.aktueller_schueler:
@@ -1060,9 +1158,10 @@ class App(tk.Tk):
 
         zeilen = osk_sync.schreibe_app_daten(self.az._wb, treffer, daten)
 
-        # Zusaetzlich je Person und Halbjahr EINE Zeile in der Bausteinliste,
-        # damit die Zahlen auch beim Blick auf eine einzelne Person auftauchen.
-        # Wiederholte Abrufe ueberschreiben diese Zeilen, statt sie zu haeufen.
+        # Je Halbjahr eine Zeile pro bearbeiteter Lerntheke (mit LZK-Terminen und
+        # Bearbeitungszeitraum) sowie eine fuer Talks/Input. Wiederholte Abrufe
+        # frischen diese Zeilen auf, statt sie zu haeufen.
+        titel = client.lerntheken_titel()
         stand = datetime.now().strftime("%d.%m.%Y")
         nach_alias = {st.alias.strip().lower(): st
                       for st in self.az.students if st.alias.strip()}
@@ -1072,7 +1171,7 @@ class App(tk.Tk):
             if not student:
                 continue
             n, a = lt_zeilen_aktualisieren(
-                student, daten.nach_account[alias]["byHalbjahr"], daten.faecher, stand)
+                student, daten.nach_account[alias]["byHalbjahr"], titel, stand)
             neu += n
             akt += a
         self._detail_anzeigen()
