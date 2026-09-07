@@ -14,15 +14,15 @@ Der Zugriff läuft über einen ganz normalen Admin-Login der App (HTTPS), nicht
 über die Datenbank. Ein Admin-Konto sieht immer genau SEINE Lerngruppe -- für
 mehrere Lerngruppen entsprechend mehrere Konten in der Konfiguration angeben.
 
-Umgekehrt lassen sich aus der Excel-Liste die Konten fuer den Bulk-Import
-erzeugen (--bulk-liste) oder direkt anlegen (--bulk-anlegen).
+Umgekehrt laesst sich aus der Excel-Liste die Kontenliste fuer den Bulk-Import
+erzeugen (--bulk-liste). Angelegt werden die Konten in der Weboberflaeche:
+dieses Werkzeug schreibt BEWUSST nie auf dem Server, es liest nur.
 
 Aufruf:
     python3 osk_sync.py                      # nutzt osk_sync_config.json
     python3 osk_sync.py --config andere.json
     python3 osk_sync.py --dry-run            # nichts schreiben, nur berichten
     python3 osk_sync.py --bulk-liste         # Konten-Liste zum Einfuegen erzeugen
-    python3 osk_sync.py --bulk-anlegen       # Konten direkt ueber die App anlegen
 
 Abhängigkeiten: openpyxl (wie die Arbeitsstände-App selbst). Der Rest ist
 Python-Standardbibliothek.
@@ -125,14 +125,6 @@ class AppClient:
 
     def halbjahr_uebersicht(self) -> dict:
         return self._get("/api/admin/halbjahr-uebersicht")
-
-    def bulk_create(self, konten: List[dict]) -> dict:
-        """Legt Schüler:innen-Konten an. Die App setzt dabei immer die Lerngruppe
-        DES ANGEMELDETEN Admin-Kontos und die Rolle 'student'. Bereits
-        vorhandene Benutzernamen werden serverseitig still übersprungen und
-        tauchen in der Antwort nur als 'skipped' auf.
-        """
-        return self._post("/api/admin/bulk-create", {"students": konten})
 
 
 # ══ Daten aus der App aufbereiten ═════════════════════════════════════════════
@@ -436,13 +428,8 @@ def main(argv=None):
     p.add_argument("--bulk-liste", nargs="?", const="bulk_konten.txt", metavar="DATEI",
                    help="Konten für fehlende Personen als Textdatei ausgeben "
                         "(Format des Bulk-Dialogs: benutzername,passwort)")
-    p.add_argument("--bulk-anlegen", action="store_true",
-                   help="diese Konten direkt über die App anlegen (schreibt auf dem Server!)")
     p.add_argument("--passwort", metavar="PW",
                    help="Start-Passwort für die neuen Konten (sonst Abfrage)")
-    p.add_argument("--lerngruppe", metavar="LG",
-                   help="in welche Lerngruppe angelegt wird, wenn mehrere Admin-Konten "
-                        "konfiguriert sind")
     args = p.parse_args(argv)
 
     config = lade_config(args.config)
@@ -486,8 +473,11 @@ def main(argv=None):
         for acc in unbenutzt:
             print(f"  {acc} (Lerngruppe {daten.nach_account[acc]['klasse']})")
 
-    # ── Konten anlegen (Excel -> App) ────────────────────────────────────────
-    if args.bulk_liste or args.bulk_anlegen:
+    # ── Kontenliste erzeugen (Excel -> Datei) ────────────────────────────────
+    # Dieses Werkzeug schreibt BEWUSST nicht auf dem Server. Es erzeugt nur die
+    # Liste; angelegt werden die Konten in der Weboberflaeche unter
+    # "Mehrere anlegen" - dort sieht man vor dem Absenden nochmal, was passiert.
+    if args.bulk_liste:
         passwort = args.passwort
         if not passwort:
             passwort = getpass.getpass("Start-Passwort für die neuen Konten: ")
@@ -504,38 +494,11 @@ def main(argv=None):
 
         if not konten:
             print("Nichts anzulegen -- alle Personen haben bereits ein Konto.")
-        elif args.bulk_liste:
+        else:
             schreibe_bulk_datei(konten, args.bulk_liste)
             print()
             print(f"Liste geschrieben: {args.bulk_liste}")
-            print("Inhalt in der App unter 'Mehrere anlegen' einfügen -- oder "
-                  "stattdessen --bulk-anlegen nutzen.")
-        elif args.bulk_anlegen:
-            # Die App legt immer in die Lerngruppe des angemeldeten Kontos an,
-            # deshalb muss bei mehreren Konten klar sein, welche gemeint ist.
-            if args.lerngruppe:
-                if args.lerngruppe not in sitzungen:
-                    raise SystemExit(f"Keine Anmeldung für Lerngruppe '{args.lerngruppe}'. "
-                                     f"Verfügbar: {', '.join(sorted(sitzungen))}")
-                ziel = args.lerngruppe
-            elif len(sitzungen) == 1:
-                ziel = next(iter(sitzungen))
-            else:
-                raise SystemExit("Mehrere Lerngruppen angemeldet -- bitte mit "
-                                 f"--lerngruppe angeben ({', '.join(sorted(sitzungen))}).")
-
-            print()
-            antwort = input(f"{len(konten)} Konten in Lerngruppe {ziel} anlegen? [j/N] ")
-            if antwort.strip().lower() not in ("j", "ja"):
-                print("Abgebrochen -- nichts angelegt.")
-                return 0
-            ergebnis = sitzungen[ziel].bulk_create(
-                [{"username": k["username"], "password": k["password"]} for k in konten])
-            print(f"Angelegt: {ergebnis.get('created', 0)}, "
-                  f"übersprungen: {ergebnis.get('skipped', 0)} "
-                  f"(bereits vorhanden oder ungültig)")
-            print("Hinweis: alle neuen Konten haben dasselbe Start-Passwort. "
-                  "Lass es die Schüler:innen beim ersten Login ändern.")
+            print("Inhalt in der App unter 'Mehrere anlegen' einfügen.")
         return 0
 
     if args.dry_run:

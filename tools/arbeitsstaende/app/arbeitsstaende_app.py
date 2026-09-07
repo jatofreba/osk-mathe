@@ -19,7 +19,7 @@ from arbeitsstaende_data import (
     halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
-# Zugriff auf die Lerntheken-App (Anmeldung, Auswertung, Konten anlegen).
+# Zugriff auf die Lerntheken-App (Anmeldung und Auswertung -- NUR lesend).
 # Liegt bewusst im selben Ordner, damit die Anwendung ohne Installation läuft.
 import osk_sync
 
@@ -359,7 +359,6 @@ class App(tk.Tk):
 
         lerntheke_menu = tk.Menu(menu, tearoff=0)
         lerntheke_menu.add_command(label="Ergebnisse abrufen…", command=self.app_ergebnisse_abrufen)
-        lerntheke_menu.add_command(label="Konten anlegen…", command=self.app_konten_anlegen)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
         lerntheke_menu.add_separator()
@@ -861,10 +860,40 @@ class App(tk.Tk):
             text += "\n\nBitte von Hand eintragen:\n" + "\n".join(konflikte)
         messagebox.showinfo("Aliasse ergaenzen", text)
 
+    def _alias_dubletten(self):
+        """{alias: [Namen]} fuer Aliasse, die mehr als einmal vergeben sind.
+
+        Von Hand eingetragene Aliasse werden nirgends gegen die anderen
+        geprueft; ohne diese Kontrolle bekaeme beim Abruf nur eine der beiden
+        Personen ihre Zahlen -- und zwar stillschweigend.
+        """
+        nach_alias = {}
+        for s in self.az.students:
+            a = s.alias.strip().lower()
+            if a:
+                nach_alias.setdefault(a, []).append(s.voller_name)
+        return {a: n for a, n in nach_alias.items() if len(n) > 1}
+
+    def _dubletten_melden(self, titel) -> bool:
+        """Meldet doppelte Aliasse. True = es gibt welche, Aktion abbrechen."""
+        dubletten = self._alias_dubletten()
+        if not dubletten:
+            return False
+        text = "\n".join(f"{a}: " + ", ".join(namen)
+                         for a, namen in sorted(dubletten.items()))
+        messagebox.showerror(
+            titel,
+            "Derselbe Lerntheken-Alias ist mehrfach vergeben:\n\n" + text +
+            "\n\nBitte zuerst eindeutig machen -- sonst bekaeme nur eine der "
+            "Personen ihre Ergebnisse.")
+        return True
+
     def aliasse_exportieren(self):
         """Schreibt die Liste fuer den Bulk-Import der Lerntheken-App:
         eine Zeile je Person, "alias,passwort".
         """
+        if self._dubletten_melden("Aliasse exportieren"):
+            return
         ohne = [s for s in self.az.students if not s.alias.strip()]
         mit = [s for s in self.az.students if s.alias.strip()]
         if not mit:
@@ -910,7 +939,7 @@ class App(tk.Tk):
         messagebox.showinfo("Aliasse exportieren", hinweis)
 
     # ------------------------------------------------------------------
-    # Lerntheken-App: Einstellungen, Ergebnisse abrufen, Konten anlegen
+    # Lerntheken-App: Einstellungen, Ergebnisse abrufen (nur lesend)
     # ------------------------------------------------------------------
     def _lt_einstellungen_laden(self) -> dict:
         """Server-Adresse und Admin-Benutzername liegen neben der Anwendung.
@@ -977,6 +1006,8 @@ class App(tk.Tk):
         """
         if not self.az.students:
             messagebox.showinfo("Ergebnisse abrufen", "Keine Personen vorhanden.")
+            return
+        if self._dubletten_melden("Ergebnisse abrufen"):
             return
         paare = self._lt_paare()
         if not paare:
@@ -1050,67 +1081,6 @@ class App(tk.Tk):
             if len(ohne) > 10:
                 text += f"\n... und {len(ohne) - 10} weitere"
         messagebox.showinfo("Ergebnisse abrufen", text)
-
-    def app_konten_anlegen(self):
-        """Legt für alle Personen mit Alias, die in der App noch kein Konto
-        haben, eines an -- in der Lerngruppe des angemeldeten Admin-Kontos.
-        """
-        paare = self._lt_paare()
-        if not paare:
-            messagebox.showwarning(
-                "Konten anlegen",
-                "Keine Lerntheken-Aliasse gepflegt.\n\nZuerst 'Bearbeiten -> "
-                "Fehlende Lerntheken-Aliasse ergänzen…' benutzen.")
-            return
-
-        angemeldet = self._lt_anmelden()
-        if not angemeldet:
-            return
-        client, klasse = angemeldet
-        try:
-            payload = client.halbjahr_uebersicht()
-        except Exception as e:
-            messagebox.showerror("Konten anlegen", f"Abruf fehlgeschlagen:\n{e}")
-            return
-        vorhanden = {(s.get("username") or "").lower()
-                     for s in payload.get("students", [])}
-        fehlend = [(vn, nn, a) for vn, nn, a in paare if a not in vorhanden]
-        if not fehlend:
-            messagebox.showinfo(
-                "Konten anlegen",
-                f"Alle {len(paare)} Personen haben in Lerngruppe {klasse} "
-                f"bereits ein Konto.")
-            return
-
-        passwort = simpledialog.askstring(
-            "Start-Passwort",
-            "Start-Passwort für die neuen Konten (mind. 4 Zeichen).\n\n"
-            "Alle bekommen dasselbe -- lass es die Schüler:innen\n"
-            "beim ersten Login ändern.", parent=self)
-        if passwort is None:
-            return
-        if len(passwort) < 4:
-            messagebox.showerror("Start-Passwort", "Mindestens 4 Zeichen.")
-            return
-
-        vorschau = "\n".join(f"{a}  ({vn} {nn})" for vn, nn, a in fehlend[:12])
-        if len(fehlend) > 12:
-            vorschau += f"\n... und {len(fehlend) - 12} weitere"
-        if not messagebox.askyesno(
-                "Konten anlegen",
-                f"{len(fehlend)} Konten in Lerngruppe {klasse} anlegen?\n\n{vorschau}"):
-            return
-
-        try:
-            ergebnis = client.bulk_create(
-                [{"username": a, "password": passwort} for _, _, a in fehlend])
-        except Exception as e:
-            messagebox.showerror("Konten anlegen", f"Anlegen fehlgeschlagen:\n{e}")
-            return
-        messagebox.showinfo(
-            "Konten anlegen",
-            f"Angelegt: {ergebnis.get('created', 0)}\n"
-            f"Übersprungen: {ergebnis.get('skipped', 0)} (Name bereits vergeben)")
 
     # ------------------------------------------------------------------
     # Baustein-Aktionen
