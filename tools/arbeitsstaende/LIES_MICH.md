@@ -16,7 +16,7 @@ als Kommandozeilen-Skript.
 ```
 app/
   arbeitsstaende_app.py       Anwendung (starten mit: python3 arbeitsstaende_app.py)
-  arbeitsstaende_data.py      Datenschicht (Laden/Speichern der Excel-Datei)
+  arbeitsstaende_data.py      Datenschicht (Arbeitsdatei .json, Excel-Import/-Export)
   osk_sync.py                 Zugriff auf die Lerntheken-App -- auch als CLI nutzbar
   test_arbeitsstaende_data.py Tests der Datenschicht
 ```
@@ -104,6 +104,18 @@ Ohne hinterlegtes Passwort fragt das Skript danach. Die Datei ist gitignored.
 Die Kommandozeilen-Variante ordnet über die Namensregel zu (nicht über die
 Alias-Spalte) und pflegt dafür ein eigenes Blatt „App-Zuordnung". Wenn du in der
 Anwendung arbeitest, ist die Alias-Spalte der verlässlichere Weg.
+
+## Speicherformat
+
+Gearbeitet wird in einer `.json`-Arbeitsdatei. Die bisherige Excel-Mappe wird
+**einmalig** über *Datei → Aus Excel importieren…* eingelesen; beim nächsten
+Start öffnet die Anwendung die Arbeitsdatei von selbst wieder. Fürs
+Ausdrucken oder Weitergeben gibt es *Datei → Als Excel exportieren…*.
+Die Arbeitsdatei ist im Klartext lesbar und von Hand korrigierbar; Details
+und ein Beispiel stehen in `app/LIES_MICH.md`.
+
+Das Kommandozeilen-Werkzeug `osk_sync.py` schreibt seine Zusatzblätter
+weiterhin in eine Excel-Mappe -- es ist der ältere, unabhängige Weg.
 
 ## Zusammenspiel der beiden Wege
 

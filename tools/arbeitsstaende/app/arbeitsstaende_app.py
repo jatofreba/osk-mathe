@@ -16,7 +16,7 @@ from typing import List
 
 from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
-    halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren,
+    halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren, ist_json_pfad,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App (Anmeldung und Auswertung -- NUR lesend).
@@ -358,6 +358,9 @@ class App(tk.Tk):
         dateimenu.add_command(label="Speichern", command=self.speichern, accelerator="Cmd+S")
         dateimenu.add_command(label="Speichern unter…", command=self.speichern_unter)
         dateimenu.add_separator()
+        dateimenu.add_command(label="Aus Excel importieren…", command=self.excel_importieren)
+        dateimenu.add_command(label="Als Excel exportieren…", command=self.excel_exportieren)
+        dateimenu.add_separator()
         dateimenu.add_command(label="Beenden", command=self._beenden)
         menu.add_cascade(label="Datei", menu=dateimenu)
 
@@ -524,9 +527,46 @@ class App(tk.Tk):
         self.status_leiste = ttk.Label(self, text="Keine Datei geladen.", anchor="w", padding=4)
         self.status_leiste.pack(fill="x", side="bottom")
 
+        # Weiterarbeiten, wo zuletzt aufgehoert wurde.
+        self._zuletzt_oeffnen()
+
     # ------------------------------------------------------------------
     # Datei-Aktionen
     # ------------------------------------------------------------------
+    def _arbeitsdatei_merken(self):
+        """Merkt sich, woran gerade gearbeitet wird -- beim naechsten Start
+        wird genau diese Datei wieder geoeffnet. Excel muss also nur ein
+        einziges Mal importiert werden."""
+        if not self.az.dateipfad:
+            return
+        try:
+            self._lt_einstellungen_speichern({"zuletzt_geoeffnet": self.az.dateipfad})
+        except OSError:
+            pass          # Nicht schreiben zu koennen darf die Arbeit nicht stoeren.
+
+    def _zuletzt_oeffnen(self):
+        """Beim Start die zuletzt benutzte Datei wieder laden. Fehlt sie oder
+        laesst sie sich nicht lesen, startet die Anwendung wie bisher leer --
+        ohne Dialog, der den Start blockiert."""
+        pfad = (self._lt_einstellungen_laden() or {}).get("zuletzt_geoeffnet")
+        if not pfad or not os.path.exists(pfad):
+            return
+        try:
+            warnungen = self.az.laden(pfad)
+        except Exception as e:
+            self.status_leiste.config(
+                text=f"⚠ Zuletzt benutzte Datei {os.path.basename(pfad)} "
+                     f"konnte nicht geladen werden: {e}")
+            self.az.dateipfad = None
+            return
+        self._liste_aktualisieren()
+        self._detail_leeren()
+        self.ungespeichert = False
+        self._aktualisiere_titel()
+        hinweis = f" -- {len(warnungen)} Hinweis(e) beim Laden" if warnungen else ""
+        self.status_leiste.config(
+            text=f"Geladen: {pfad} ({len(self.az.students)} Personen){hinweis}")
+
     def _frage_ungespeichert(self) -> bool:
         """True = weitermachen, False = Aktion abbrechen."""
         if not self.ungespeichert:
@@ -557,9 +597,24 @@ class App(tk.Tk):
             return
         pfad = filedialog.askopenfilename(
             title="Arbeitsstände öffnen",
-            filetypes=[("Excel-Dateien", "*.xlsx *.xlsm"), ("Alle Dateien", "*.*")])
-        if not pfad:
+            filetypes=[("Arbeitsstände", "*.json"),
+                       ("Excel-Dateien", "*.xlsx *.xlsm"),
+                       ("Alle Dateien", "*.*")])
+        if pfad:
+            self._datei_laden(pfad)
+
+    def excel_importieren(self):
+        """Bestehende Excel-Mappe einlesen und ab da im eigenen Format
+        weiterarbeiten -- der Weg von der alten Liste in die App."""
+        if not self._frage_ungespeichert():
             return
+        pfad = filedialog.askopenfilename(
+            title="Aus Excel importieren",
+            filetypes=[("Excel-Dateien", "*.xlsx *.xlsm"), ("Alle Dateien", "*.*")])
+        if pfad:
+            self._datei_laden(pfad)
+
+    def _datei_laden(self, pfad: str):
         try:
             warnungen = self.az.laden(pfad)
         except Exception as e:
@@ -572,23 +627,33 @@ class App(tk.Tk):
         self._liste_aktualisieren()
         self._detail_leeren()
 
-        # Die geöffnete Datei bleibt unangetastet -- hier einmalig festlegen,
-        # wohin Änderungen (manuell und automatisch alle 5 Minuten)
-        # gespeichert werden. Vorschlag: dieselbe Datei, falls schon .xlsx;
-        # bei .xlsm dieselbe Datei mit .xlsx-Endung (ohne Makros).
-        basis, ext = os.path.splitext(pfad)
-        vorschlag = pfad if ext.lower() == ".xlsx" else basis + ".xlsx"
+        if ist_json_pfad(pfad):
+            # Eigenes Format: es wird direkt in dieser Datei weitergearbeitet.
+            self.ungespeichert = False
+            self._arbeitsdatei_merken()
+            self.status_leiste.config(text=f"Geladen: {pfad}")
+            self._aktualisiere_titel()
+            return
+
+        # Aus Excel importiert: die Ausgangsdatei bleibt unangetastet, ab jetzt
+        # wird im eigenen Format gearbeitet (verlustfrei und nachbearbeitbar).
+        # Excel ist über "Als Excel exportieren…" jederzeit wieder erreichbar.
+        basis, _ = os.path.splitext(pfad)
+        vorschlag = basis + ".json"
         ziel = filedialog.asksaveasfilename(
-            title="Änderungen speichern unter (auch für die automatische Sicherung alle 5 Min.)",
+            title="Arbeitsdatei anlegen (auch für die automatische Sicherung alle 5 Min.)",
             initialdir=os.path.dirname(vorschlag), initialfile=os.path.basename(vorschlag),
-            defaultextension=".xlsx", filetypes=[("Excel-Datei", "*.xlsx")])
+            defaultextension=".json",
+            filetypes=[("Arbeitsstände", "*.json"), ("Excel-Datei", "*.xlsx")])
 
         if ziel:
             self.az.dateipfad = ziel
             try:
                 self.az.speichern(ziel)
                 self.ungespeichert = False
-                self.status_leiste.config(text=f"Geladen aus {pfad} -- Änderungen gehen an {ziel}")
+                self._arbeitsdatei_merken()
+                self.status_leiste.config(
+                    text=f"Aus {os.path.basename(pfad)} übernommen -- Änderungen gehen an {ziel}")
             except Exception as e:
                 messagebox.showerror("Fehler beim Speichern", str(e))
                 self.ungespeichert = True
@@ -596,7 +661,7 @@ class App(tk.Tk):
             self.az.dateipfad = None
             self.ungespeichert = False
             self.status_leiste.config(
-                text=f"Geladen aus {pfad} -- noch keine Zieldatei gewählt, "
+                text=f"Geladen aus {pfad} -- noch keine Arbeitsdatei gewählt, "
                      f"'Speichern' fragt beim nächsten Mal danach.")
         self._aktualisiere_titel()
 
@@ -616,8 +681,8 @@ class App(tk.Tk):
     def speichern_unter(self) -> bool:
         pfad = filedialog.asksaveasfilename(
             title="Speichern unter",
-            defaultextension=".xlsx",
-            filetypes=[("Excel-Datei", "*.xlsx")])
+            defaultextension=".json",
+            filetypes=[("Arbeitsstände", "*.json"), ("Excel-Datei", "*.xlsx")])
         if not pfad:
             return False
         try:
@@ -626,9 +691,36 @@ class App(tk.Tk):
             messagebox.showerror("Fehler beim Speichern", str(e))
             return False
         self.ungespeichert = False
+        self._arbeitsdatei_merken()
         self._aktualisiere_titel()
         self.status_leiste.config(text=f"Gespeichert: {pfad}")
         return True
+
+    def excel_exportieren(self):
+        """Aktuellen Stand als Excel-Mappe herausschreiben -- zum Ausdrucken
+        oder Weitergeben. Die Arbeitsdatei bleibt davon unberührt."""
+        if not self.az.students:
+            messagebox.showinfo("Nichts zu exportieren", "Es sind keine Personen geladen.")
+            return
+        basis = os.path.splitext(self.az.dateipfad or "Arbeitsstaende")[0]
+        pfad = filedialog.asksaveasfilename(
+            title="Als Excel exportieren",
+            initialdir=os.path.dirname(basis) or None,
+            initialfile=os.path.basename(basis) + ".xlsx",
+            defaultextension=".xlsx", filetypes=[("Excel-Datei", "*.xlsx")])
+        if not pfad:
+            return
+        arbeitsdatei = self.az.dateipfad
+        try:
+            self.az.speichern_excel(pfad)
+        except Exception as e:
+            messagebox.showerror("Fehler beim Export", str(e))
+            return
+        finally:
+            # speichern_excel() merkt sich den Zielpfad -- der Export darf die
+            # Arbeitsdatei aber nicht umhängen.
+            self.az.dateipfad = arbeitsdatei
+        self.status_leiste.config(text=f"Als Excel exportiert: {pfad}")
 
     def _autosave_tick(self):
         if self.ungespeichert and self.az.dateipfad:
@@ -1108,10 +1200,15 @@ class App(tk.Tk):
             return {}
 
     def _lt_einstellungen_speichern(self, werte: dict):
+        """Schreibt die uebergebenen Werte in die Einstellungsdatei -- als
+        Ergaenzung, damit z.B. die zuletzt geoeffnete Arbeitsdatei nicht
+        verlorengeht, wenn nur die Serveradresse geaendert wird."""
         pfad = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "osk_einstellungen.json")
+        bestand = self._lt_einstellungen_laden()
+        bestand.update(werte)
         with open(pfad, "w", encoding="utf-8") as f:
-            json.dump(werte, f, indent=2, ensure_ascii=False)
+            json.dump(bestand, f, indent=2, ensure_ascii=False)
 
     def app_einstellungen(self):
         cfg = self._lt_einstellungen_laden()
@@ -1175,13 +1272,6 @@ class App(tk.Tk):
                 "Keine Lerntheken-Aliasse gepflegt.\n\nZuerst 'Bearbeiten -> "
                 "Fehlende Lerntheken-Aliasse ergänzen…' benutzen.")
             return
-        if self.az._wb is None:
-            messagebox.showwarning(
-                "Ergebnisse abrufen",
-                "Bitte die Datei zuerst speichern -- die Ergebnisse werden als "
-                "zusätzliches Blatt in diese Mappe geschrieben.")
-            return
-
         angemeldet = self._lt_anmelden()
         if not angemeldet:
             return
@@ -1210,7 +1300,11 @@ class App(tk.Tk):
                 "Stimmen die Aliasse mit den Benutzernamen in der App überein?")
             return
 
-        zeilen = osk_sync.schreibe_app_daten(self.az._wb, treffer, daten)
+        # Das Rohdaten-Blatt "App-Daten" gibt es nur, wenn gerade mit einer
+        # Excel-Mappe gearbeitet wird. Die eigentlichen Ergebnisse landen
+        # ohnehin in den Bausteinlisten und damit in jedem Format.
+        zeilen = (osk_sync.schreibe_app_daten(self.az._wb, treffer, daten)
+                  if self.az._wb is not None else 0)
 
         # Je Halbjahr eine Zeile pro bearbeiteter Lerntheke (mit LZK-Terminen und
         # Bearbeitungszeitraum) sowie eine fuer Talks/Input. Wiederholte Abrufe
@@ -1259,10 +1353,11 @@ class App(tk.Tk):
         zugeordnet = {t[3] for t in treffer}
         verwaist = sorted(set(daten.nach_account) - zugeordnet)
 
-        text = (f"{zeilen} Zeilen im Blatt 'App-Daten' aktualisiert "
-                f"(Lerngruppe {klasse}, nur Mathe).\n"
-                f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n\n"
-                f"Noch speichern nicht vergessen.")
+        text = (f"Lerngruppe {klasse}, nur Mathe.\n"
+                f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n")
+        if zeilen:
+            text += f"Rohdaten im Blatt 'App-Daten': {zeilen} Zeilen.\n"
+        text += "\nNoch speichern nicht vergessen."
 
         def _liste(titel, eintraege, grenze=10):
             if not eintraege:
