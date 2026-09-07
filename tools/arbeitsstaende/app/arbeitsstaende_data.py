@@ -285,6 +285,30 @@ def _clean(value):
     return str(value).strip()
 
 
+# Eigenes Speicherformat. Excel bleibt als Import- und Exportweg erhalten
+# (Weitergeben, Ausdrucken), gearbeitet wird aber mit JSON: verlustfrei,
+# von Hand lesbar und nachbearbeitbar, und neue Felder brechen alte Dateien
+# nicht -- unbekannte Schluessel werden beim Laden schlicht ignoriert.
+JSON_FORMAT = "osk-arbeitsstaende"
+JSON_VERSION = 1
+JSON_ENDUNGEN = (".json",)
+
+
+def ist_json_pfad(pfad: str) -> bool:
+    return str(pfad).lower().endswith(JSON_ENDUNGEN)
+
+
+def _iso(d) -> Optional[str]:
+    d = _to_date(d)
+    return d.isoformat() if d else None
+
+
+def _ohne_leere(d: dict) -> dict:
+    """Leere Felder gar nicht erst schreiben -- eine von Hand gelesene Datei
+    soll nur zeigen, was tatsaechlich gepflegt ist."""
+    return {k: v for k, v in d.items() if v not in (None, "", [], {})}
+
+
 @dataclass
 class Baustein:
     name: str = ""
@@ -342,6 +366,78 @@ class Student:
         return f"{self.vorname} {self.nachname}".strip()
 
 
+def baustein_als_dict(b: Baustein) -> dict:
+    daten = {
+        "name": b.name,
+        "status": b.status,
+        "bausteinarbeit": b.bausteinarbeit,
+        "halbjahr": b.halbjahr,
+        "bemerkung": b.bemerkung,
+    }
+    for nr, (datum, note, bem) in enumerate(
+            ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1),
+             (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2)), start=1):
+        lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem})
+        if lzk:
+            daten[f"lzk_{nr}"] = lzk
+    return _ohne_leere(daten)
+
+
+def baustein_aus_dict(d: dict) -> Baustein:
+    b = Baustein(
+        name=d.get("name") or "",
+        status=d.get("status") or "Ausstehend",
+        bausteinarbeit=d.get("bausteinarbeit") or "",
+        halbjahr=d.get("halbjahr") or "",
+        bemerkung=d.get("bemerkung") or "",
+    )
+    for nr, felder in ((1, ("lzk_datum_1", "lzk_note_1", "lzk_bem_1")),
+                       (2, ("lzk_datum_2", "lzk_note_2", "lzk_bem_2"))):
+        lzk = d.get(f"lzk_{nr}") or {}
+        setattr(b, felder[0], _to_date(lzk.get("datum")))
+        setattr(b, felder[1], lzk.get("note") or "")
+        setattr(b, felder[2], lzk.get("bemerkung") or "")
+    return b
+
+
+def student_als_dict(s: "Student") -> dict:
+    return _ohne_leere({
+        "vorname": s.vorname,
+        "nachname": s.nachname,
+        "lerntheken_alias": s.alias,
+        "kursung": s.kursung,
+        "jahrgangsstufe": s.jahrgangsstufe,
+        "hj_note": s.hj_note,
+        "sonstige_deadline": _iso(s.sonstige_deadline),
+        "sonstige_deadline_anlass": s.sonstige_deadline_bemerkung,
+        "fb_besuche": [d.isoformat() for d in s.fb_besuche],
+        "bausteine": [baustein_als_dict(b) for b in s.bausteine],
+    })
+
+
+def student_aus_dict(d: dict) -> "Student":
+    jahrgang = d.get("jahrgangsstufe")
+    try:
+        jahrgang = int(jahrgang) if jahrgang not in (None, "") else None
+    except (TypeError, ValueError):
+        jahrgang = None
+    s = Student(
+        vorname=d.get("vorname") or "",
+        nachname=d.get("nachname") or "",
+        alias=(d.get("lerntheken_alias") or "").strip().lower(),
+        kursung=d.get("kursung") or "",
+        jahrgangsstufe=jahrgang,
+        hj_note=d.get("hj_note") or "",
+        sonstige_deadline=_to_date(d.get("sonstige_deadline")),
+        sonstige_deadline_bemerkung=d.get("sonstige_deadline_anlass") or "",
+        bausteine=[baustein_aus_dict(b) for b in d.get("bausteine") or []],
+    )
+    besuche = sorted({b for b in (_to_date(x) for x in d.get("fb_besuche") or []) if b})
+    s.fb_besuche = besuche
+    s.letzter_besuch_fb = besuche[-1] if besuche else None
+    return s
+
+
 class Arbeitsstaende:
     """Hält den kompletten Datenbestand und kapselt Laden/Speichern."""
 
@@ -352,11 +448,76 @@ class Arbeitsstaende:
         self._wb: Optional[Workbook] = None  # zuletzt geladene/erzeugte Mappe
 
     # ------------------------------------------------------------------
-    # Laden
+    # Eigenes Format (JSON)
+    # ------------------------------------------------------------------
+    def als_dict(self) -> dict:
+        return {
+            "format": JSON_FORMAT,
+            "version": JSON_VERSION,
+            "gespeichert_am": date.today().isoformat(),
+            "vorlage_bausteine": list(self.vorlage_bausteine),
+            "personen": [student_als_dict(s) for s in self.students],
+        }
+
+    def aus_dict(self, daten: dict) -> List[str]:
+        warnungen: List[str] = []
+        if not isinstance(daten, dict):
+            raise ValueError("Datei enthaelt kein Arbeitsstaende-Objekt.")
+        if daten.get("format") not in (None, JSON_FORMAT):
+            warnungen.append(f"Unbekanntes Format '{daten.get('format')}' -- es wird "
+                             f"trotzdem versucht, die Daten zu lesen.")
+        version = daten.get("version")
+        if isinstance(version, int) and version > JSON_VERSION:
+            warnungen.append(f"Die Datei stammt aus einer neueren Version (v{version}); "
+                             f"unbekannte Angaben gehen beim Speichern verloren.")
+        self.vorlage_bausteine = [str(n) for n in daten.get("vorlage_bausteine") or []]
+        self.students = []
+        for eintrag in daten.get("personen") or []:
+            person = student_aus_dict(eintrag)
+            if not person.voller_name:
+                warnungen.append("Ein Eintrag ohne Namen wurde uebersprungen.")
+                continue
+            self.students.append(person)
+        return warnungen
+
+    def laden_json(self, pfad: str) -> List[str]:
+        with open(pfad, encoding="utf-8") as f:
+            daten = json.load(f)
+        warnungen = self.aus_dict(daten)
+        # Eine frisch geladene JSON-Datei hat keine Excel-Mappe im Ruecken; ein
+        # spaeterer Excel-Export baut daher eine neue Mappe auf.
+        self._wb = None
+        self.dateipfad = pfad
+        return warnungen
+
+    def speichern_json(self, pfad: str):
+        with open(pfad, "w", encoding="utf-8") as f:
+            json.dump(self.als_dict(), f, ensure_ascii=False, indent=2)
+            f.write("\n")   # abschliessender Zeilenumbruch, git-freundlich
+        self.dateipfad = pfad
+
+    # ------------------------------------------------------------------
+    # Laden / Speichern -- Format ergibt sich aus der Dateiendung
     # ------------------------------------------------------------------
     def laden(self, pfad: str) -> List[str]:
-        """Lädt eine bestehende Arbeitsstände-Datei. Gibt eine Liste von
-        Warnungen zurück (z.B. übersprungene Blätter)."""
+        """Laedt eine Arbeitsstaende-Datei: .json im eigenen Format, alles
+        andere als Excel-Mappe. Gibt eine Liste von Warnungen zurueck."""
+        if ist_json_pfad(pfad):
+            return self.laden_json(pfad)
+        return self.laden_excel(pfad)
+
+    def speichern(self, pfad: str):
+        if ist_json_pfad(pfad):
+            self.speichern_json(pfad)
+        else:
+            self.speichern_excel(pfad)
+
+    # ------------------------------------------------------------------
+    # Excel (Import und Export)
+    # ------------------------------------------------------------------
+    def laden_excel(self, pfad: str) -> List[str]:
+        """Liest eine Arbeitsstände-Mappe (.xlsx/.xlsm) ein. Gibt eine Liste
+        von Warnungen zurück (z.B. übersprungene Blätter)."""
         warnungen: List[str] = []
         wb = load_workbook(pfad, data_only=False)
         self._wb = wb
@@ -581,7 +742,7 @@ class Arbeitsstaende:
     # ------------------------------------------------------------------
     # Speichern
     # ------------------------------------------------------------------
-    def speichern(self, pfad: str):
+    def speichern_excel(self, pfad: str):
         if self._wb is None:
             wb = self._neue_mappe()
         else:

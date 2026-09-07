@@ -43,8 +43,12 @@ Danach reicht ein Doppelklick auf diese Datei.
 
 ## Bedienung
 
-- **Datei → Öffnen…**: deine bestehende .xlsx/.xlsm-Datei laden (auch die
-  bisherige Excel-Datei mit den 29 Personenblättern liest die App ein).
+- **Beim Start** öffnet sich automatisch die Datei, an der du zuletzt
+  gearbeitet hast -- du musst also nichts auswählen, sondern kannst direkt
+  weitermachen. Nur beim allerersten Mal ist ein Schritt nötig:
+  **Datei → Aus Excel importieren…** (siehe unten).
+- **Datei → Öffnen…**: eine andere Arbeitsdatei (`.json`) laden -- oder eine
+  Excel-Mappe, wenn du doch einmal eine ältere Datei brauchst.
 - Links: Liste aller Schüler:innen, **sortiert nach Jahrgangsstufe und
   innerhalb der Stufe alphabetisch**. Fehlt bei jemandem die
   Jahrgangsstufe, rutscht die Person ans Ende der Liste -- einfach im
@@ -71,6 +75,15 @@ Danach reicht ein Doppelklick auf diese Datei.
   (Standard-Bausteine UND frei benannte individuelle Zeilen -- beides geht
   genau wie bisher in Excel). Doppelklick auf eine Zeile öffnet sie zum
   Bearbeiten.
+- **Sonstige Deadline + Anlass** (im Kopfbereich rechts): eine Frist, die
+  nichts mit einer LZK zu tun hat -- Referat abgeben, etwas mitbringen,
+  etwas drucken. Der Anlass steht in der Liste links direkt neben dem
+  Datum; kommt die Frist aus einer LZK, steht dort "LZK". Angezeigt wird
+  immer der nächstliegende der beiden Termine, und die Spalte **Anlass**
+  lässt sich wie jede andere über ihren Kopf sortieren.
+- **Bemerkung zur LZK 1 / 2** (im Baustein-Formular): kurze Notiz zur
+  jeweiligen Leistungszielkontrolle ("nur Teil 1", "Nachschreibtermin").
+  Sie erscheint in der Baustein-Tabelle hinter dem jeweiligen Datum.
 - **Bearbeiten → Standard-Bausteine bearbeiten…**: die Liste, die neu
   angelegte Schüler:innen automatisch bekommen (entspricht der alten
   "Vorlage_31" in Excel).
@@ -112,22 +125,63 @@ nur dafür gilt, und lass es die Schüler:innen beim ersten Login ändern.
 
 Blätter, deren Name mit `App-` beginnt, werden beim Speichern nicht angetastet.
 
-## Speichern und automatische Sicherung
+## Speicherformat: einmal Excel, danach Arbeitsdatei
 
-- **Beim Öffnen** fragt die App einmal, unter welchem Namen deine Änderungen
-  gespeichert werden sollen (Vorschlag: derselbe Ordner, gleicher Name,
-  Endung `.xlsx`). Die **geöffnete Datei selbst wird dabei nie verändert** --
-  weder beim ersten Öffnen noch danach. Brichst du diese Abfrage ab, wird
-  nichts vorgemerkt; "Speichern" fragt dann beim nächsten Mal erneut danach.
+Gearbeitet wird in einer **Arbeitsdatei mit der Endung `.json`**. Die ist
+verlustfrei (sie kennt alle Felder der App), lässt sich später erweitern und
+ist trotzdem im Klartext lesbar -- du kannst sie zur Not in jedem Texteditor
+öffnen und korrigieren. Der Ablauf:
+
+1. **Einmalig:** *Datei → Aus Excel importieren…*, deine bisherige
+   `.xlsm`/`.xlsx` auswählen. Danach fragt die App, wo die Arbeitsdatei
+   liegen soll (Vorschlag: gleicher Ordner, gleicher Name, Endung `.json`).
+   Die **Excel-Datei selbst wird dabei nie verändert**.
+2. **Ab dann:** Anwendung starten -- die Arbeitsdatei ist sofort wieder da.
+   Kein Importieren, kein Auswählen, kein Neuaufbau.
+3. **Wenn du Excel brauchst** (ausdrucken, weitergeben, in Excel
+   nachschauen): *Datei → Als Excel exportieren…* schreibt den aktuellen
+   Stand als `.xlsx` heraus -- mit Namen-Blatt und Personenblättern wie
+   gewohnt. Die Arbeitsdatei bleibt davon unberührt; gearbeitet wird
+   weiterhin in der `.json`.
+
+So sieht ein Eintrag in der Arbeitsdatei aus:
+
+```json
+{
+  "vorname": "Anton",
+  "nachname": "Berger",
+  "lerntheken_alias": "an.be",
+  "jahrgangsstufe": 9,
+  "sonstige_deadline": "2026-09-20",
+  "sonstige_deadline_anlass": "Referat drucken",
+  "fb_besuche": ["2026-08-25", "2026-09-01"],
+  "bausteine": [
+    {
+      "name": "Kreise und Zylinder",
+      "status": "In Bearbeitung",
+      "halbjahr": "2627_1",
+      "lzk_1": { "datum": "2026-11-05", "bemerkung": "nur Teil 1" }
+    }
+  ]
+}
+```
+
+Leere Felder stehen gar nicht erst drin. Kommen später neue Angaben dazu,
+lassen sich ältere Dateien weiterhin öffnen -- Unbekanntes wird beim Laden
+gemeldet statt zu stören.
+
+## Automatische Sicherung
+
+- Brichst du beim Import die Frage nach der Arbeitsdatei ab, wird nichts
+  vorgemerkt; "Speichern" fragt dann beim nächsten Mal erneut danach.
 - Ab dann läuft eine **automatische Sicherung alle 5 Minuten** im
   Hintergrund, sobald es etwas Ungespeichertes gibt -- lautlos, ohne
   Rückfrage. Die Statuszeile unten zeigt jeweils Uhrzeit und Zieldatei; falls
-  es einmal nicht klappt (z.B. Datei gerade in Excel geöffnet), steht dort
-  eine Warnung.
+  es einmal nicht klappt, steht dort eine Warnung.
 - **Datei → Speichern** und **Speichern unter…** funktionieren wie gewohnt
   daneben, für's Speichern zwischendurch von Hand.
 
-## Was übernommen wird, wenn du deine bisherige Excel-Datei öffnest
+## Was beim Import aus deiner bisherigen Excel-Datei übernommen wird
 
 Alle Personen, alle Bausteinzeilen (auch deine individuellen Zusatzzeilen),
 Status, Noten, Termine und die komplette FB-Besuchshistorie aus dem
@@ -138,11 +192,11 @@ Besuchstage werden dabei automatisch zu neuen Spalten.
 
 ## Was sich ändert
 
-- Gespeichert wird als **.xlsx ohne Makros** -- die Buttons/VBA aus der
-  alten Datei sind danach weg, weil du ab jetzt über diese Anwendung statt
-  über Excel-Buttons arbeitest. Deine ursprüngliche .xlsm-Datei bleibt beim
-  ersten Öffnen unangetastet; "Speichern unter…" legt beim allerersten Mal
-  eine neue Datei an.
+- Gearbeitet wird in der `.json`-Arbeitsdatei; der **Excel-Export enthält
+  keine Makros** -- die Buttons/VBA aus der alten Datei sind dort also nicht
+  mehr dabei, weil du ab jetzt über diese Anwendung statt über
+  Excel-Buttons arbeitest. Deine ursprüngliche `.xlsm`-Datei bleibt beim
+  Import unangetastet.
 - "Aktueller Baustein" und "Nächste Deadline" im Namen-Blatt werden beim
   Speichern automatisch neu berechnet (gleiche Logik wie bisher: nächster
   anstehender LZK-Termin, sonst "Frist vereinbaren!", wenn ein Baustein

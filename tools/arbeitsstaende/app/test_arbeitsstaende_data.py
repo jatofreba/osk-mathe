@@ -5,6 +5,7 @@ Testsuite für die Datenschicht der Arbeitsstände-App.
 Läuft komplett eigenständig (baut sich seine Testdatei selbst) --
 einfach ausführen mit: python3 test_arbeitsstaende_data.py
 """
+import json
 import os
 import tempfile
 from datetime import date
@@ -259,6 +260,91 @@ def test_neue_leere_mappe():
     print("OK: test_neue_leere_mappe")
 
 
+def test_json_ist_verlustfrei():
+    """Excel -> JSON -> Excel muss inhaltlich dasselbe ergeben."""
+    az = Arbeitsstaende()
+    pfad = _pfad("basis.xlsx")
+    _testmappe_erzeugen(pfad)
+    az.laden(pfad)
+    person = az.students[0]
+    person.alias = "an.be"
+    person.sonstige_deadline = date(2026, 9, 20)
+    person.sonstige_deadline_bemerkung = "Referat drucken"
+    person.bausteine.append(Baustein(name="Kreise", status="In Bearbeitung",
+                                     halbjahr="2627_1",
+                                     lzk_datum_1=date(2026, 11, 5), lzk_bem_1="nur Teil 1",
+                                     lzk_datum_2=date(2027, 1, 12), lzk_note_2="3"))
+
+    def stand(a):
+        return [(s.vorname, s.nachname, s.alias, s.kursung, s.jahrgangsstufe, s.hj_note,
+                 s.sonstige_deadline, s.sonstige_deadline_bemerkung,
+                 tuple(s.fb_besuche), s.letzter_besuch_fb,
+                 tuple((b.name, b.status, b.bausteinarbeit, b.halbjahr, b.bemerkung,
+                        b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1,
+                        b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2) for b in s.bausteine))
+                for s in sorted(a.students, key=lambda s: s.voller_name)]
+
+    vorher = stand(az)
+    js = _pfad("arbeitsstaende.json")
+    az.speichern(js)
+
+    ausJson = Arbeitsstaende()
+    assert ausJson.laden(js) == []
+    assert stand(ausJson) == vorher
+    assert ausJson.vorlage_bausteine == az.vorlage_bausteine
+
+    xlsx = _pfad("aus_json.xlsx")
+    ausJson.speichern_excel(xlsx)
+    ausExcel = Arbeitsstaende()
+    ausExcel.laden(xlsx)
+    assert stand(ausExcel) == vorher
+    print("OK: test_json_ist_verlustfrei")
+
+
+def test_json_ist_lesbar_und_stabil():
+    """Die Datei soll von Hand lesbar bleiben: Umlaute im Klartext, leere
+    Felder gar nicht erst geschrieben, gleicher Stand = gleiche Datei."""
+    az = Arbeitsstaende()
+    az.neu(["Baustein 1"])
+    s = Student(vorname="J\u00fcrgen", nachname="\u00d6ztürk", jahrgangsstufe=9)
+    s.bausteine.append(Baustein(name="Kreise", status="In Bearbeitung",
+                                lzk_datum_1=date(2026, 11, 5), lzk_bem_1="nur Teil 1"))
+    az.students.append(s)
+
+    js = _pfad("lesbar.json")
+    az.speichern(js)
+    roh = open(js, encoding="utf-8").read()
+    assert "J\u00fcrgen" in roh and "\\u00fc" not in roh, "Umlaute muessen lesbar bleiben"
+
+    daten = json.loads(roh)
+    baustein = daten["personen"][0]["bausteine"][0]
+    assert baustein["lzk_1"] == {"datum": "2026-11-05", "bemerkung": "nur Teil 1"}
+    assert "lzk_2" not in baustein, "leere LZK gar nicht schreiben"
+    assert "hj_note" not in daten["personen"][0]
+
+    js2 = _pfad("lesbar2.json")
+    Arbeitsstaende_neu = Arbeitsstaende()
+    Arbeitsstaende_neu.laden(js)
+    Arbeitsstaende_neu.speichern(js2)
+    a, b = json.loads(roh), json.loads(open(js2, encoding="utf-8").read())
+    a.pop("gespeichert_am"), b.pop("gespeichert_am")
+    assert a == b
+    print("OK: test_json_ist_lesbar_und_stabil")
+
+
+def test_json_fremde_datei_warnt_statt_abzustuerzen():
+    js = _pfad("fremd.json")
+    with open(js, "w", encoding="utf-8") as f:
+        json.dump({"format": "irgendwas", "version": 99,
+                   "personen": [{"vorname": "Ohne", "nachname": "Bausteine"},
+                                {"nachname": ""}]}, f)
+    az = Arbeitsstaende()
+    warnungen = az.laden(js)
+    assert len(az.students) == 1
+    assert len(warnungen) == 3, warnungen
+    print("OK: test_json_fremde_datei_warnt_statt_abzustuerzen")
+
+
 if __name__ == "__main__":
     test_laden_testmappe()
     test_speichern_ohne_aenderung_erhaelt_daten()
@@ -270,5 +356,8 @@ if __name__ == "__main__":
     test_hj_note_und_keine_phantom_bausteine()
     test_vorlage_bearbeiten_und_speichern()
     test_neue_leere_mappe()
+    test_json_ist_verlustfrei()
+    test_json_ist_lesbar_und_stabil()
+    test_json_fremde_datei_warnt_statt_abzustuerzen()
     print("\nAlle Tests erfolgreich.")
     print(f"(Testdateien lagen in {TMP})")
