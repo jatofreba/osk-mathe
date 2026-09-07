@@ -27,7 +27,7 @@ KURSUNG_OPTIONEN = ["", "E", "G"]
 BAUSTEIN_SPALTEN = [
     "name", "status", "bausteinarbeit",
     "lzk_datum_1", "lzk_note_1", "lzk_datum_2", "lzk_note_2",
-    "halbjahr", "bemerkung",
+    "halbjahr", "bemerkung", "lzk_bem_1", "lzk_bem_2",
 ]
 
 STATUS_FARBEN = {
@@ -296,6 +296,9 @@ class Baustein:
     lzk_note_2: str = ""
     halbjahr: str = ""
     bemerkung: str = ""
+    # Notiz zur jeweiligen LZK (z.B. "nur Teil 1 geschrieben", "Nachschreibtermin")
+    lzk_bem_1: str = ""
+    lzk_bem_2: str = ""
 
 
 @dataclass
@@ -312,6 +315,11 @@ class Student:
     jahrgangsstufe: Optional[int] = None
     letzter_besuch_fb: Optional[date] = None
     hj_note: str = ""
+    # Frei setzbare Frist neben den LZK-Terminen (Referat abgeben, Material
+    # drucken, ...). Die Bemerkung ist zugleich der Anlass, der in der Uebersicht
+    # neben dem Datum steht.
+    sonstige_deadline: Optional[date] = None
+    sonstige_deadline_bemerkung: str = ""
     bausteine: List[Baustein] = field(default_factory=list)
     # Name des Original-Arbeitsblatts, falls aus einer Datei geladen.
     # Wird für gezieltes Aktualisieren beim Speichern gebraucht.
@@ -376,9 +384,12 @@ class Arbeitsstaende:
         if namen_sheet:
             ws_namen = wb[namen_sheet]
             letzte_spalte = ws_namen.max_column
-            if letzte_spalte >= 8:
+            # Altes Layout: Raster ab Spalte H. Neues Layout: H = "Anlass",
+            # Raster ab Spalte I. Unterscheidbar am Inhalt von H1.
+            raster_start = 8 if _to_date(ws_namen.cell(row=1, column=8).value) else 9
+            if letzte_spalte >= raster_start:
                 spalten_daten = [_to_date(ws_namen.cell(row=1, column=c).value)
-                                  for c in range(8, letzte_spalte + 1)]
+                                  for c in range(raster_start, letzte_spalte + 1)]
                 for row in range(2, ws_namen.max_row + 1):
                     vn = _clean(ws_namen.cell(row=row, column=1).value)
                     nn = _clean(ws_namen.cell(row=row, column=2).value)
@@ -388,7 +399,7 @@ class Arbeitsstaende:
                     for j, spaltendatum in enumerate(spalten_daten):
                         if spaltendatum is None:
                             continue
-                        wert = ws_namen.cell(row=row, column=8 + j).value
+                        wert = ws_namen.cell(row=row, column=raster_start + j).value
                         if wert in (1, "1", True):
                             besuche.append(spaltendatum)
                     besuche_by_row[row] = sorted(besuche)
@@ -456,10 +467,12 @@ class Arbeitsstaende:
             jahrgang = None
         letzter_besuch = _to_date(ws.cell(row=2, column=2).value)
         hj_note = _clean(ws.cell(row=2, column=4).value)
+        sonstige_deadline = _to_date(ws.cell(row=2, column=6).value)
+        sonstige_bem = _clean(ws.cell(row=2, column=8).value)
 
         bausteine = []
         for row in range(4, ws.max_row + 1):
-            werte = [ws.cell(row=row, column=c).value for c in range(1, 10)]
+            werte = [ws.cell(row=row, column=c).value for c in range(1, 12)]
             name = _clean(werte[0])
             if not name:
                 # Leere "Ausstehend"-Platzzeilen aus der Vorlage (Name leer,
@@ -475,13 +488,17 @@ class Arbeitsstaende:
                 lzk_note_2=_clean(werte[6]),
                 halbjahr=_clean(werte[7]),
                 bemerkung=_clean(werte[8]),
+                lzk_bem_1=_clean(werte[9]),
+                lzk_bem_2=_clean(werte[10]),
             )
             bausteine.append(b)
 
         return Student(
             vorname=vorname, nachname=nachname, kursung=kursung,
             jahrgangsstufe=jahrgang, letzter_besuch_fb=letzter_besuch,
-            hj_note=hj_note, bausteine=bausteine, _quellblatt=sheetname,
+            hj_note=hj_note, sonstige_deadline=sonstige_deadline,
+            sonstige_deadline_bemerkung=sonstige_bem,
+            bausteine=bausteine, _quellblatt=sheetname,
         )
 
     # ------------------------------------------------------------------
@@ -531,6 +548,35 @@ class Arbeitsstaende:
         if frist_noetig:
             return frist_baustein, "Frist vereinbaren!"
         return "", ""
+
+    def deadline_info(self, student: Student, heute: Optional[date] = None):
+        """Naechste Frist samt Anlass: (termin, anlass).
+
+        Beruecksichtigt die LZK-Termine aus den Bausteinen UND die frei gesetzte
+        Deadline der Person. Es gewinnt der fruehere Termin; ein reiner Hinweis
+        ("Frist vereinbaren!") tritt hinter jeden echten Termin zurueck.
+
+        `termin` ist ein date oder ein Hinweistext, `anlass` das, was daneben
+        stehen soll -- "LZK" oder die eigene Bemerkung.
+        """
+        heute = heute or date.today()
+        baustein, lzk_termin = self.berechne_status(student, heute)
+
+        frei_termin = student.sonstige_deadline
+        frei_anlass = (student.sonstige_deadline_bemerkung or "").strip() or "Termin"
+
+        kandidaten = []
+        if isinstance(lzk_termin, date):
+            kandidaten.append((0, lzk_termin, lzk_termin, "LZK"))
+        if frei_termin:
+            kandidaten.append((0, frei_termin, frei_termin, frei_anlass))
+        if not kandidaten and isinstance(lzk_termin, str) and lzk_termin:
+            return lzk_termin, baustein or "LZK"
+        if not kandidaten:
+            return "", ""
+        kandidaten.sort(key=lambda k: k[1])
+        _, _, termin, anlass = kandidaten[0]
+        return termin, anlass
 
     # ------------------------------------------------------------------
     # Speichern
@@ -590,12 +636,13 @@ class Arbeitsstaende:
         ws["A2"] = "Letzter Besuch im FB:"
         ws["C2"] = "HJ-Note:"
         kopf_labels = ["Baustein", "Status", "Bausteinarbeit", "LZK-Datum-1", "LZK-Note-1",
-                       "LZK-Datum-2", "LZK-Note-2", "Halbjahr:", "Bemerkung"]
+                       "LZK-Datum-2", "LZK-Note-2", "Halbjahr:", "Bemerkung",
+                       "LZK-Bemerkung-1", "LZK-Bemerkung-2"]
         for i, label in enumerate(kopf_labels, start=1):
             ws.cell(row=3, column=i, value=label)
-        for col, width in zip("ABCDEFGHI", [24, 16, 20, 13, 13, 13, 13, 11, 40]):
+        for col, width in zip("ABCDEFGHIJK", [24, 16, 20, 13, 13, 13, 13, 11, 40, 26, 26]):
             ws.column_dimensions[col].width = width
-        for c in range(1, 10):
+        for c in range(1, 12):
             ws.cell(row=1, column=c).font = Font(bold=True)
             ws.cell(row=3, column=c).font = Font(bold=True)
         ws.freeze_panes = "A4"
@@ -603,8 +650,10 @@ class Arbeitsstaende:
     def _schreibe_vorlage(self, ws: Worksheet):
         # Bestehende Bausteinzeilen leeren, dann neu schreiben
         for row in range(4, ws.max_row + 2):
-            for col in range(1, 10):
-                ws.cell(row=row, column=col, value=None)
+            for col in range(1, 12):
+                # openpyxl ignoriert value=None beim cell()-Aufruf -- die Zelle
+                # muss ueber .value geleert werden, sonst bleibt der alte Inhalt.
+                ws.cell(row=row, column=col).value = None
         for i, name in enumerate(self.vorlage_bausteine):
             row = 4 + i
             ws.cell(row=row, column=1, value=name)
@@ -617,15 +666,24 @@ class Arbeitsstaende:
         ws["F1"] = student.jahrgangsstufe
         ws["B2"] = student.letzter_besuch_fb
         ws["D2"] = student.hj_note
+        ws["E2"] = "Sonstige Deadline:"
+        ws["F2"] = student.sonstige_deadline
+        if student.sonstige_deadline:
+            ws["F2"].number_format = "DD.MM.YYYY"
+        ws["G2"] = "Anlass:"
+        ws["H2"] = student.sonstige_deadline_bemerkung
 
         for row in range(4, ws.max_row + 2):
-            for col in range(1, 10):
-                ws.cell(row=row, column=col, value=None)
+            for col in range(1, 12):
+                # openpyxl ignoriert value=None beim cell()-Aufruf -- die Zelle
+                # muss ueber .value geleert werden, sonst bleibt der alte Inhalt.
+                ws.cell(row=row, column=col).value = None
 
         for i, b in enumerate(student.bausteine):
             row = 4 + i
             werte = [b.name, b.status, b.bausteinarbeit, b.lzk_datum_1, b.lzk_note_1,
-                     b.lzk_datum_2, b.lzk_note_2, b.halbjahr, b.bemerkung]
+                     b.lzk_datum_2, b.lzk_note_2, b.halbjahr, b.bemerkung,
+                     b.lzk_bem_1, b.lzk_bem_2]
             for col, wert in enumerate(werte, start=1):
                 ws.cell(row=row, column=col, value=wert)
             for col in (4, 6):
@@ -647,18 +705,26 @@ class Arbeitsstaende:
 
         for status, farbe in STATUS_FARBEN.items():
             ws.conditional_formatting.add(
-                f"A4:I{letzte_zeile}",
+                f"A4:K{letzte_zeile}",
                 FormulaRule(formula=[f'$B4="{status}"'],
                             fill=PatternFill("solid", fgColor=farbe)),
             )
 
     def _schreibe_namen_blatt(self, wb: Workbook, students: List[Student]):
         ws = wb["Namen"]
-        # Ganze bisherige Tabelle leeren (inkl. der Termine-Spalten) --
-        # sie wird gleich komplett aus fb_besuche neu aufgebaut.
-        for row in range(2, ws.max_row + 2):
-            for col in range(1, ws.max_column + 1):
-                ws.cell(row=row, column=col, value=None)
+        # Ganze bisherige Tabelle leeren -- sie wird gleich komplett aus
+        # fb_besuche neu aufgebaut. WICHTIG: auch Zeile 1 ab der ersten
+        # Datumsspalte. Frueher blieben dort alte Spaltenkoepfe stehen, wenn das
+        # neue Raster schmaler war als das alte; beim naechsten Laden wurden sie
+        # als zusaetzliche Besuchstage gelesen und die Historie bekam Dubletten.
+        letzte_spalte = max(ws.max_column, 8)
+        letzte_zeile = ws.max_row + 1
+        for row in range(1, letzte_zeile + 1):
+            erste_spalte = 1 if row > 1 else 9   # Zeile 1: Beschriftungen behalten
+            for col in range(erste_spalte, letzte_spalte + 1):
+                # openpyxl ignoriert value=None beim cell()-Aufruf -- die Zelle
+                # muss ueber .value geleert werden, sonst bleibt der alte Inhalt.
+                ws.cell(row=row, column=col).value = None
 
         ws["A1"] = "Vorname"
         ws["B1"] = "Name"
@@ -667,7 +733,8 @@ class Arbeitsstaende:
         ws["E1"] = "Nächste Deadline"
         ws["F1"] = "Letzter Besuch im FB"
         ws["G1"] = "Kursung"
-        for c in range(1, 8):
+        ws["H1"] = "Anlass"
+        for c in range(1, 9):
             ws.cell(row=1, column=c).font = Font(bold=True)
 
         # Spaltenköpfe: alle Tage, an denen irgendeine Person im FB war,
@@ -675,17 +742,21 @@ class Arbeitsstaende:
         # Speichern automatisch zu neuen Spalten.
         alle_tage = sorted({d for s in students for d in s.fb_besuche})
         for j, tag in enumerate(alle_tage):
-            zelle = ws.cell(row=1, column=8 + j, value=tag)
+            zelle = ws.cell(row=1, column=9 + j, value=tag)
             zelle.number_format = "DD.MM.YYYY"
 
         for i, student in enumerate(students):
             row = 2 + i
-            aktueller_baustein, deadline = self.berechne_status(student)
+            aktueller_baustein, _ = self.berechne_status(student)
+            deadline, anlass = self.deadline_info(student)
             ws.cell(row=row, column=1, value=student.vorname)
             ws.cell(row=row, column=2, value=student.nachname)
             ws.cell(row=row, column=3, value=student.alias)
             ws.cell(row=row, column=4, value=aktueller_baustein)
-            ws.cell(row=row, column=5, value=deadline if isinstance(deadline, str) else deadline)
+            zelle = ws.cell(row=row, column=5, value=deadline if deadline != "" else None)
+            if isinstance(deadline, date):
+                zelle.number_format = "DD.MM.YYYY"
+            ws.cell(row=row, column=8, value=anlass)
             letzter = student.fb_besuche[-1] if student.fb_besuche else student.letzter_besuch_fb
             ws.cell(row=row, column=6, value=letzter)
             ws.cell(row=row, column=7, value=student.kursung)
@@ -693,7 +764,7 @@ class Arbeitsstaende:
             # Sortieren/Hinzufügen/Entfernen von Personen).
             besuchte_tage = set(student.fb_besuche)
             for j, tag in enumerate(alle_tage):
-                ws.cell(row=row, column=8 + j, value=1 if tag in besuchte_tage else 0)
-        ws.freeze_panes = "G1"
-        for col, width in zip("ABCDEFG", [11, 11, 16, 22, 17, 16, 9]):
+                ws.cell(row=row, column=9 + j, value=1 if tag in besuchte_tage else 0)
+        ws.freeze_panes = "I1"
+        for col, width in zip("ABCDEFGH", [11, 11, 16, 22, 17, 16, 9, 20]):
             ws.column_dimensions[col].width = width
