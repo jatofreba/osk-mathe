@@ -16,7 +16,7 @@ from typing import List
 
 from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
-    halbjahr_fuer_datum, halbjahr_optionen,
+    halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App (Anmeldung, Auswertung, Konten anlegen).
@@ -1021,9 +1021,29 @@ class App(tk.Tk):
             return
 
         zeilen = osk_sync.schreibe_app_daten(self.az._wb, treffer, daten)
+
+        # Zusaetzlich je Person und Halbjahr EINE Zeile in der Bausteinliste,
+        # damit die Zahlen auch beim Blick auf eine einzelne Person auftauchen.
+        # Wiederholte Abrufe ueberschreiben diese Zeilen, statt sie zu haeufen.
+        stand = datetime.now().strftime("%d.%m.%Y")
+        nach_alias = {st.alias.strip().lower(): st
+                      for st in self.az.students if st.alias.strip()}
+        neu = akt = 0
+        for _, _, _, alias in treffer:
+            student = nach_alias.get(alias)
+            if not student:
+                continue
+            n, a = lt_zeilen_aktualisieren(
+                student, daten.nach_account[alias]["byHalbjahr"], daten.faecher, stand)
+            neu += n
+            akt += a
+        self._detail_anzeigen()
+
         self._markiere_ungespeichert()
         text = (f"{zeilen} Zeilen im Blatt 'App-Daten' aktualisiert "
-                f"(Lerngruppe {klasse}).\n\nNoch speichern nicht vergessen.")
+                f"(Lerngruppe {klasse}, nur Mathe).\n"
+                f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n\n"
+                f"Noch speichern nicht vergessen.")
         if ohne:
             text += (f"\n\nOhne passendes Konto ({len(ohne)}):\n"
                      + "\n".join(ohne[:10]))

@@ -90,6 +90,76 @@ def halbjahr_optionen(zusaetzlich=(), jahre_zurueck: int = 3, jahre_vor: int = 1
     return sorted(set(optionen), reverse=True)
 
 
+# Name der Bausteinzeile, in der die Zahlen aus der Lerntheken-App stehen.
+# Ueber diesen Namen (plus Halbjahr) werden die Zeilen bei einem erneuten Abruf
+# wiedererkannt und ueberschrieben, statt sich zu vermehren.
+LT_ZEILE_NAME = "Lerntheken-App"
+
+
+def lt_zusammenfassung(bucket: dict, faecher) -> str:
+    """Baut den Bemerkungstext fuer ein Halbjahr aus den App-Zahlen.
+
+    Faecher ohne jede Aktivitaet werden weggelassen -- sonst stuende in jeder
+    Zeile zweimal "0 gehalten, 0 zugehoert".
+    """
+    teile = []
+    for fach in faecher:
+        sub = (bucket.get("bySubject") or {}).get(fach["key"]) or {}
+        geh = sub.get("talksPresented", 0) or 0
+        zug = sub.get("talksListened", 0) or 0
+        inp = sub.get("inputParticipated", 0) or 0
+        klee = (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0)
+        if not (geh or zug or inp or klee):
+            continue
+        einzel = []
+        if geh:
+            einzel.append(f"{geh} gehalten")
+        if zug:
+            einzel.append(f"{zug} zugehoert")
+        if inp:
+            einzel.append(f"{inp} Input")
+        if klee:
+            einzel.append(f"{klee} Kleeblaetter")
+        teile.append(f"{fach['name']}: " + ", ".join(einzel))
+
+    stationen = bucket.get("stationsCompleted", 0) or 0
+    if stationen:
+        teile.append(f"{stationen} Stationen")
+
+    lzk_bestanden = [l for l in (bucket.get("lzk") or []) if l.get("status") == "bestanden"]
+    for l in lzk_bestanden:
+        pk = l.get("pokale") or 0
+        teile.append(f"{l.get('typ', 'LZK')}-LZK bestanden"
+                     + (f" ({pk} Kleeblaetter)" if pk else ""))
+
+    return " · ".join(teile) if teile else "keine Aktivitaet"
+
+
+def lt_zeilen_aktualisieren(student, by_halbjahr: dict, faecher, stand: str = ""):
+    """Legt je Halbjahr EINE Bausteinzeile mit den App-Zahlen an bzw. frischt
+    eine vorhandene auf. Rueckgabe: (neu, aktualisiert).
+
+    Wiedererkennung ueber Name + Halbjahr, damit wiederholte Abrufe die Liste
+    nicht mit Duplikaten fluten.
+    """
+    neu = aktualisiert = 0
+    for hj in sorted(by_halbjahr.keys()):
+        text = lt_zusammenfassung(by_halbjahr[hj] or {}, faecher)
+        if stand:
+            text += f" (Stand {stand})"
+        vorhanden = next((b for b in student.bausteine
+                          if b.name == LT_ZEILE_NAME and b.halbjahr == hj), None)
+        if vorhanden:
+            vorhanden.bemerkung = text
+            vorhanden.status = "Sonstiges"
+            aktualisiert += 1
+        else:
+            student.bausteine.append(Baustein(
+                name=LT_ZEILE_NAME, status="Sonstiges", halbjahr=hj, bemerkung=text))
+            neu += 1
+    return neu, aktualisiert
+
+
 def alias_vorschlag(vorname: str, nachname: str) -> str:
     """Vorschlag fuer den Lerntheken-Alias: erste 2 Buchstaben des Vornamens,
     Punkt, erste 2 Buchstaben des Nachnamens -- "Anton Berger" -> "an.be".

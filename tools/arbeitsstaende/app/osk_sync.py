@@ -44,6 +44,10 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+# Diese Liste ist eine reine MATHE-Liste, deshalb werden nur Mathe-Ergebnisse
+# uebernommen. Auf None setzen, um alle Faecher zu holen.
+NUR_FACH = "mathe"
+
 # Blattnamen, die dieses Skript anlegt und verwaltet.
 BLATT_DATEN = "App-Daten"
 BLATT_ZUORDNUNG = "App-Zuordnung"
@@ -147,6 +151,8 @@ class AppDaten:
             if hj not in self.halbjahre:
                 self.halbjahre.append(hj)
         for fach in payload.get("subjects", []):
+            if NUR_FACH and fach.get("key") != NUR_FACH:
+                continue
             if not any(f["key"] == fach["key"] for f in self.faecher):
                 self.faecher.append(fach)
         for stud in payload.get("students", []):
