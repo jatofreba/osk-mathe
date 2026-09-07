@@ -10,3 +10,4 @@ stations_out.txt
 osk_sync_config.json
 tools/arbeitsstaende/osk_sync_config.json
 __pycache__/
+tools/arbeitsstaende/app/osk_einstellungen.json

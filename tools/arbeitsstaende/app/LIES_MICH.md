@@ -1,0 +1,122 @@
+# Arbeitsstände -- Desktop-Anwendung
+
+Eine eigenständige Python-Anwendung zur Bausteinarbeit -- als Ersatz für die
+Excel/VBA-Version. Läuft nur auf deinem eigenen Rechner, schreibt direkt in
+eine ganz normale .xlsx-Datei (kein Makro-Sicherheitshinweis, kein
+"Inhalt aktivieren").
+
+## Einmalige Einrichtung
+
+1. Python 3 muss installiert sein. Prüfen im Terminal:
+   ```
+   python3 --version
+   ```
+   Falls nicht vorhanden: https://www.python.org/downloads/ (Installer für Mac).
+   Falls du Python über Homebrew installierst, zusätzlich:
+   ```
+   brew install python-tk
+   ```
+   (Die Oberfläche braucht das "tkinter"-Paket, das bei manchen Homebrew-
+   Installationen separat dazukommt. Der Installer von python.org bringt
+   es schon mit.)
+
+2. Eine einzige Abhängigkeit installieren:
+   ```
+   pip3 install openpyxl
+   ```
+
+## Starten
+
+```
+python3 arbeitsstaende_app.py
+```
+
+Am einfachsten machst du dir eine Doppelklick-Startdatei (einmalig):
+Rechtsklick auf einen neuen Text-Datei-Namen `Arbeitsstände starten.command`
+mit dem Inhalt:
+```
+cd "ORDNERPFAD_HIER_EINSETZEN"
+python3 arbeitsstaende_app.py
+```
+und einmal ausführbar machen: `chmod +x "Arbeitsstände starten.command"`.
+Danach reicht ein Doppelklick auf diese Datei.
+
+## Bedienung
+
+- **Datei → Öffnen…**: deine bestehende .xlsx/.xlsm-Datei laden (auch die
+  bisherige Excel-Datei mit den 29 Personenblättern liest die App ein).
+- Links: Liste aller Schüler:innen, **sortiert nach Jahrgangsstufe und
+  innerhalb der Stufe alphabetisch**. Fehlt bei jemandem die
+  Jahrgangsstufe, rutscht die Person ans Ende der Liste -- einfach im
+  Kopfbereich rechts nachtragen, dann steht sie beim nächsten Aktualisieren
+  richtig einsortiert. Überfällige oder offene Deadlines sind unabhängig
+  von der Sortierung weiterhin rot bzw. gelb markiert (siehe Deadline-
+  Spalte). Suchfeld filtert zusätzlich nach Namen. **+ Hinzufügen** /
+  **− Entfernen** für die ganze Person.
+- Die Spalte **FB zuletzt** hat einen eigenen Farbcode (unabhängig von der
+  Zeilenfarbe für Deadlines): 🟢 vor bis zu 7 Tagen da gewesen, 🟡 8-14
+  Tage her, 🔴 länger her oder noch nie. Die zwei Schwellenwerte stehen als
+  `FB_GRUEN_TAGE` / `FB_GELB_TAGE` ganz am Anfang der Klasse `App` in
+  `arbeitsstaende_app.py`, falls dir andere Abstände lieber sind -- sag
+  mir sonst einfach Bescheid, dann ändere ich es.
+- **War heute im FB**: eine oder mehrere Personen in der Liste auswählen
+  (mehrere geht mit Cmd-Klick bzw. Shift-Klick) und klicken -- trägt das
+  heutige Datum ein.
+- **FB-Besuch nachtragen…**: genauso, fragt aber nach einem Datum (z.B. für
+  einen vergessenen Eintrag von letzter Woche).
+- Rechts: Kopfdaten (Kursung, Jahrgangsstufe, HJ-Note). "Letzter Besuch FB"
+  wird hier nur angezeigt -- eingetragen wird ausschließlich über die beiden
+  Buttons links, damit es nicht zwei widersprüchliche Datenquellen gibt.
+  Darunter die Bausteinliste dieser Person. **+ Baustein** legt eine neue Zeile an
+  (Standard-Bausteine UND frei benannte individuelle Zeilen -- beides geht
+  genau wie bisher in Excel). Doppelklick auf eine Zeile öffnet sie zum
+  Bearbeiten.
+- **Bearbeiten → Standard-Bausteine bearbeiten…**: die Liste, die neu
+  angelegte Schüler:innen automatisch bekommen (entspricht der alten
+  "Vorlage_31" in Excel).
+- **Datei → Speichern**: schreibt direkt in dieselbe Datei zurück -- kein
+  Download, kein Umbenennen nötig. **Speichern unter…** für eine Kopie oder
+  den allerersten Speichervorgang.
+
+## Speichern und automatische Sicherung
+
+- **Beim Öffnen** fragt die App einmal, unter welchem Namen deine Änderungen
+  gespeichert werden sollen (Vorschlag: derselbe Ordner, gleicher Name,
+  Endung `.xlsx`). Die **geöffnete Datei selbst wird dabei nie verändert** --
+  weder beim ersten Öffnen noch danach. Brichst du diese Abfrage ab, wird
+  nichts vorgemerkt; "Speichern" fragt dann beim nächsten Mal erneut danach.
+- Ab dann läuft eine **automatische Sicherung alle 5 Minuten** im
+  Hintergrund, sobald es etwas Ungespeichertes gibt -- lautlos, ohne
+  Rückfrage. Die Statuszeile unten zeigt jeweils Uhrzeit und Zieldatei; falls
+  es einmal nicht klappt (z.B. Datei gerade in Excel geöffnet), steht dort
+  eine Warnung.
+- **Datei → Speichern** und **Speichern unter…** funktionieren wie gewohnt
+  daneben, für's Speichern zwischendurch von Hand.
+
+## Was übernommen wird, wenn du deine bisherige Excel-Datei öffnest
+
+Alle Personen, alle Bausteinzeilen (auch deine individuellen Zusatzzeilen),
+Status, Noten, Termine und die komplette FB-Besuchshistorie aus dem
+Anwesenheits-Raster im Namen-Blatt werden eingelesen. Die Besuchshistorie
+ist jetzt direkt in der App nutzbar (siehe "War heute im FB" oben) und wird
+beim Speichern als das gleiche Datums-Raster zurückgeschrieben -- neue
+Besuchstage werden dabei automatisch zu neuen Spalten.
+
+## Was sich ändert
+
+- Gespeichert wird als **.xlsx ohne Makros** -- die Buttons/VBA aus der
+  alten Datei sind danach weg, weil du ab jetzt über diese Anwendung statt
+  über Excel-Buttons arbeitest. Deine ursprüngliche .xlsm-Datei bleibt beim
+  ersten Öffnen unangetastet; "Speichern unter…" legt beim allerersten Mal
+  eine neue Datei an.
+- "Aktueller Baustein" und "Nächste Deadline" im Namen-Blatt werden beim
+  Speichern automatisch neu berechnet (gleiche Logik wie bisher: nächster
+  anstehender LZK-Termin, sonst "Frist vereinbaren!", wenn ein Baustein
+  "In Bearbeitung" ist, aber kein Termin steht).
+
+## Getestet
+
+Die komplette Lade-/Speicherlogik läuft unter `python3 test_arbeitsstaende_data.py`
+gegen automatisierte Tests (Laden, Hinzufügen, Entfernen, individuelle
+Bausteine, Rundtrip-Erhalt aller Daten). Diese Datei kannst du jederzeit
+erneut laufen lassen, auch nach eigenen Änderungen am Code.
