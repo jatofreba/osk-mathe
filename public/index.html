@@ -975,7 +975,7 @@ textarea.form-input{
       <div class="admin-title">👥 Lerngruppen-Übersicht</div>
       <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
       <button class="btn-act btn-outline" onclick="openSingle()">+ Einzeln anlegen</button>
-      <button class="btn-act btn-outline" onclick="openSingleAdmin()">+ Mit-Admin anlegen</button>
+      <button class="btn-act btn-outline" id="btn-create-admin" style="display:none;" onclick="openSingleAdmin()">+ Mit-Admin anlegen</button>
       <button class="btn-act btn-outline" onclick="loadKlasse()">↺ Laden</button>
     </div>
     <div id="admin-peers-panel" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;">
@@ -2450,16 +2450,22 @@ async function showApp() {
     const tabAdmin = document.getElementById('tab-admin');
     const tabLerntheke = document.getElementById('tab-lerntheke');
     const tabHome = document.getElementById('tab-home');
-    if (barRole) barRole.style.display = '';
+    if (barRole) {
+      barRole.textContent = me.superAdmin ? 'Super-Admin' : 'Admin';
+      barRole.style.display = '';
+    }
     if (tabAdmin) tabAdmin.style.display = '';
-    // Mein Standard-Fach ist ein Account-Attribut, daher prominent in der Topbar (nicht in
-    // einer einzelnen Ansicht versteckt) - steuert u.a. die Vorauswahl bei neuen Input-Terminen.
+    // Standard-Fach wählt nur ein Super-Admin selbst - bei normalen Admins legt es ein
+    // Super-Admin in der Lerngruppen-Übersicht fest, deshalb bleibt das Feld dort verborgen.
     const barSubj = document.getElementById('bar-default-subject');
-    if (barSubj) {
+    if (barSubj && me.superAdmin) {
       barSubj.innerHTML = '<option value="">Fach: keine Präferenz</option>' + subjectsMeta.map(s => `<option value="${s.id}">Fach: ${escHtml(s.name)}</option>`).join('');
       barSubj.value = (me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
       barSubj.style.display = '';
     }
+    // Admins anlegen/löschen ist Super-Admin-Sache.
+    const btnCreateAdmin = document.getElementById('btn-create-admin');
+    if (btnCreateAdmin && me.superAdmin) btnCreateAdmin.style.display = '';
     const tabHalbjahr = document.getElementById('tab-halbjahr');
     if (tabHalbjahr) tabHalbjahr.style.display = '';
     const tabKlasse = document.getElementById('tab-klasse');
@@ -3036,17 +3042,51 @@ async function loadAdminPeers() {
     if (!r.ok) return;
     const peers = await r.json();
     if (!peers.length) { panel.style.display = 'none'; return; }
+    // Fach zuweisen, zum Super-Admin machen und löschen darf nur ein Super-Admin.
+    const canManage = !!(me && me.superAdmin);
     list.innerHTML = peers.map(p => `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <span>${p.username}</span>
-        <div style="display:flex;gap:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <span>${escHtml(p.username)}${p.superAdmin ? ' <span class="pill pill-purple" style="font-size:10px;">Super-Admin</span>' : ''}</span>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+          ${canManage ? `
+            <select class="form-input" style="width:auto;padding:4px 8px;font-size:12px;"
+              title="Fach dieser Lernbegleitung" onchange="setPeerDefaultSubject(${p.id}, this.value)">
+              <option value="">Fach: keine Präferenz</option>
+              ${subjectsMeta.map(s => `<option value="${s.id}"${p.defaultSubjectId === s.id ? ' selected' : ''}>Fach: ${escHtml(s.name)}</option>`).join('')}
+            </select>
+            <button class="btn-icon" title="${p.superAdmin ? 'Super-Admin-Status entziehen' : 'Zum Super-Admin machen'}"
+              onclick="setPeerSuperAdmin(${p.id},'${escHtml(p.username)}',${p.superAdmin ? 'false' : 'true'})">${p.superAdmin ? '★' : '☆'}</button>` : ''}
           <button class="btn-icon" onclick="openResetAdmin(${p.id},'${p.username}')" title="Passwort zurücksetzen">🔑</button>
-          <button class="btn-icon red" onclick="deleteAdminPeer(${p.id},'${p.username}')" title="Admin-Account löschen">🗑</button>
+          ${canManage ? `<button class="btn-icon red" onclick="deleteAdminPeer(${p.id},'${p.username}')" title="Admin-Account löschen">🗑</button>` : ''}
         </div>
       </div>
     `).join('');
     panel.style.display = '';
   } catch {}
+}
+
+// Super-Admin legt das Fach einer anderen Lernbegleitung fest (die kann es selbst nicht ändern).
+async function setPeerDefaultSubject(id, value) {
+  const subjectId = value ? parseInt(value) : null;
+  const r = await fetch(`/api/admin/peer/${id}/default-subject`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ subjectId })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Speichern.'); loadAdminPeers(); }
+}
+
+// Super-Admin-Status vergeben oder entziehen.
+async function setPeerSuperAdmin(id, name, makeSuper) {
+  const frage = makeSuper
+    ? `${name} zum Super-Admin machen? Damit darf die Person Admins anlegen/löschen, Fächer festlegen und fremde Termine stornieren.`
+    : `${name} den Super-Admin-Status entziehen?`;
+  if (!confirm(frage)) return;
+  const r = await fetch(`/api/admin/peer/${id}/super-admin`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ superAdmin: makeSuper })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Ändern.'); return; }
+  loadAdminPeers();
 }
 
 async function deleteAdminPeer(id, name) {
@@ -3639,10 +3679,18 @@ function renderCalDetail() {
       }
     }
     if (isAdmin) {
-      const editBtn = `<button class="btn-act btn-outline" onclick="openTalkingSlotEditModal(${it.id},'calendar')">Bearbeiten</button>`;
-      actions = it.booked
-        ? editBtn + `<button class="btn-act btn-red" onclick="calCancelSession(${it.session_id})">Stornieren</button>`
-        : editBtn + `<button class="btn-act btn-red" onclick="calDeleteSlot(${it.id})">Löschen</button>`;
+      // Eigene Termine darf jede Lernbegleitung ändern; fremde nur Super-Admins (der Server
+      // prüft das nochmal, hier geht es nur darum, keine Buttons anzubieten, die scheitern).
+      const mine = it.teacherId == null || it.teacherId === me.userId;
+      const mayManage = mine || !!me.superAdmin;
+      if (mayManage) {
+        const editBtn = `<button class="btn-act btn-outline" onclick="openTalkingSlotEditModal(${it.id},'calendar')">Bearbeiten</button>`;
+        actions = it.booked
+          ? editBtn + `<button class="btn-act btn-red" onclick="calCancelSession(${it.session_id})">Stornieren</button>`
+          : editBtn + `<button class="btn-act btn-red" onclick="calDeleteSlot(${it.id})">Löschen</button>`;
+      } else {
+        actions = `<span class="pill" style="font-size:10px;">Termin einer anderen Lernbegleitung</span>`;
+      }
       // Admin darf bei Input-Terminen direkt Schüler:innen zuweisen - bei Erstellung (noch offen)
       // UND nachträglich (schon gebucht, weitere Personen dazu).
       if (it.typ === 'input') {

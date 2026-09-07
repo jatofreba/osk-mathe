@@ -112,6 +112,18 @@ async function initDB() {
         ALTER TABLE users ADD COLUMN passiv_seit TIMESTAMPTZ;
       END IF;
     END $$;
+    -- Super-Admin (2026-09-07): zusätzliche Stufe innerhalb von role='admin'. Nur Super-Admins
+    -- dürfen Admins anlegen/löschen, andere zu Super-Admins machen, Fächer (auch fremde) setzen
+    -- und Termine anderer Lernbegleitungen stornieren/verschieben. Bewusst eine eigene Spalte
+    -- statt einer neuen role, damit alle bestehenden role='admin'-Prüfungen unverändert greifen.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='super_admin') THEN
+        ALTER TABLE users ADD COLUMN super_admin BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+    UPDATE users SET super_admin = true
+      WHERE role = 'admin' AND username IN ('admin_m1m2','admin_m3m4','admin_m5m6','admin_m7m8')
+        AND super_admin = false;
     -- Altbestand: wer schon passiv ist, aber noch keinen Stempel hat, bekommt den aktuellen
     -- Zeitpunkt - damit zählt die Vergangenheit weiter und erst ab jetzt nicht mehr.
     UPDATE users SET passiv_seit = NOW() WHERE aktiv = false AND passiv_seit IS NULL;
@@ -444,6 +456,33 @@ const requireLogin = (req, res, next) =>
 const requireAdmin = (req, res, next) =>
   req.session.role === 'admin' ? next() : res.status(403).json({ error: 'Kein Zugriff' });
 
+// Super-Admin-Status bewusst frisch aus der DB lesen statt aus der Session: sonst müssten
+// bestehende Sessions (und frisch beförderte Admins) sich erst neu einloggen.
+async function isSuperAdmin(userId) {
+  if (!userId) return false;
+  try {
+    const r = await pool.query('SELECT super_admin FROM users WHERE id=$1', [userId]);
+    return !!(r.rows[0] && r.rows[0].super_admin);
+  } catch { return false; }
+}
+
+const requireSuperAdmin = async (req, res, next) => {
+  if (req.session.role !== 'admin') return res.status(403).json({ error: 'Kein Zugriff' });
+  if (await isSuperAdmin(req.session.userId)) return next();
+  return res.status(403).json({ error: 'Nur Super-Admins dürfen das' });
+};
+
+// Termine gehören der eingetragenen Lernbegleitung (talking_slots.admin_id). Normale Admins
+// dürfen nur ihre eigenen ändern/stornieren, Super-Admins alle der Lerngruppe.
+async function mayManageSlot(req, slotId) {
+  const r = await pool.query('SELECT admin_id FROM talking_slots WHERE id=$1 AND klasse=$2',
+    [slotId, req.session.klasse]);
+  if (!r.rows.length) return { ok: false, status: 404, error: 'Nicht gefunden' };
+  if (r.rows[0].admin_id === req.session.userId) return { ok: true };
+  if (await isSuperAdmin(req.session.userId)) return { ok: true };
+  return { ok: false, status: 403, error: 'Dieser Termin gehört einer anderen Lernbegleitung - nur Super-Admins dürfen ihn ändern' };
+}
+
 // Vorgegebene Auswahl für die Qualitäts-Bewertung von Mathe-Talks (Admin)
 const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
 // Tri-State statt Boolean, damit "nicht teilgenommen" von "noch nicht bewertet" unterscheidbar ist.
@@ -612,7 +651,7 @@ app.post('/api/login', async (req, res) => {
       userId: user.id, username: user.username,
       klasse: user.klasse, role: user.role
     });
-    res.json({ ok: true, userId: user.id, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password, defaultSubjectId: user.default_subject_id });
+    res.json({ ok: true, userId: user.id, username: user.username, klasse: user.klasse, role: user.role, mustChangePassword: user.must_change_password, defaultSubjectId: user.default_subject_id, superAdmin: !!user.super_admin });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -622,17 +661,19 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', async (req, res) => {
   if (!req.session.userId) return res.json({ loggedIn: false });
-  const kr = await pool.query('SELECT kurs, default_subject_id AS "defaultSubjectId" FROM users WHERE id=$1', [req.session.userId]).catch(() => ({ rows: [] }));
+  const kr = await pool.query('SELECT kurs, default_subject_id AS "defaultSubjectId", super_admin AS "superAdmin" FROM users WHERE id=$1', [req.session.userId]).catch(() => ({ rows: [] }));
   res.json({
     loggedIn: true, userId: req.session.userId,
     username: req.session.username, klasse: req.session.klasse, role: req.session.role,
     kurs: kr.rows[0]?.kurs || 'E',
-    defaultSubjectId: kr.rows[0]?.defaultSubjectId ?? null
+    defaultSubjectId: kr.rows[0]?.defaultSubjectId ?? null,
+    superAdmin: !!kr.rows[0]?.superAdmin
   });
 });
 
 // Admin wählt ihr/sein "Standard-Fach" - steht danach in Übersichten (Halbjahr-Übersicht etc.) zuerst.
-app.post('/api/set-default-subject', requireAdmin, async (req, res) => {
+// Nur Super-Admins wählen ihr Fach selbst; bei normalen Admins legt es ein Super-Admin fest.
+app.post('/api/set-default-subject', requireSuperAdmin, async (req, res) => {
   try {
     const { subjectId } = req.body;
     if (subjectId != null) {
@@ -1025,7 +1066,7 @@ app.post('/api/admin/create-student', requireAdmin, async (req, res) => {
 
 // Admin legt Mit-Admin für die eigene Lerngruppe an - muss beim ersten Login das (vom anlegenden
 // Admin vergebene, temporäre) Passwort selbst ändern, analog zu den initial geseedeten Accounts.
-app.post('/api/admin/create-admin', requireAdmin, async (req, res) => {
+app.post('/api/admin/create-admin', requireSuperAdmin, async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Fehlende Angaben' });
@@ -1077,10 +1118,46 @@ app.post('/api/admin/reset-password', requireAdmin, async (req, res) => {
 app.get('/api/admin/peers', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, username FROM users WHERE klasse=$1 AND role=$2 AND id != $3 ORDER BY username',
+      `SELECT id, username, super_admin AS "superAdmin", default_subject_id AS "defaultSubjectId"
+       FROM users WHERE klasse=$1 AND role=$2 AND id != $3 ORDER BY username`,
       [req.session.klasse, 'admin', req.session.userId]
     );
     res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Super-Admin legt das Fach einer anderen Lernbegleitung fest (Standard-Fach des Accounts).
+app.post('/api/admin/peer/:id/default-subject', requireSuperAdmin, async (req, res) => {
+  try {
+    const { subjectId } = req.body;
+    if (subjectId != null) {
+      const check = await pool.query('SELECT id FROM subjects WHERE id=$1', [subjectId]);
+      if (!check.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
+    }
+    const r = await pool.query(
+      'UPDATE users SET default_subject_id=$1 WHERE id=$2 AND klasse=$3 AND role=$4 RETURNING id',
+      [subjectId ?? null, req.params.id, req.session.klasse, 'admin']
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Super-Admin befördert eine andere Lernbegleitung zum Super-Admin (oder nimmt den Status
+// wieder weg). Der eigene Status lässt sich nicht ändern - sonst könnte sich die letzte
+// Person versehentlich selbst aussperren.
+app.post('/api/admin/peer/:id/super-admin', requireSuperAdmin, async (req, res) => {
+  try {
+    const { superAdmin } = req.body;
+    if (typeof superAdmin !== 'boolean') return res.status(400).json({ error: 'Ungültig' });
+    if (Number(req.params.id) === req.session.userId)
+      return res.status(400).json({ error: 'Eigener Super-Admin-Status kann nicht geändert werden' });
+    const r = await pool.query(
+      'UPDATE users SET super_admin=$1 WHERE id=$2 AND klasse=$3 AND role=$4 RETURNING id',
+      [superAdmin, req.params.id, req.session.klasse, 'admin']
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -1100,7 +1177,7 @@ app.post('/api/admin/reset-admin-password', requireAdmin, async (req, res) => {
 
 // Admin löscht einen Mit-Admin der eigenen Lerngruppe - weder sich selbst noch den letzten
 // verbleibenden Admin-Account (sonst wäre die Lerngruppe ausgesperrt).
-app.delete('/api/admin/peer/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/peer/:id', requireSuperAdmin, async (req, res) => {
   try {
     if (Number(req.params.id) === req.session.userId)
       return res.status(400).json({ error: 'Eigener Account kann nicht gelöscht werden' });
@@ -1904,6 +1981,8 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
   try {
     const { datum, uhrzeit, ort, halbjahr, dauer } = req.body;
     if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const may = await mayManageSlot(req, req.params.id);
+    if (!may.ok) return res.status(may.status).json({ error: may.error });
     const conflict = await pool.query(
       `SELECT id FROM talking_slots WHERE klasse=$1 AND datum=$2 AND uhrzeit=$3 AND id != $4`,
       [req.session.klasse, datum, uhrzeit || '', req.params.id]
@@ -1949,6 +2028,8 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
 
 app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {
   try {
+    const may = await mayManageSlot(req, req.params.id);
+    if (!may.ok) return res.status(may.status).json({ error: may.error });
     const booked = await pool.query('SELECT id FROM talking_sessions WHERE slot_id=$1', [req.params.id]);
     if (booked.rows.length) return res.status(409).json({ error: 'Termin ist bereits gebucht' });
     const r = await pool.query(
@@ -2052,6 +2133,14 @@ app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, as
 
 app.delete('/api/admin/talking-sessions/:id', requireAdmin, async (req, res) => {
   try {
+    // Buchung gehört zum Slot - deshalb entscheidet dessen Lernbegleitung über das Stornieren.
+    const slotRow = await pool.query(`
+      SELECT sl.id FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+      WHERE ts.id=$1 AND sl.klasse=$2
+    `, [req.params.id, req.session.klasse]);
+    if (!slotRow.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const may = await mayManageSlot(req, slotRow.rows[0].id);
+    if (!may.ok) return res.status(may.status).json({ error: may.error });
     const r = await pool.query(`
       DELETE FROM talking_sessions ts USING talking_slots sl
       WHERE ts.slot_id = sl.id AND ts.id=$1 AND sl.klasse=$2
@@ -2097,7 +2186,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
                ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
                pu.username AS "presenterUsername",
-               tu.username AS "teacherUsername",
+               tu.username AS "teacherUsername", s.admin_id AS "teacherId",
                (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
                (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
                COALESCE(json_agg(json_build_object('id', inv.id, 'username', lu.username, 'status', inv.status, 'attendedStatus', inv.attended_status))
