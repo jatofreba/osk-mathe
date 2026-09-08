@@ -134,7 +134,10 @@ function chip(s) {
     '<div class="chip-time"><span style="color:' + esc(color) + ';">' + icon(s.typ) + '</span>' +
       timeRange(s.uhrzeit, s.dauer) + ' <span class="chip-type">' + typ + '</span></div>' +
     '<div class="chip-meta"><span class="chip-subj" style="color:' + esc(color) + ';">' +
-      esc(s.subjectName || '') + '</span>' + ort + (s.booked ? ' · gebucht' : ' · frei') + '</div>' +
+      esc(s.subjectName || '') + '</span>' + ort +
+      // Ein ausgeschriebenes Thema steht auch bei noch freien Terminen schon dabei.
+      (s.slotThema && !s.booked ? ' · ' + esc(s.slotThema) : '') +
+      (s.booked ? ' · gebucht' : ' · frei') + '</div>' +
   '</div>';
 }
 

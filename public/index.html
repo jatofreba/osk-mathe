@@ -1351,6 +1351,10 @@ textarea.form-input{
       <label class="form-label" for="tsedit-ort">Ort</label>
       <input class="form-input" id="tsedit-ort" placeholder="z.B. Mathe-Fachbüro M3/M4">
     </div>
+    <div class="form-group" id="tsedit-thema-group">
+      <label class="form-label" for="tsedit-thema">Thema <span style="font-weight:400;color:var(--md-on-surface-variant);">(optional)</span></label>
+      <input class="form-input" id="tsedit-thema" placeholder="z.B. Bruchrechnen üben">
+    </div>
     <div id="tsedit-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:-8px;margin-bottom:8px;" role="status" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-slot-edit')">Abbrechen</button>
@@ -1414,6 +1418,13 @@ textarea.form-input{
     <div class="form-group"><label class="form-label" for="islot-uhrzeit">Uhrzeit</label><input class="form-input" id="islot-uhrzeit" type="time"></div>
     <div class="form-group"><label class="form-label" for="islot-dauer">Dauer (Minuten)</label><input class="form-input" id="islot-dauer" type="number" min="5" max="600" value="45"></div>
     <div class="form-group"><label class="form-label" for="islot-ort">Ort</label><input class="form-input" id="islot-ort" placeholder="z.B. Mathe-Fachbüro"></div>
+    <div class="form-group">
+      <label class="form-label" for="islot-thema">Thema <span style="font-weight:400;color:var(--md-on-surface-variant);">(optional)</span></label>
+      <input class="form-input" id="islot-thema" placeholder="z.B. Bruchrechnen üben">
+      <div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;">
+        Steht dann schon am ausgeschriebenen Termin – Zuweisen ist nicht nötig.
+      </div>
+    </div>
     <div id="islot-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-input-slot')">Abbrechen</button>
@@ -1766,7 +1777,8 @@ function lwChip(s) {
   const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
   // Gebucht: Thema statt "gebucht" zeigen (kein Personenbezug, nur der Inhalt) - fällt auf
   // "gebucht" zurück, falls (theoretisch) kein Thema gesetzt ist.
-  const metaText = s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht') : 'frei';
+  const metaText = s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht')
+                           : (s.slotThema ? escHtml(s.slotThema) + ' · frei' : 'frei');
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
@@ -1847,7 +1859,8 @@ async function loadLoginWeek() {
       const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
         <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''}</div>
-        <div class="lw-chip-meta">${s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht') : 'frei'}</div>
+        <div class="lw-chip-meta">${s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht')
+          : (s.slotThema ? escHtml(s.slotThema) + ' · frei' : 'frei')}</div>
       </div>`;
     }).join('')}
     ${deadlines.map(d => `<div class="lw-chip" style="margin-bottom:3px;">
@@ -3666,7 +3679,9 @@ function renderCalDetail() {
     const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}${teacherLabel}`;
     let body, actions = '';
     if (!it.booked) {
-      body = '<span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>';
+      // Ein ausgeschriebenes Thema steht auch dann schon da, wenn noch niemand gebucht ist.
+      body = (it.slotThema ? `<div><strong>${escHtml(it.slotThema)}</strong></div>` : '')
+           + '<span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>';
       if (!isAdmin) actions = `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
     } else {
       // Bei einem FaBü, das die Lernbegleitung angelegt und zugewiesen hat, gibt es keine
@@ -3817,6 +3832,7 @@ async function openInputSlotModal(presetDate) {
   document.getElementById('islot-von').value = '';
   document.getElementById('islot-bis').value = '';
   document.getElementById('islot-weekday').value = '1';
+  document.getElementById('islot-thema').value = '';
   document.getElementById('islot-error').style.display = 'none';
   applyInputSlotSubjectDefaults();
   openModal('modal-input-slot');
@@ -3829,6 +3845,7 @@ async function submitInputSlot() {
   const uhrzeit = document.getElementById('islot-uhrzeit').value.trim();
   const dauer = parseInt(document.getElementById('islot-dauer').value) || 45;
   const ort = document.getElementById('islot-ort').value.trim();
+  const thema = document.getElementById('islot-thema').value.trim();
   const recurring = document.getElementById('islot-recurring').checked;
   let body;
   if (recurring) {
@@ -3836,11 +3853,11 @@ async function submitInputSlot() {
     const von = document.getElementById('islot-von').value;
     const bis = document.getElementById('islot-bis').value;
     if (!von || !bis) { errEl.textContent = 'Bitte Zeitraum (Von/Bis) angeben.'; errEl.style.display = 'block'; return; }
-    body = { typ:'input', uhrzeit, dauer, ort, subjectId, teacherId, recurring: { weekday, von, bis } };
+    body = { typ:'input', uhrzeit, dauer, ort, thema, subjectId, teacherId, recurring: { weekday, von, bis } };
   } else {
     const datum = document.getElementById('islot-datum').value;
     if (!datum) { errEl.textContent = 'Bitte Datum angeben.'; errEl.style.display = 'block'; return; }
-    body = { typ:'input', datum, uhrzeit, dauer, ort, subjectId, teacherId };
+    body = { typ:'input', datum, uhrzeit, dauer, ort, thema, subjectId, teacherId };
   }
   const r = await fetch('/api/admin/talking-slots', {
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -3869,7 +3886,8 @@ function openInputAssignModal(slotId) {
     themaGroup.style.display = 'none';
   } else {
     themaGroup.style.display = '';
-    document.getElementById('iassign-thema').value = '';
+    // Ist am Termin schon ein Thema ausgeschrieben, steht es hier drin statt leer.
+    document.getElementById('iassign-thema').value = slot.slotThema || '';
   }
   const already = new Set((slot.invitees || []).map(iv => iv.username));
   const available = (calClassmates || []).filter(c => !already.has(c.username));
@@ -5016,6 +5034,12 @@ function openTalkingSlotEditModal(id, source) {
   document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
   document.getElementById('tsedit-dauer').value = s.dauer || 45;
   document.getElementById('tsedit-ort').value = s.ort || '';
+  // Das ausgeschriebene Thema gehoert zum Fachbuero-Angebot. Bei Talks kommt das Thema
+  // von der vortragenden Person, und bei einem schon gebuchten Termin gilt das der Buchung -
+  // in beiden Faellen waere das Feld hier irrefuehrend.
+  const themaEditierbar = s.typ === 'input' && !s.session_id;
+  document.getElementById('tsedit-thema-group').style.display = themaEditierbar ? '' : 'none';
+  document.getElementById('tsedit-thema').value = themaEditierbar ? (s.slotThema || '') : '';
   document.getElementById('tsedit-error').style.display = 'none';
   openModal('modal-talking-slot-edit');
 }
@@ -5028,11 +5052,14 @@ async function submitTalkingSlotEdit() {
   const uhrzeit = document.getElementById('tsedit-uhrzeit').value.trim();
   const dauer = parseInt(document.getElementById('tsedit-dauer').value) || 45;
   const ort = document.getElementById('tsedit-ort').value.trim();
+  // Nur mitschicken, wenn das Feld ueberhaupt angeboten wird (offenes Fachbuero).
+  const themaSichtbar = document.getElementById('tsedit-thema-group').style.display !== 'none';
+  const thema = themaSichtbar ? document.getElementById('tsedit-thema').value.trim() : undefined;
   if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
   if (!datum) { alert('Bitte Datum angeben.'); return; }
   const r = await fetch(`/api/admin/talking-slots/${_talkingEditSlotId}/reschedule`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ datum, uhrzeit, dauer, ort, halbjahr })
+    body: JSON.stringify({ datum, uhrzeit, dauer, ort, halbjahr, thema })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Verschieben.'; errEl.style.display = 'block'; return; }

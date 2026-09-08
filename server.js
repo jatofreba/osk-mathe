@@ -226,6 +226,14 @@ async function initDB() {
         ALTER TABLE talking_slots ADD COLUMN dauer INTEGER NOT NULL DEFAULT 45;
       END IF;
     END $$;
+    -- Thema am Termin selbst (2026-09): ein Fachbüro lässt sich damit MIT Thema ausschreiben,
+    -- ohne dass schon jemand zugewiesen ist. Das Thema der Buchung (talking_sessions.thema)
+    -- bleibt davon unberührt - es überschreibt in der Anzeige das ausgeschriebene.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='thema') THEN
+        ALTER TABLE talking_slots ADD COLUMN thema TEXT NOT NULL DEFAULT '';
+      END IF;
+    END $$;
     -- Deadlines/Termine der Lernbegleitungen (klassenweit sichtbar im Kalender, alles Mathe = blau).
     CREATE TABLE IF NOT EXISTS math_deadlines (
       id         SERIAL PRIMARY KEY,
@@ -1688,7 +1696,8 @@ app.get('/api/talking-slots/open', requireLogin, async (req, res) => {
     const typ = req.query.typ === 'input' ? 'input' : 'talk';
     const subjectKey = req.query.subject || 'mathe';
     const r = await pool.query(`
-      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer, s.subject_id AS "subjectId"
+      SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer, s.subject_id AS "subjectId",
+             s.thema AS "slotThema"
       FROM talking_slots s
       JOIN subjects sub ON sub.id = s.subject_id
       WHERE s.klasse=$1 AND s.typ=$2 AND sub.key=$3 AND s.datum >= CURRENT_DATE
@@ -1765,20 +1774,26 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
 // damit nie eine Session ohne eingeladene Personen übrig bleibt (einzige Transaktion im Projekt).
 app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   const { slotId, thema, inviteeIds } = req.body;
-  if (!slotId || !thema)
-    return res.status(400).json({ error: 'Fehlende Angaben' });
+  if (!slotId) return res.status(400).json({ error: 'Fehlende Angaben' });
   const ids = [...new Set((Array.isArray(inviteeIds) ? inviteeIds : []).map(Number))].filter(id => id && id !== req.session.userId);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const slotCheck = await client.query(
-      'SELECT id, typ FROM talking_slots WHERE id=$1 AND klasse=$2',
+      'SELECT id, typ, thema FROM talking_slots WHERE id=$1 AND klasse=$2',
       [slotId, req.session.klasse]
     );
     if (!slotCheck.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Termin nicht gefunden' });
+    }
+    // Ist am Termin schon ein Thema ausgeschrieben (Fachbüro), reicht es aus;
+    // sonst muss die buchende Person eins angeben.
+    const sessionThema = (thema || '').trim() || (slotCheck.rows[0].thema || '').trim();
+    if (!sessionThema) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Fehlende Angaben' });
     }
     // Talks brauchen mind. 1 eingeladene Person; Input ist Solo-buchbar (0 Eingeladene erlaubt).
     if ((slotCheck.rows[0].typ || 'talk') === 'talk' && !ids.length) {
@@ -1802,7 +1817,7 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
     }
     const sessionResult = await client.query(
       'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,$2,$3) RETURNING id',
-      [slotId, req.session.userId, thema]
+      [slotId, req.session.userId, sessionThema]
     );
     const sessionId = sessionResult.rows[0].id;
     for (const listenerId of ids) {
@@ -1997,7 +2012,7 @@ app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) 
 // Lernbegleitung. typ='talk' (default) oder 'input'; dauer in Minuten (Default 45).
 app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
   try {
-    const { datum, uhrzeit, ort, halbjahr, recurring, typ, dauer, subjectId, teacherId } = req.body;
+    const { datum, uhrzeit, ort, halbjahr, recurring, typ, dauer, subjectId, teacherId, thema } = req.body;
     const slotTyp = typ === 'input' ? 'input' : 'talk';
     // Input-Slots brauchen kein Halbjahr (nicht in die Pokale-Zählung eingebunden).
     if (slotTyp === 'talk' && !halbjahr) return res.status(400).json({ error: 'Fehlende Angaben' });
@@ -2038,9 +2053,10 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     }
     for (const d of dates) {
       await pool.query(`
-        INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', teacherUserId, slotTyp, slotDauer, subjId]);
+        INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id, thema)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', teacherUserId, slotTyp, slotDauer, subjId,
+          (thema || '').trim()]);
     }
     res.json({ ok: true, count: dates.length });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -2050,7 +2066,7 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
 // Verhindert Terminkonflikte: kein zweiter Slot derselben Klasse am selben Datum+Uhrzeit.
 app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, res) => {
   try {
-    const { datum, uhrzeit, ort, halbjahr, dauer } = req.body;
+    const { datum, uhrzeit, ort, halbjahr, dauer, thema } = req.body;
     if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
     const may = await mayManageSlot(req, req.params.id);
     if (!may.ok) return res.status(may.status).json({ error: may.error });
@@ -2062,8 +2078,13 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
       return res.status(409).json({ error: 'Terminkonflikt: An diesem Datum/dieser Uhrzeit existiert bereits ein anderer Termin.' });
     const slotDauer = Math.min(600, Math.max(5, parseInt(dauer) || 45));
     const r = await pool.query(
-      `UPDATE talking_slots SET datum=$1, uhrzeit=$2, ort=$3, halbjahr=$4, dauer=$5 WHERE id=$6 AND klasse=$7 RETURNING id`,
-      [datum, uhrzeit || '', ort || '', halbjahr || '', slotDauer, req.params.id, req.session.klasse]
+      // Das Thema wird nur angefasst, wenn es mitgeschickt wurde - sonst wuerde ein
+      // Dialog ohne Themafeld (Talk oder schon gebucht) das ausgeschriebene loeschen.
+      `UPDATE talking_slots SET datum=$1, uhrzeit=$2, ort=$3, halbjahr=$4, dauer=$5,
+              thema = CASE WHEN $8::boolean THEN $9 ELSE thema END
+       WHERE id=$6 AND klasse=$7 RETURNING id`,
+      [datum, uhrzeit || '', ort || '', halbjahr || '', slotDauer, req.params.id, req.session.klasse,
+       thema !== undefined, (thema || '').trim()]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
@@ -2077,6 +2098,7 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     const subjectKey = req.query.subject || 'mathe';
     const r = await pool.query(`
       SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer, s.subject_id AS "subjectId",
+             s.thema AS "slotThema",
              ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji", pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
@@ -2119,9 +2141,12 @@ app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {
 app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
   try {
     const { slotId, thema, studentIds } = req.body;
-    if (!slotId || !thema || !thema.trim()) return res.status(400).json({ error: 'Fehlende Angaben' });
-    const slot = await pool.query('SELECT id FROM talking_slots WHERE id=$1 AND klasse=$2', [slotId, req.session.klasse]);
+    if (!slotId) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const slot = await pool.query('SELECT id, thema FROM talking_slots WHERE id=$1 AND klasse=$2', [slotId, req.session.klasse]);
     if (!slot.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
+    // Ist am Termin schon ein Thema ausgeschrieben, muss es hier nicht wiederholt werden.
+    const sessionThema = (thema || '').trim() || (slot.rows[0].thema || '').trim();
+    if (!sessionThema) return res.status(400).json({ error: 'Fehlende Angaben' });
     const existing = await pool.query('SELECT id FROM talking_sessions WHERE slot_id=$1', [slotId]);
     if (existing.rows.length) return res.status(409).json({ error: 'Termin bereits gebucht' });
 
@@ -2129,7 +2154,7 @@ app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
 
     const sessionResult = await pool.query(
       'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,NULL,$2) RETURNING id',
-      [slotId, thema.trim()]
+      [slotId, sessionThema]
     );
     const sessionId = sessionResult.rows[0].id;
     for (const uid of okIds) {
@@ -2255,6 +2280,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
     const [slots, deadlines] = await Promise.all([
       pool.query(`
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
+               s.thema AS "slotThema",
                ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
                pu.username AS "presenterUsername",
                tu.username AS "teacherUsername", s.admin_id AS "teacherId",
@@ -2449,7 +2475,7 @@ app.get('/api/public/week', async (req, res) => {
         SELECT s.id, s.typ, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort,
                sub.id AS "subjectId", sub.key AS "subjectKey", sub.name AS "subjectName",
                sub.color AS "subjectColor",
-               (ts.id IS NOT NULL) AS booked, ts.thema
+               (ts.id IS NOT NULL) AS booked, ts.thema, s.thema AS "slotThema"
         FROM talking_slots s
         LEFT JOIN subjects sub ON sub.id = s.subject_id
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
