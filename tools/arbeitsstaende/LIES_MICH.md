@@ -166,6 +166,17 @@ Anderer Zielordner? Über die Umgebungsvariable `OSK_APP_ZIEL`. Fehlt der Ordner
 ganz (anderer Rechner, kein OneDrive), läuft das Skript still durch, damit
 Commits nicht daran scheitern.
 
+## Schreibzugriff auf den Server
+
+Genau eine Sache geht zurück an die Lerntheken-App: **LZK-Termine**. Sie
+werden automatisch geschickt, sobald du hier ein Datum änderst, oder auf einen
+Rutsch über *Lerntheken-App → LZK-Termine zum Server schicken…* (mit
+Bestätigungsliste). Status und Kleeblätter einer LZK bleiben dabei unverändert,
+gelöscht wird nichts. Der Rest des Werkzeugs liest ausschließlich.
+
+Über *Lerntheken-App → Offline arbeiten* lässt sich jede Verbindung
+unterbinden; die Liste bleibt vollständig bedienbar.
+
 ## Datenschutz
 
 Es werden personenbezogene Schülerdaten verarbeitet. Die Anwendung spricht

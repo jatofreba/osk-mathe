@@ -15,8 +15,12 @@ Der Zugriff läuft über einen ganz normalen Admin-Login der App (HTTPS), nicht
 mehrere Lerngruppen entsprechend mehrere Konten in der Konfiguration angeben.
 
 Umgekehrt laesst sich aus der Excel-Liste die Kontenliste fuer den Bulk-Import
-erzeugen (--bulk-liste). Angelegt werden die Konten in der Weboberflaeche:
-dieses Werkzeug schreibt BEWUSST nie auf dem Server, es liest nur.
+erzeugen (--bulk-liste). Angelegt werden die Konten in der Weboberflaeche.
+
+Geschrieben wird auf dem Server nur an EINER Stelle: `lzk_setzen()` traegt einen
+vereinbarten LZK-Termin ein. Das passiert ausschliesslich, wenn es in der
+Oberflaeche ausdruecklich angestossen und die Liste der Aenderungen bestaetigt
+wurde -- nie beim Abrufen, nie automatisch. Alles andere ist reines Lesen.
 
 Aufruf:
     python3 osk_sync.py                      # nutzt osk_sync_config.json
@@ -136,6 +140,29 @@ class AppClient:
         gelieferte Fortschritt ist dagegen der tatsaechliche Gesamtstand.
         """
         return self._get("/api/admin/students")
+
+    def lzk_setzen(self, user_id, lerntheke: str, typ: str, datum,
+                   status: str, pokale: int) -> dict:
+        """Traegt einen LZK-Termin ein (der einzige Schreibzugriff dieses Werkzeugs).
+
+        `status` und `pokale` MUESSEN mitgegeben werden: die Schnittstelle
+        schreibt beide Felder bei jedem Aufruf mit. Wer nur ein Datum schickt,
+        setzt damit eine bestandene LZK samt Kleeblaettern zurueck -- deshalb
+        werden hier immer die Werte durchgereicht, die schon auf dem Server
+        stehen.
+        """
+        if not user_id or not lerntheke or not typ:
+            raise ValueError("user_id, lerntheke und typ sind Pflicht.")
+        if isinstance(datum, (date, datetime)):
+            datum = datum.strftime("%Y-%m-%d")
+        return self._post("/api/admin/lzk", {
+            "userId": user_id,
+            "lerntheke": lerntheke,
+            "typ": typ,
+            "datum": datum,
+            "status": status or "ausstehend",
+            "pokale": int(pokale or 0),
+        })
 
     def lerntheken_meta(self) -> List[dict]:
         """Alle Lerntheken mit key, Titel und Stationszahl."""

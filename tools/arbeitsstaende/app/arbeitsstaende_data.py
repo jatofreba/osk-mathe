@@ -192,6 +192,64 @@ def lt_lerntheke_zeilen(progress: dict, lzk_liste, lerntheken, aktuelles_hj: str
     return zeilen
 
 
+# LZK 1 in der Bausteinzeile ist die Basis-, LZK 2 die Aufbau-LZK -- genau so
+# baut lt_lerntheke_zeilen() die Zeilen aus den Serverdaten auf.
+LZK_TYP_JE_NUMMER = {1: "Basis", 2: "Aufbau"}
+
+
+def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
+    """Vergleicht die LZK-Termine einer Person mit dem Stand auf dem Server.
+
+    Betrachtet werden nur Bausteinzeilen, die aus der Lerntheken-App stammen
+    (Marker in der Bemerkung) und deren Name zu einer Lerntheke gehoert -- von
+    Hand angelegte Zeilen haben keine Entsprechung auf dem Server.
+
+    Rueckgabe: (aenderungen, uebersprungen). Jede Aenderung enthaelt alles,
+    was der Server zum Speichern braucht -- inklusive `status` und `pokale`
+    aus dem bestehenden Eintrag: die Schnittstelle schreibt beide Felder immer
+    mit, ein Termin allein wuerde eine bestandene LZK also zuruecksetzen.
+    """
+    key_je_titel = {(t or "").strip().lower(): k for k, t in (titel_je_key or {}).items()}
+    server = {}
+    for eintrag in konto.get("lzk") or []:
+        server[(eintrag.get("lerntheke"), eintrag.get("typ"))] = eintrag
+
+    aenderungen, uebersprungen = [], []
+    for b in student.bausteine:
+        if not _ist_app_zeile(b):
+            continue
+        key = key_je_titel.get((b.name or "").strip().lower())
+        if not key:
+            continue
+        for nummer, typ in LZK_TYP_JE_NUMMER.items():
+            lokal = _to_date(getattr(b, f"lzk_datum_{nummer}"))
+            vorhanden = server.get((key, typ))
+            auf_server = _to_date((vorhanden or {}).get("datum"))
+            if lokal == auf_server:
+                continue
+            if lokal is None:
+                # Loeschen waere nicht rueckholbar -- das bleibt der
+                # Weboberflaeche vorbehalten, hier wird nur berichtet.
+                uebersprungen.append({
+                    "person": student.voller_name, "titel": b.name, "typ": typ,
+                    "grund": f"lokal kein Termin, auf dem Server {_fmt_kurz(auf_server)}",
+                })
+                continue
+            aenderungen.append({
+                "person": student.voller_name,
+                "alias": student.alias.strip().lower(),
+                "user_id": konto.get("id"),
+                "lerntheke": key,
+                "titel": b.name,
+                "typ": typ,
+                "alt": auf_server,
+                "neu": lokal,
+                "status": (vorhanden or {}).get("status") or "ausstehend",
+                "pokale": (vorhanden or {}).get("pokale") or 0,
+            })
+    return aenderungen, uebersprungen
+
+
 def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
     """Bemerkungstext fuer die Talk-/Input-Zeile eines Halbjahres, oder None."""
     sub = (bucket.get("bySubject") or {}).get(fach_key) or {}

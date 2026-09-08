@@ -17,9 +17,11 @@ from typing import List
 from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
     halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren, ist_json_pfad,
+    lt_lzk_aenderungen,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
-# Zugriff auf die Lerntheken-App (Anmeldung und Auswertung -- NUR lesend).
+# Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
+# geschrieben wird ausschliesslich der LZK-Termin (siehe app_lzk_senden).
 # Liegt bewusst im selben Ordner, damit die Anwendung ohne Installation läuft.
 import osk_sync
 
@@ -205,6 +207,66 @@ class SchuelerDialog(tk.Toplevel):
         self.destroy()
 
 
+class LzkSendenDialog(tk.Toplevel):
+    """Zeigt vor dem Schreiben genau, was sich auf dem Server aendern wuerde.
+
+    Der einzige Weg, auf dem dieses Werkzeug ueberhaupt etwas auf dem Server
+    veraendert -- deshalb steht hier jede Zeile einzeln, statt nur eine Anzahl."""
+
+    def __init__(self, parent, aenderungen, uebersprungen, klasse):
+        super().__init__(parent)
+        self.title("LZK-Termine zum Server schicken")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self, text=f"Lerngruppe {klasse} — {len(aenderungen)} Termin(e) "
+                             f"werden auf dem Server eingetragen:",
+                  font=("", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 6))
+
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=10)
+        spalten = ("lerntheke", "typ", "alt", "neu")
+        tabelle = ttk.Treeview(rahmen, columns=spalten, show="tree headings", height=14)
+        tabelle.heading("#0", text="Person")
+        for key, text, breite in (("lerntheke", "Lerntheke", 200), ("typ", "LZK", 70),
+                                  ("alt", "auf dem Server", 120), ("neu", "neu", 120)):
+            tabelle.heading(key, text=text)
+            tabelle.column(key, width=breite)
+        tabelle.column("#0", width=160)
+        for i, a in enumerate(aenderungen):
+            tabelle.insert("", "end", iid=str(i), text=a["person"],
+                           values=(a["titel"], a["typ"],
+                                   fmt_datum(a["alt"]) or "—", fmt_datum(a["neu"])))
+        sb = ttk.Scrollbar(rahmen, command=tabelle.yview)
+        tabelle.config(yscrollcommand=sb.set)
+        tabelle.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        if uebersprungen:
+            text = "\n".join(f"• {u['person']}: {u['titel']} ({u['typ']}) — {u['grund']}"
+                             for u in uebersprungen[:6])
+            if len(uebersprungen) > 6:
+                text += f"\n… und {len(uebersprungen) - 6} weitere"
+            hinweis = ttk.LabelFrame(self, text="Bleibt unveraendert", padding=6)
+            hinweis.pack(fill="x", padx=10, pady=(8, 0))
+            ttk.Label(hinweis, text=text, justify="left", foreground="#555").pack(anchor="w")
+
+        ttk.Label(self, text="Bestandene LZK behalten ihren Status und ihre "
+                             "Kleeblätter — es wird nur das Datum gesetzt.",
+                  foreground="#555").pack(anchor="w", padx=10, pady=(8, 0))
+
+        btns = ttk.Frame(self)
+        btns.pack(pady=10)
+        ttk.Button(btns, text="Termine senden", command=self._senden).pack(side="left", padx=4)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="left", padx=4)
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _senden(self):
+        self.result = True
+        self.destroy()
+
+
 class VorlageDialog(tk.Toplevel):
     """Bearbeiten der Standard-Bausteinliste, die neue Schüler:innen erhalten."""
 
@@ -373,8 +435,23 @@ class App(tk.Tk):
 
         lerntheke_menu = tk.Menu(menu, tearoff=0)
         lerntheke_menu.add_command(label="Ergebnisse abrufen…", command=self.app_ergebnisse_abrufen)
+        lerntheke_menu.add_command(label="LZK-Termine zum Server schicken…",
+                                   command=self.app_lzk_senden)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
+        lerntheke_menu.add_separator()
+        cfg = self._lt_einstellungen_laden()
+        # Offline: die Anwendung nimmt garantiert keine Verbindung auf. Alles
+        # laesst sich weiter bearbeiten; der Abgleich kommt, wenn es passt.
+        self.offline_var = tk.BooleanVar(value=bool(cfg.get("offline")))
+        self.lzk_auto_var = tk.BooleanVar(value=cfg.get("lzk_auto_senden", True))
+        lerntheke_menu.add_checkbutton(
+            label="Offline arbeiten (nichts senden)", variable=self.offline_var,
+            command=self._offline_umschalten)
+        lerntheke_menu.add_checkbutton(
+            label="Neue LZK-Termine automatisch senden", variable=self.lzk_auto_var,
+            command=lambda: self._lt_einstellungen_speichern(
+                {"lzk_auto_senden": bool(self.lzk_auto_var.get())}))
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Einstellungen…", command=self.app_einstellungen)
         menu.add_cascade(label="Lerntheken-App", menu=lerntheke_menu)
@@ -528,6 +605,14 @@ class App(tk.Tk):
         self.status_leiste.pack(fill="x", side="bottom")
 
         self._letzte_quelle = None
+        # Anmeldung gilt fuer die ganze Sitzung: der Client haelt das
+        # Session-Cookie, das Passwort selbst wird nirgends behalten.
+        self._lt_client = None
+        self._lt_klasse = None
+        self._lt_konten = None          # zuletzt geholter Serverstand
+        self._lt_titel = None           # {Lerntheken-Key: Titel}
+        self._lt_login_abgelehnt = False
+        self._lzk_auto_job = None
         # Weiterarbeiten, wo zuletzt aufgehoert wurde.
         self._zuletzt_oeffnen()
 
@@ -1212,7 +1297,7 @@ class App(tk.Tk):
         messagebox.showinfo("Aliasse exportieren", hinweis)
 
     # ------------------------------------------------------------------
-    # Lerntheken-App: Einstellungen, Ergebnisse abrufen (nur lesend)
+    # Lerntheken-App: Einstellungen, Ergebnisse abrufen, LZK-Termine zurueckschreiben
     # ------------------------------------------------------------------
     def _lt_einstellungen_laden(self) -> dict:
         """Server-Adresse und Admin-Benutzername liegen neben der Anwendung.
@@ -1247,8 +1332,45 @@ class App(tk.Tk):
             self._lt_einstellungen_speichern(dlg.result)
             messagebox.showinfo("Einstellungen", "Gespeichert.")
 
-    def _lt_anmelden(self):
-        """Meldet sich an der Lerntheken-App an. Gibt (client, klasse) oder None."""
+    def _offline_umschalten(self):
+        offline = bool(self.offline_var.get())
+        self._lt_einstellungen_speichern({"offline": offline})
+        if offline:
+            # Bestehende Anmeldung fallen lassen, damit auch wirklich nichts
+            # mehr hinausgeht, solange der Modus an ist.
+            self._lt_client = None
+            self._lt_konten = None
+            self.status_leiste.config(
+                text="Offline: es wird nichts gesendet oder abgerufen. "
+                     "Alles andere funktioniert wie gewohnt.")
+        else:
+            self._lt_login_abgelehnt = False
+            self.status_leiste.config(text="Offline-Modus aus.")
+
+    def _ist_offline(self) -> bool:
+        return bool(getattr(self, "offline_var", None) and self.offline_var.get())
+
+    def _lt_anmelden(self, still: bool = False):
+        """Meldet sich an der Lerntheken-App an -- einmal pro Programmstart.
+
+        Danach wird die bestehende Sitzung wiederverwendet; das Passwort wird
+        nur beim ersten Mal abgefragt und nirgends gespeichert. `still=True`
+        laesst automatische Ablaeufe schweigen, statt Fenster aufzumachen.
+        """
+        if self._lt_client is not None:
+            return self._lt_client, self._lt_klasse
+        if self._ist_offline():
+            if still:
+                return None
+            if not messagebox.askyesno(
+                    "Offline",
+                    "Der Offline-Modus ist eingeschaltet -- es wird nichts "
+                    "gesendet oder abgerufen.\n\nJetzt online gehen?"):
+                return None
+            self.offline_var.set(False)
+            self._offline_umschalten()
+        if still and self._lt_login_abgelehnt:
+            return None
         cfg = self._lt_einstellungen_laden()
         if not cfg.get("base_url") or not cfg.get("username"):
             # Nicht in ein anderes Menue verweisen, sondern gleich hier anbieten --
@@ -1265,8 +1387,12 @@ class App(tk.Tk):
                 return None
         passwort = simpledialog.askstring(
             "Anmeldung",
-            f"Passwort für '{cfg['username']}':", show="*", parent=self)
+            f"Passwort für '{cfg['username']}' (einmalig für diese Sitzung):",
+            show="*", parent=self)
         if not passwort:
+            # Nicht bei jeder Kleinigkeit erneut fragen -- bis zur naechsten
+            # ausdruecklichen Aktion bleibt es dabei.
+            self._lt_login_abgelehnt = True
             return None
         try:
             client = osk_sync.AppClient(cfg["base_url"])
@@ -1275,10 +1401,17 @@ class App(tk.Tk):
             messagebox.showerror("Anmeldung fehlgeschlagen", str(e))
             return None
         except Exception as e:
-            messagebox.showerror("Anmeldung fehlgeschlagen",
-                                 f"Keine Verbindung zu {cfg['base_url']}:\n{e}")
+            if not still:
+                messagebox.showerror(
+                    "Anmeldung fehlgeschlagen",
+                    f"Keine Verbindung zu {cfg['base_url']}:\n{e}\n\n"
+                    "Ohne Verbindung lässt sich weiterarbeiten -- unter "
+                    "„Lerntheken-App“ gibt es dafür „Offline arbeiten“.")
+            self._lt_login_abgelehnt = True
             return None
-        return client, me.get("klasse", "?")
+        self._lt_client = client
+        self._lt_klasse = me.get("klasse", "?")
+        return client, self._lt_klasse
 
     def _lt_paare(self):
         """(vorname, nachname, alias) aller Personen mit gepflegtem Alias."""
@@ -1340,7 +1473,10 @@ class App(tk.Tk):
         # frischen diese Zeilen auf, statt sie zu haeufen.
         lerntheken = client.lerntheken_meta()
         try:
-            konten = client.studierende()
+            # Frisch holen und zugleich als Serverstand der Sitzung merken --
+            # davon lebt der Abgleich der LZK-Termine. Die Lerntheken-Titel
+            # braucht der Abruf nicht; die holt der Abgleich bei Bedarf.
+            konten = self._lt_konten = client.studierende()
         except Exception as e:
             messagebox.showerror("Ergebnisse abrufen", f"Abruf fehlgeschlagen:\n{e}")
             return
@@ -1402,6 +1538,188 @@ class App(tk.Tk):
                        [v for v in verwaist if v not in inaktiv])
         messagebox.showinfo("Ergebnisse abrufen", text)
 
+    def _lt_serverstand(self, client, neu_laden: bool = False):
+        """Kontenliste und Lerntheken-Titel der Sitzung, bei Bedarf geholt."""
+        if neu_laden or self._lt_konten is None:
+            self._lt_konten = client.studierende()
+        if neu_laden or self._lt_titel is None:
+            self._lt_titel = client.lerntheken_titel()
+        return self._lt_konten, self._lt_titel
+
+    def _lzk_offene_aenderungen(self, konten, titel):
+        """(aenderungen, uebersprungen, ohne_konto) fuer alle Personen."""
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+        aenderungen, uebersprungen, ohne_konto = [], [], []
+        for student in self.az.students:
+            alias = student.alias.strip().lower()
+            if not alias:
+                continue
+            konto = je_konto.get(alias)
+            if not konto:
+                ohne_konto.append(f"{student.voller_name} ({alias})")
+                continue
+            a, u = lt_lzk_aenderungen(student, konto, titel)
+            aenderungen += a
+            uebersprungen += u
+        return aenderungen, uebersprungen, ohne_konto
+
+    def _lzk_uebertragen(self, client, aenderungen):
+        """Schickt die Aenderungen und haelt den gemerkten Serverstand aktuell.
+
+        Ohne diese Nachfuehrung wuerde derselbe Termin beim naechsten Anlass
+        noch einmal geschickt, weil der zwischengespeicherte Stand veraltet ist.
+        """
+        gesendet, fehler = 0, []
+        for a in aenderungen:
+            try:
+                client.lzk_setzen(a["user_id"], a["lerntheke"], a["typ"],
+                                  a["neu"], a["status"], a["pokale"])
+            except Exception as e:
+                fehler.append(f"{a['person']} · {a['titel']} ({a['typ']}): {e}")
+                continue
+            gesendet += 1
+            for konto in self._lt_konten or []:
+                if konto.get("id") != a["user_id"]:
+                    continue
+                eintraege = konto.setdefault("lzk", []) or []
+                konto["lzk"] = eintraege
+                vorhanden = next((e for e in eintraege
+                                  if e.get("lerntheke") == a["lerntheke"]
+                                  and e.get("typ") == a["typ"]), None)
+                if vorhanden is None:
+                    eintraege.append({"typ": a["typ"], "lerntheke": a["lerntheke"],
+                                      "datum": a["neu"].isoformat(),
+                                      "status": a["status"], "pokale": a["pokale"]})
+                else:
+                    vorhanden["datum"] = a["neu"].isoformat()
+        return gesendet, fehler
+
+    # Mehr als so viele abweichende Termine gehen nie ohne Rueckfrage hinaus.
+    LZK_AUTO_GRENZE = 5
+
+    def _lzk_auto_anstossen(self):
+        """Nach einer Bearbeitung kurz warten und dann gebuendelt senden --
+        so wird nicht bei jedem Tastendruck eine Verbindung aufgemacht."""
+        if self._ist_offline() or not self.lzk_auto_var.get():
+            return
+        if self._lzk_auto_job:
+            self.after_cancel(self._lzk_auto_job)
+        self._lzk_auto_job = self.after(1200, self._lzk_auto_senden)
+
+    def _lzk_auto_senden(self):
+        """Automatischer Abgleich: meldet sich hoechstens einmal pro Sitzung an
+        und meldet Ergebnisse nur in der Statuszeile -- ein misslungener Versuch
+        darf die Arbeit nie unterbrechen. Ungesendetes bleibt lokal stehen und
+        geht beim naechsten Versuch mit."""
+        self._lzk_auto_job = None
+        if self._ist_offline() or not self.lzk_auto_var.get() or not self.az.students:
+            return
+        angemeldet = self._lt_anmelden(still=self._lt_login_abgelehnt)
+        if not angemeldet:
+            self.status_leiste.config(
+                text="LZK-Termine noch nicht gesendet -- ohne Verbindung wird "
+                     "lokal weitergearbeitet (Menü „Lerntheken-App“).")
+            return
+        client, klasse = angemeldet
+        try:
+            konten, titel = self._lt_serverstand(client)
+        except Exception as e:
+            self.status_leiste.config(text=f"⚠ LZK-Abgleich nicht möglich: {e}")
+            return
+
+        aenderungen, uebersprungen, _ = self._lzk_offene_aenderungen(konten, titel)
+        if not aenderungen:
+            return
+        if len(aenderungen) > self.LZK_AUTO_GRENZE:
+            # Beim ersten Abgleich nach einem Import koennen auf einen Schlag
+            # viele alte Termine abweichen. So etwas geht nicht stillschweigend
+            # hinaus -- dann lieber einmal hinschauen und bestaetigen.
+            dlg = LzkSendenDialog(self, aenderungen, uebersprungen, klasse)
+            self.wait_window(dlg)
+            if not dlg.result:
+                self.lzk_auto_var.set(False)
+                self._lt_einstellungen_speichern({"lzk_auto_senden": False})
+                self.status_leiste.config(
+                    text="Nichts gesendet. Automatisches Senden ist jetzt aus -- "
+                         "im Menü „Lerntheken-App“ wieder einschaltbar.")
+                return
+        gesendet, fehler = self._lzk_uebertragen(client, aenderungen)
+        if fehler:
+            self.status_leiste.config(
+                text=f"⚠ {gesendet} von {len(aenderungen)} LZK-Terminen gesendet, "
+                     f"{len(fehler)} nicht -- über „LZK-Termine zum Server "
+                     f"schicken…“ erneut versuchen.")
+        elif gesendet:
+            zeit = datetime.now().strftime("%H:%M")
+            self.status_leiste.config(
+                text=f"{gesendet} LZK-Termin(e) um {zeit} Uhr an die "
+                     f"Lerntheken-App gesendet (Lerngruppe {klasse}).")
+
+    def app_lzk_senden(self):
+        """Traegt hier geaenderte LZK-Termine in der Lerntheken-App ein.
+
+        Der einzige Schreibzugriff des Werkzeugs -- und er passiert nur nach
+        ausdruecklicher Bestaetigung der vollstaendigen Aenderungsliste.
+        Angefasst werden ausschliesslich Zeilen, die aus der App stammen; von
+        Hand angelegte Bausteine haben auf dem Server keine Entsprechung.
+        """
+        if not self.az.students:
+            messagebox.showinfo("LZK-Termine senden", "Keine Personen vorhanden.")
+            return
+        if self._dubletten_melden("LZK-Termine senden"):
+            return
+        if not self._lt_paare():
+            messagebox.showwarning(
+                "LZK-Termine senden",
+                "Keine Lerntheken-Aliasse gepflegt.\n\nZuerst 'Bearbeiten -> "
+                "Fehlende Lerntheken-Aliasse ergänzen…' benutzen.")
+            return
+
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            # Von Hand angestossen: immer den frischen Stand holen.
+            konten, titel = self._lt_serverstand(client, neu_laden=True)
+        except Exception as e:
+            messagebox.showerror("LZK-Termine senden", f"Abruf fehlgeschlagen:\n{e}")
+            return
+
+        aenderungen, uebersprungen, ohne_konto = self._lzk_offene_aenderungen(konten, titel)
+
+        if not aenderungen:
+            text = "Alle LZK-Termine stimmen bereits mit dem Server überein."
+            if uebersprungen:
+                text += (f"\n\n{len(uebersprungen)} Termin(e) stehen nur auf dem "
+                         f"Server und wurden hier nicht angefasst.")
+            messagebox.showinfo("LZK-Termine senden", text)
+            return
+
+        dlg = LzkSendenDialog(self, aenderungen, uebersprungen, klasse)
+        self.wait_window(dlg)
+        if not dlg.result:
+            self.status_leiste.config(text="LZK-Termine senden: abgebrochen, "
+                                           "auf dem Server wurde nichts geändert.")
+            return
+
+        gesendet, fehler = self._lzk_uebertragen(client, aenderungen)
+
+        text = f"{gesendet} von {len(aenderungen)} Termin(en) eingetragen (Lerngruppe {klasse})."
+        if fehler:
+            text += ("\n\nNicht übernommen (" + str(len(fehler)) + "):\n"
+                     + "\n".join(fehler[:8]))
+            if len(fehler) > 8:
+                text += f"\n... und {len(fehler) - 8} weitere"
+        if ohne_konto:
+            text += (f"\n\nOhne passendes Konto ({len(ohne_konto)}):\n"
+                     + "\n".join(ohne_konto[:8]))
+        (messagebox.showwarning if fehler else messagebox.showinfo)(
+            "LZK-Termine senden", text)
+        self.status_leiste.config(
+            text=f"LZK-Termine gesendet: {gesendet} von {len(aenderungen)}")
+
     # ------------------------------------------------------------------
     # Baustein-Aktionen
     # ------------------------------------------------------------------
@@ -1417,6 +1735,7 @@ class App(tk.Tk):
         self._markiere_ungespeichert()
         self._detail_anzeigen()
         self._liste_aktualisieren()
+        self._lzk_auto_anstossen()
 
     def baustein_bearbeiten(self):
         if not self.aktueller_schueler:
@@ -1434,6 +1753,7 @@ class App(tk.Tk):
         self._markiere_ungespeichert()
         self._detail_anzeigen()
         self._liste_aktualisieren()
+        self._lzk_auto_anstossen()
 
     def baustein_entfernen(self):
         if not self.aktueller_schueler:

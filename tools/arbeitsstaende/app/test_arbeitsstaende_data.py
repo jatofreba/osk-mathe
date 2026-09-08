@@ -10,7 +10,8 @@ import os
 import tempfile
 from datetime import date
 
-from arbeitsstaende_data import Arbeitsstaende, Baustein, Student
+from arbeitsstaende_data import (
+    Arbeitsstaende, Baustein, Student, lt_lzk_aenderungen, LT_MARKER)
 
 TMP = tempfile.mkdtemp(prefix="arbeitsstaende_test_")
 
@@ -345,6 +346,66 @@ def test_json_fremde_datei_warnt_statt_abzustuerzen():
     print("OK: test_json_fremde_datei_warnt_statt_abzustuerzen")
 
 
+def test_lzk_abgleich_mit_dem_server():
+    """Welche Termine muessten auf dem Server geaendert werden?
+
+    Wichtig ist dabei, dass Status und Kleeblaetter eines bestehenden Eintrags
+    unveraendert mitgeschickt werden -- die Schnittstelle schreibt beide Felder
+    bei jedem Aufruf mit, ein Termin allein wuerde eine bestandene LZK also
+    zuruecksetzen.
+    """
+    titel = {"lerntheke_kreise_v11": "Kreise und Zylinder",
+             "lerntheke_lf_v1": "Lineare Funktionen"}
+
+    def app_zeile(name, d1=None, d2=None):
+        return Baustein(name=name, status="In Bearbeitung",
+                        lzk_datum_1=d1, lzk_datum_2=d2,
+                        bemerkung=f"{LT_MARKER} 5 von 20 Stationen erledigt")
+
+    person = Student(vorname="Anton", nachname="Berger", alias="an.be")
+    person.bausteine = [
+        app_zeile("Kreise und Zylinder", date(2026, 11, 12), date(2027, 1, 15)),
+        app_zeile("Lineare Funktionen", date(2027, 3, 2)),
+        # von Hand angelegt -- hat auf dem Server keine Entsprechung
+        Baustein(name="Referat Statistik", status="In Bearbeitung",
+                 lzk_datum_1=date(2026, 12, 1)),
+    ]
+    konto = {"id": 7, "username": "an.be", "lzk": [
+        {"typ": "Basis", "lerntheke": "lerntheke_kreise_v11",
+         "datum": "2026-11-05", "status": "bestanden", "pokale": 2},
+        {"typ": "Aufbau", "lerntheke": "lerntheke_lf_v1",
+         "datum": "2027-04-01", "status": "ausstehend", "pokale": 0},
+    ]}
+
+    aenderungen, uebersprungen = lt_lzk_aenderungen(person, konto, titel)
+    nach_typ = {(a["lerntheke"], a["typ"]): a for a in aenderungen}
+    assert len(aenderungen) == 3, aenderungen
+
+    verschoben = nach_typ[("lerntheke_kreise_v11", "Basis")]
+    assert verschoben["alt"] == date(2026, 11, 5)
+    assert verschoben["neu"] == date(2026, 11, 12)
+    assert (verschoben["status"], verschoben["pokale"]) == ("bestanden", 2)
+    assert verschoben["user_id"] == 7
+
+    ganz_neu = nach_typ[("lerntheke_kreise_v11", "Aufbau")]
+    assert ganz_neu["alt"] is None and ganz_neu["neu"] == date(2027, 1, 15)
+    assert (ganz_neu["status"], ganz_neu["pokale"]) == ("ausstehend", 0)
+
+    assert nach_typ[("lerntheke_lf_v1", "Basis")]["neu"] == date(2027, 3, 2)
+    assert all(a["titel"] != "Referat Statistik" for a in aenderungen)
+
+    # Lokal leer, auf dem Server gesetzt: wird gemeldet, aber nie geloescht.
+    assert len(uebersprungen) == 1
+    assert uebersprungen[0]["typ"] == "Aufbau"
+    assert "2027" in uebersprungen[0]["grund"]
+
+    # Stimmen die Termine ueberein, gibt es nichts zu tun.
+    person.bausteine = [app_zeile("Kreise und Zylinder", date(2026, 11, 5))]
+    konto["lzk"] = [konto["lzk"][0]]
+    assert lt_lzk_aenderungen(person, konto, titel) == ([], [])
+    print("OK: test_lzk_abgleich_mit_dem_server")
+
+
 if __name__ == "__main__":
     test_laden_testmappe()
     test_speichern_ohne_aenderung_erhaelt_daten()
@@ -359,5 +420,6 @@ if __name__ == "__main__":
     test_json_ist_verlustfrei()
     test_json_ist_lesbar_und_stabil()
     test_json_fremde_datei_warnt_statt_abzustuerzen()
+    test_lzk_abgleich_mit_dem_server()
     print("\nAlle Tests erfolgreich.")
     print(f"(Testdateien lagen in {TMP})")

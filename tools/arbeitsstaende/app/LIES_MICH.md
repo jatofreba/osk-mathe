@@ -170,6 +170,42 @@ Leere Felder stehen gar nicht erst drin. Kommen später neue Angaben dazu,
 lassen sich ältere Dateien weiterhin öffnen -- Unbekanntes wird beim Laden
 gemeldet statt zu stören.
 
+## LZK-Termine zurück in die Lerntheken-App
+
+Termine, die du hier änderst, können in die Lerntheken-App zurückgeschrieben
+werden -- damit die Schüler:innen denselben Termin sehen wie du.
+
+- **Automatisch**: sobald du in einem Baustein ein LZK-Datum änderst, geht es
+  kurz darauf an die App. Rückmeldung nur in der Statuszeile, nie als Fenster;
+  klappt es nicht, bleibt die Änderung hier stehen und geht beim nächsten
+  Versuch mit. Abschaltbar unter *Lerntheken-App → Neue LZK-Termine
+  automatisch senden*.
+- **Von Hand**: *Lerntheken-App → LZK-Termine zum Server schicken…* zeigt
+  vorher eine Liste mit **Person, Lerntheke, LZK, altem und neuem Datum** und
+  schickt erst nach Bestätigung.
+- **Was nicht passiert**: Status und Kleeblätter einer LZK bleiben, wie sie
+  sind -- es wird nur das Datum gesetzt. Termine zu **löschen** geht hier
+  nicht: steht bei dir kein Datum, auf dem Server aber schon, wird das nur
+  gemeldet. Und angefasst werden ausschließlich Bausteinzeilen, die aus der
+  App stammen; von Hand angelegte Zeilen haben dort keine Entsprechung.
+
+Das ist der **einzige** Schreibzugriff des Werkzeugs. Alles andere -- Abrufen
+der Ergebnisse, Aliasse, Halbjahresübersicht -- liest nur.
+
+## Passwort und Offline-Arbeiten
+
+- Das Passwort wird **einmal pro Programmstart** abgefragt, beim ersten
+  Zugriff auf die App. Danach läuft alles über dieselbe Sitzung. Gespeichert
+  wird es nirgends -- beim nächsten Start fragt die Anwendung erneut.
+- **Ohne Verbindung arbeiten**: *Lerntheken-App → Offline arbeiten (nichts
+  senden)*. In diesem Modus nimmt die Anwendung garantiert keine Verbindung
+  auf; Personen, Bausteine, Termine, FB-Besuche — alles lässt sich normal
+  bearbeiten und speichern. Schaltest du später wieder online, holt ein
+  *LZK-Termine zum Server schicken…* alles Liegengebliebene auf einmal nach.
+- Ist der Server nicht erreichbar, sagt die Anwendung das **einmal** und
+  arbeitet dann still weiter -- es geht nichts verloren, und du wirst nicht
+  bei jeder Eingabe erneut gefragt.
+
 ## Automatische Sicherung
 
 - **In Excel-Dateien schreibt die Anwendung nie von selbst.** Gespeichert
