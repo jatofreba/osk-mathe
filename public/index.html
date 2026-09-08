@@ -5009,7 +5009,9 @@ function openTalkingSlotEditModal(id, source) {
   if (!s) return;
   _talkingEditSlotId = id;
   _talkingEditSlotSource = source || 'admin';
-  document.getElementById('tsedit-halbjahr').value = s.halbjahr || '';
+  // Halbjahr ergibt sich aus dem Datum: Altbestand ohne gespeichertes Halbjahr (v.a. früher
+  // angelegte Fachbüro-Termine) wird daraus vorbelegt, statt ein leeres Pflichtfeld zu zeigen.
+  document.getElementById('tsedit-halbjahr').value = s.halbjahr || halbjahrForDateClient(s.datum) || '';
   document.getElementById('tsedit-datum').value = new Date(s.datum).toISOString().slice(0, 10);
   document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
   document.getElementById('tsedit-dauer').value = s.dauer || 45;
