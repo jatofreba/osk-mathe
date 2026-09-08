@@ -2037,10 +2037,15 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       dates.push(datum);
     }
     for (const d of dates) {
+      // Das Halbjahr ergibt sich aus dem Datum, es wird nicht von Hand zugewiesen. Fachbüro-
+      // Termine schicken deshalb gar keins mit und bekommen es hier automatisch - je Datum
+      // einzeln, damit eine wiederkehrende Reihe über einen Halbjahres-Wechsel hinweg korrekt
+      // aufgeteilt wird. Ein explizit mitgeschicktes Halbjahr (Talks) bleibt unangetastet.
+      const slotHalbjahr = (halbjahr && String(halbjahr).trim()) || halbjahrForDate(d) || '';
       await pool.query(`
         INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', teacherUserId, slotTyp, slotDauer, subjId]);
+      `, [req.session.klasse, d, uhrzeit || '', ort || '', slotHalbjahr, teacherUserId, slotTyp, slotDauer, subjId]);
     }
     res.json({ ok: true, count: dates.length });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
