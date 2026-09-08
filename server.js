@@ -2294,12 +2294,14 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
 async function halbjahrOverview(klasse, onlyUid) {
   const uidFilter = onlyUid ? ' AND u.id = $2' : '';
   const params = onlyUid ? [klasse, onlyUid] : [klasse];
-  // Passive Schüler:innen werden hier NICHT mehr hart ausgefiltert - sonst verschwände auch
-  // ihre Vergangenheit aus den Halbjahren, in denen sie aktiv dabei waren. Stattdessen liefert
-  // die Route firstHalbjahr/lastHalbjahr mit; das Frontend blendet sie nur in den Halbjahren
-  // aus, die vor der Account-Erstellung oder nach dem Passiv-Setzen liegen.
+  // In der Lerngruppen-Übersicht auf passiv gesetzte Schüler:innen tauchen in dieser Übersicht
+  // gar nicht auf - genau wie in der Lerntheken-Übersicht (Nutzer-Vorgabe, mehrfach bestätigt).
+  // NICHT entfernen: ohne diesen Filter stehen passive Personen wieder in allen Halbjahren.
+  // Der Selbst-Aufruf (/api/my-halbjahr, onlyUid gesetzt) bleibt bewusst ausgenommen, sonst
+  // wäre die eigene Karte nach dem Passiv-Setzen leer.
+  const aktivFilter = onlyUid ? '' : ' AND aktiv=true';
   const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
-    pool.query(`SELECT id, username, created_at, passiv_seit FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    pool.query(`SELECT id, username, created_at, passiv_seit FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
       SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
