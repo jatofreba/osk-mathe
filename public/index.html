@@ -154,7 +154,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   font-size:9px;font-weight:800;color:#fff;line-height:1;
 }
 .lw-chip-meta{color:var(--md-on-surface-variant);}
-/* Piktogramme (Mikrofon = Talk, Buch = Input): erben per currentColor die Fach-Farbe,
+/* Piktogramme (Mikrofon = Talk, Buch = Fachbüro): erben per currentColor die Fach-Farbe,
    anders als Emoji, die sich nicht einfärben lassen. */
 .lw-ico{
   width:11px;height:11px;vertical-align:-1px;margin-right:2px;
@@ -895,7 +895,7 @@ textarea.form-input{
     <span class="pill pill-blue" id="bar-klasse"></span>
     <span class="pill" id="bar-kurs" style="display:none"></span>
     <span class="pill pill-purple" id="bar-role" style="display:none">Admin</span>
-    <select class="form-input" id="bar-default-subject" style="display:none;width:auto;padding:4px 8px;font-size:12px;" onchange="setMyDefaultSubject(this.value)" title="Mein Standard-Fach – vorausgewählt bei neuen Input-Terminen"></select>
+    <select class="form-input" id="bar-default-subject" style="display:none;width:auto;padding:4px 8px;font-size:12px;" onchange="setMyDefaultSubject(this.value)" title="Mein Standard-Fach – vorausgewählt bei neuen Fachbüro-Terminen"></select>
     <button class="btn-sm" onclick="showView('changepw')" title="Passwort ändern">🔑</button>
     <button class="btn-sm" onclick="doLogout()">Abmelden</button>
   </div>
@@ -1023,7 +1023,7 @@ textarea.form-input{
         </div>
       </div>
       <div id="cal-admin-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="btn-act btn-green" onclick="openInputSlotModal()">+ Input-Termin</button>
+        <button class="btn-act btn-green" onclick="openInputSlotModal()">+ FaBü-Termin</button>
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
@@ -1037,7 +1037,7 @@ textarea.form-input{
         <span><i style="background:#fff;border:1px solid #94a3b8;"></i> Offen (buchbar)</span>
         <span><i style="background:#e2e8f0;border:1px solid #94a3b8;"></i> Gebucht</span>
         <span><i style="background:#fff;border:1px dashed #1d4ed8;"></i> Deadline</span>
-        <span>🎤 Talk · 📘 Input</span>
+        <span>🎤 Talk · 📘 FaBü</span>
         <span id="cal-legend-subjects"></span>
       </div>
       <div class="cal-detail" id="cal-detail"><div class="cal-detail-empty">Wähle einen Tag, um Details & Buchung zu sehen.</div></div>
@@ -1359,7 +1359,7 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Kalender – Termin buchen (Talk oder Input) ═══════════════════════ -->
+<!-- ══ MODAL: Kalender – Termin buchen (Talk oder Fachbüro) ═══════════════════════ -->
 <div class="overlay" id="modal-cal-book">
   <div class="modal" style="max-width:440px;">
     <div class="modal-title" id="calbook-title">Buchen</div>
@@ -1380,10 +1380,10 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Input-Termin freischalten (Admin) ═══════════════════════════════ -->
+<!-- ══ MODAL: Fachbüro-Termin freischalten (Admin) ═══════════════════════════════ -->
 <div class="overlay" id="modal-input-slot">
   <div class="modal" style="max-width:400px;">
-    <div class="modal-title">Input-Termin freischalten</div>
+    <div class="modal-title">Fachbüro-Termin freischalten</div>
     <div class="form-group">
       <label class="form-label" for="islot-subject">Fach</label>
       <select class="form-input" id="islot-subject" onchange="applyInputSlotSubjectDefaults()"></select>
@@ -1436,7 +1436,7 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Input-Termin - Schüler:innen zuweisen (Admin, bei Erstellung + nachträglich) ══ -->
+<!-- ══ MODAL: Fachbüro-Termin - Schüler:innen zuweisen (Admin, bei Erstellung + nachträglich) ══ -->
 <div class="overlay" id="modal-input-assign">
   <div class="modal" style="max-width:440px;">
     <div class="modal-title" id="iassign-title">Schüler:innen zuweisen</div>
@@ -1494,7 +1494,7 @@ let resetId = null;
 let resetIsAdmin = false;
 let forcePasswordChange = false;
 
-// Fächer (2026-08-06): Mathe/Englisch/Deutsch, je mit eigenem Talks/Input-Bereich.
+// Fächer (2026-08-06): Mathe/Englisch/Deutsch, je mit eigenem Talks/Fachbüro-Bereich.
 // subjectsMeta wird einmal in showApp() geladen; activeSubject merkt sich, welcher
 // Fach-Talks-Tab gerade offen ist (Default 'mathe' für Rückwärtskompatibilität).
 let subjectsMeta = [];
@@ -1751,7 +1751,7 @@ function lwMonday() {
   return d;
 }
 
-// Mikrofon = Talk, Buch = Input. Bewusst als SVG statt Emoji, damit die Symbole
+// Mikrofon = Talk, Buch = Fachbüro. Bewusst als SVG statt Emoji, damit die Symbole
 // die Fach-Farbe annehmen können (Emoji haben feste Eigenfarben).
 function lwIcon(typ) {
   const inner = typ === 'input'
@@ -1762,7 +1762,7 @@ function lwIcon(typ) {
 
 function lwChip(s) {
   const color = s.subjectColor || '#94a3b8';
-  const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
+  const typLabel = s.typ === 'input' ? 'Fachbüro' : 'Talk';
   const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
   // Gebucht: Thema statt "gebucht" zeigen (kein Personenbezug, nur der Inhalt) - fällt auf
   // "gebucht" zurück, falls (theoretisch) kein Thema gesetzt ist.
@@ -2175,7 +2175,7 @@ function mwChip(s) {
   const state = mwState(s);
   const subj = subjectById(s.subjectId);
   const color = subj.color || '#94a3b8';
-  const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
+  const typLabel = s.typ === 'input' ? 'Fachbüro' : 'Talk';
   const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const label = {
     mine:     '✓ von dir gebucht',
@@ -2188,7 +2188,7 @@ function mwChip(s) {
   // holen. Fremd belegte Termine behalten Fach-Badge und -Symbol in Fachfarbe:
   // man kann sich ueber die Lernbegleitung noch dazubuchen.
   const neutral = state === 'conflict';
-  // Fach nur als Buchstaben-Badge, Talk/Input nur als Piktogramm - kein Fliesstext.
+  // Fach nur als Buchstaben-Badge, Talk/Fachbüro nur als Piktogramm - kein Fliesstext.
   // Damit dadurch nichts verloren geht, tragen die Kacheln die volle Information
   // in title (Maus) UND aria-label (Screenreader).
   const full = [subj.name, typLabel, s.uhrzeit, s.ort,
@@ -2308,7 +2308,7 @@ async function loadMyWeek() {
     <div class="mw-legend">
       <span>Buchstabe/Farbe = Fach</span>
       <span>${lwIcon('talk')} Talk</span>
-      <span>${lwIcon('input')} Input</span>
+      <span>${lwIcon('input')} FaBü</span>
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
       <span>belegt = von anderen gebucht – mitmachen? Sprich die Lernbegleitung an, sie kann dich dazunehmen</span>
@@ -3349,7 +3349,7 @@ const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯'
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-// Kurzform für die Anzeige der Lernbegleitung (z.B. gegenüber Schüler:innen bei Input-Terminen): erster+letzter
+// Kurzform für die Anzeige der Lernbegleitung (z.B. gegenüber Schüler:innen bei Fachbüro-Terminen): erster+letzter
 // Buchstabe groß, Rest klein - z.B. "herf" -> "HerF".
 function formatTeacherShort(username) {
   const s = String(username || '').toLowerCase();
@@ -3530,7 +3530,7 @@ async function loadTalkingSessions() {
 }
 
 // ── Mein Kalender ─────────────────────────────────────────────────────────────
-// Zeigt alle Mathe-Termine der Lerngruppe (Talks + Input + Deadlines, alles blau).
+// Zeigt alle Mathe-Termine der Lerngruppe (Talks + Fachbüro + Deadlines, alles blau).
 // Lerngruppenweit sichtbar; Buchung/Antwort direkt aus der Tagesansicht. Quelle: /api/calendar.
 let calYear = null, calMonth = null; // aktuell angezeigter Monat (0-basiert)
 let calData = { slots: [], deadlines: [] };
@@ -3565,7 +3565,7 @@ async function loadCalendar() {
   try {
     const [cr, cmr, hr] = await Promise.all([
       fetch('/api/calendar'),
-      fetch('/api/classmates'), // funktioniert auch für Admins (nur role='student'+klasse-Filter) - Roster fürs Input-Zuweisen
+      fetch('/api/classmates'), // funktioniert auch für Admins (nur role='student'+klasse-Filter) - Roster fürs Fachbüro-Zuweisen
       (me && me.role !== 'admin') ? fetch('/api/my-halbjahr') : Promise.resolve(null)
     ]);
     calData = cr.ok ? await cr.json() : { slots: [], deadlines: [] };
@@ -3579,7 +3579,7 @@ async function loadCalendar() {
   // Hinweis war nicht erkennbar, wofür man welche Ansicht nimmt.
   const calSub = document.getElementById('cal-subtitle');
   if (calSub) calSub.textContent = (me && me.role === 'admin')
-    ? 'Alle Termine der Lerngruppe – hier legst du Input-Termine und Deadlines an.'
+    ? 'Alle Termine der Lerngruppe – hier legst du Fachbüro-Termine und Deadlines an.'
     : 'Hier buchst du freie Termine und beantwortest Einladungen. Deinen Wochenüberblick findest du unter „Start".';
   renderAdminWeek(); renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
 }
@@ -3630,7 +3630,7 @@ function renderCalendar() {
         : it.booked
           ? `background:${subj.colorBg};color:${subj.color};border-color:${subj.color}66;`
           : `background:#fff;color:${subj.color};border-color:${subj.color}88;`;
-      return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Input':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'Input':'Talk'))}</div>`;
+      return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Fachbüro':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'FaBü':'Talk'))}</div>`;
     }).join('');
     const more = items.length > 3 ? `<div class="cal-more">+${items.length - 3} mehr</div>` : '';
     const cls = ['cal-cell'];
@@ -3661,13 +3661,13 @@ function renderCalDetail() {
     }
     const icon = it.typ === 'input' ? '📘' : '🎤';
     const subj = subjectById(it.subjectId);
-    const typLabel = subj.name + '-' + (it.typ === 'input' ? 'Input' : 'Talk');
+    const typLabel = subj.name + '-' + (it.typ === 'input' ? 'FaBü' : 'Talk');
     const teacherLabel = (it.typ === 'input' && it.teacherUsername) ? ' · Lernbegleitung: ' + escHtml(formatTeacherShort(it.teacherUsername)) : '';
     const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}${teacherLabel}`;
     let body, actions = '';
     if (!it.booked) {
       body = '<span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>';
-      if (!isAdmin) actions = `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'Input buchen':'Talk anmelden'}</button>`;
+      if (!isAdmin) actions = `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
     } else {
       const who = it.mineAsPresenter ? 'Du' : escHtml(it.presenterUsername || '?');
       body = `<div><strong>${who}</strong> · ${escHtml(it.thema || '')}</div>` + calInviteeListHtml(it);
@@ -3680,7 +3680,7 @@ function renderCalDetail() {
         const s = it.myInvitationStatus === 'angenommen' ? '✓ zugesagt' : it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt' : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`;
       } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter && it.presentedStatus === 'ausstehend') {
-        // Bei einem schon laufenden Input, bei dem man nicht dabei ist, kann man mitmachen anfragen.
+        // Bei einem schon laufenden Fachbüro, bei dem man nicht dabei ist, kann man mitmachen anfragen.
         actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.session_id})">Mitmachen anfragen</button>`;
       }
     }
@@ -3697,7 +3697,7 @@ function renderCalDetail() {
       } else {
         actions = `<span class="pill" style="font-size:10px;">Termin einer anderen Lernbegleitung</span>`;
       }
-      // Admin darf bei Input-Terminen direkt Schüler:innen zuweisen - bei Erstellung (noch offen)
+      // Admin darf bei Fachbüro-Terminen direkt Schüler:innen zuweisen - bei Erstellung (noch offen)
       // UND nachträglich (schon gebucht, weitere Personen dazu).
       if (it.typ === 'input') {
         actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere zuweisen' : '+ zuweisen'}</button> ` + actions;
@@ -3717,7 +3717,7 @@ function renderCalDetail() {
   el.innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px;color:#1d4ed8;">${dateLabel}</div>
     ${items.length ? rows : '<div class="cal-detail-empty">Keine Mathe-Termine an diesem Tag.</div>'}
     ${isAdmin ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn-sm" onclick="openInputSlotModal('${calSelected}')">+ Input-Termin an diesem Tag</button>
+      <button class="btn-sm" onclick="openInputSlotModal('${calSelected}')">+ FaBü-Termin an diesem Tag</button>
       <button class="btn-sm" onclick="openDeadlineModal('${calSelected}')">+ Deadline an diesem Tag</button>
     </div>` : ''}`;
 }
@@ -3731,7 +3731,7 @@ async function calRespondInvite(id, accept) {
   loadCalendar();
 }
 
-// Buchung (Talk oder Input) direkt aus dem Kalender
+// Buchung (Talk oder Fachbüro) direkt aus dem Kalender
 let _calBookSlot = null;
 function openCalBookModal(slotId) {
   const slot = (calData.slots || []).find(s => s.id === slotId);
@@ -3739,7 +3739,7 @@ function openCalBookModal(slotId) {
   _calBookSlot = slot;
   const isInput = slot.typ === 'input';
   const bookSubj = subjectById(slot.subjectId);
-  document.getElementById('calbook-title').textContent = isInput ? `📘 ${bookSubj.name}-Input buchen` : `🎤 ${bookSubj.name}-Talk anmelden`;
+  document.getElementById('calbook-title').textContent = isInput ? `📘 ${bookSubj.name}-FaBü buchen` : `🎤 ${bookSubj.name}-Talk anmelden`;
   const teacherInfo = (isInput && slot.teacherUsername) ? ' · Lernbegleitung: ' + formatTeacherShort(slot.teacherUsername) : '';
   document.getElementById('calbook-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}${teacherInfo}`;
@@ -3770,7 +3770,7 @@ async function submitCalBook() {
   loadCalendar();
 }
 
-// Admin: Input-Termin freischalten
+// Admin: Fachbüro-Termin freischalten
 function toggleInputRecurring() {
   const c = document.getElementById('islot-recurring').checked;
   document.getElementById('islot-recurring-fields').style.display = c ? 'block' : 'none';
@@ -3793,7 +3793,7 @@ async function openInputSlotModal(presetDate) {
     subjSel.value = String((hintSubj && hintSubj.id) || (subjectsMeta[0] && subjectsMeta[0].id) || '');
   }
   // Lernbegleitung: Default ist der eigene Account, wählbar ist jeder Mit-Admin derselben Klasse
-  // (z.B. wenn eine andere Lernbegleitung den Input tatsächlich hält).
+  // (z.B. wenn eine andere Lernbegleitung das Fachbüro tatsächlich hält).
   const teacherSel = document.getElementById('islot-teacher');
   if (teacherSel && me) {
     teacherSel.innerHTML = `<option value="${me.userId}">${escHtml(me.username)}</option>`;
@@ -3849,7 +3849,7 @@ async function submitInputSlot() {
   loadCalendar();
 }
 
-// Admin: bei einem Input-Termin direkt Schüler:innen zuweisen (bei Erstellung, wenn noch offen -
+// Admin: bei einem Fachbüro-Termin direkt Schüler:innen zuweisen (bei Erstellung, wenn noch offen -
 // ODER nachträglich, wenn schon gebucht). Terminkonflikte werden serverseitig geprüft; wer wegen
 // Konflikt nicht zugewiesen wurde, kommt mit Grund zurück (assignStudentsToSlot(), siehe server.js).
 let _iassignSlot = null;
@@ -3858,7 +3858,7 @@ function openInputAssignModal(slotId) {
   if (!slot) return;
   _iassignSlot = slot;
   const subj = subjectById(slot.subjectId);
-  document.getElementById('iassign-title').textContent = `📘 ${subj.name}-Input: Schüler:innen zuweisen`;
+  document.getElementById('iassign-title').textContent = `📘 ${subj.name}-FaBü: Schüler:innen zuweisen`;
   document.getElementById('iassign-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}`;
   const themaGroup = document.getElementById('iassign-thema-group');
@@ -4090,7 +4090,7 @@ async function calDeleteSlot(slotId) {
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   loadCalendar();
 }
-// Schüler:in fragt an, bei einem schon laufenden Input mitzumachen.
+// Schüler:in fragt an, bei einem schon laufenden Fachbüro mitzumachen.
 async function calRequestJoin(sessionId) {
   const r = await fetch(`/api/talking-sessions/${sessionId}/request`, { method: 'POST' });
   const d = await r.json().catch(() => ({}));
@@ -4110,7 +4110,7 @@ async function calDecideRequest(invitationId, accept) {
   loadCalendar();
 }
 
-// Admin entfernt nachträglich eine einzelne Person aus einem Talk (Zuhören) oder Input (Teilnahme).
+// Admin entfernt nachträglich eine einzelne Person aus einem Talk (Zuhören) oder Fachbüro (Teilnahme).
 async function calRemoveInvitee(invitationId) {
   if (!confirm('Diese Person wirklich aus dem Termin entfernen?')) return;
   const r = await fetch(`/api/admin/talking-invitations/${invitationId}`, { method:'DELETE' });
@@ -4129,11 +4129,11 @@ let myHjData = { halbjahre: [], byHalbjahr: {} };
 function awChip(s) {
   const subj = subjectById(s.subjectId);
   const color = subj.color || '#94a3b8';
-  const typLabel = s.typ === 'input' ? 'Input' : 'Talk';
+  const typLabel = s.typ === 'input' ? 'Fachbüro' : 'Talk';
   const isMine = s.teacherUsername && me && s.teacherUsername === me.username;
   const state = !s.booked ? 'free' : (isMine ? 'mine' : 'taken');
 
-  // Teilnehmende: buchende Person zuerst (bei Input die anfragende, bei Talk die
+  // Teilnehmende: buchende Person zuerst (bei Fachbüro die anfragende, bei Talk die
   // vortragende), danach die Eingeladenen mit ihrem Zusage-Status.
   const teilnehmende = [];
   if (s.presenterUsername) {
@@ -4155,7 +4155,7 @@ function awChip(s) {
   const tip = escHtml([subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
     s.thema ? 'Thema: ' + s.thema : '', s.booked ? 'gebucht' : 'frei'].filter(Boolean).join(' · '));
-  // Fach nur als Buchstaben-Badge, Talk/Input nur als Piktogramm - analog zur
+  // Fach nur als Buchstaben-Badge, Talk/Fachbüro nur als Piktogramm - analog zur
   // Ansicht vor dem Login. Die volle Information steckt in title + aria-label.
   const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const neutral = state === 'taken';
@@ -4230,14 +4230,14 @@ function renderAdminWeek() {
         <div class="mw-title">📅 Meine Woche</div>
         <div class="mw-sub">${fmt(dayDates[0])}–${fmt(dayDates[4])} · ${booked} gebucht${free ? ` · ${free} frei` : ''} · ${teilnahmen} Teilnahme${teilnahmen === 1 ? '' : 'n'}</div>
       </div>
-      <button class="mw-book-btn" onclick="openInputSlotModal()">+ Input-Termin</button>
+      <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
     </div>
     ${weekSlots.length
       ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
          <div class="mw-legend">
            <span>Buchstabe/Farbe = Fach</span>
            <span>${lwIcon('talk')} Talk</span>
-           <span>${lwIcon('input')} Input</span>
+           <span>${lwIcon('input')} FaBü</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>✓ zugesagt</span>
            <span>⏳ eingeladen, noch offen</span>
@@ -4253,7 +4253,7 @@ function renderMyHalbjahr() {
   if (me && me.role === 'admin') { el.innerHTML = ''; return; }
   const hj = currentHalbjahrGuess();
   const b = (myHjData.byHalbjahr || {})[hj] || { bySubject:{}, lzk:[], stationsCompleted:0 };
-  // Talks/Input sind seit dem Fächer-System nach Fach getrennt (bySubject) - die kompakte Karte
+  // Talks/Fachbüro sind seit dem Fächer-System nach Fach getrennt (bySubject) - die kompakte Karte
   // zeigt weiterhin nur eine Gesamtzahl, daher hier über alle Fächer aufsummiert.
   const subjVals = Object.values(b.bySubject || {});
   const talksPresented = subjVals.reduce((sum, s) => sum + (s.talksPresented || 0), 0);
@@ -4265,7 +4265,7 @@ function renderMyHalbjahr() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <span class="pill pill-blue">🎤 ${talksPresented} gehalten</span>
       <span class="pill pill-blue">👂 ${talksListened} zugehört</span>
-      <span class="pill pill-blue">📘 ${inputParticipated} Input-Teilnahmen</span>
+      <span class="pill pill-blue">📘 ${inputParticipated} FaBü-Teilnahmen</span>
       <span class="pill pill-blue">📚 ${b.stationsCompleted} Stationen</span>
       ${lzkB}
     </div>
@@ -4304,7 +4304,7 @@ function renderHalbjahr() {
   if (!hjData.students.length) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen.</div>'; return; }
   if (!hjSelected) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten in irgendeinem Halbjahr erfasst.</div>'; return; }
 
-  // Talks/Input sind seit 2026-08-06 fach-getrennt (bySubject); LZK/Stationen bleiben HJ-weit
+  // Talks/Fachbüro sind seit 2026-08-06 fach-getrennt (bySubject); LZK/Stationen bleiben HJ-weit
   // (gibt's aktuell nur für Mathe) und werden daher im Mathe-Abschnitt mitgezeigt.
   const emptySubj = { talksPresented:0, talksListened:0, inputParticipated:0, talkDetails:[], inputDetails:[], lastTalk:null, lastInput:null };
   const emptyB = { lzk:[], stationDetails:[], stationsCompleted:0, lastLzk:null, lastStation:null, lastActivity:null, bySubject:{} };
@@ -4348,14 +4348,14 @@ function renderHalbjahr() {
         ${nothingCount ? `<span style="color:var(--md-error);font-weight:600;font-size:12px;">– ${nothingCount} ohne Aktivität</span>` : ''}
       </div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Name</th><th>🎤 Gehalten</th><th>👂 Zugehört</th><th>📘 Input</th>${headCols}</tr></thead>
+        <thead><tr><th>Name</th><th>🎤 Gehalten</th><th>👂 Zugehört</th><th>📘 FaBü</th>${headCols}</tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
   }).join('');
 
   el.innerHTML = `
     <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">
-      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Input/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Nach Fach sortiert, Zeile anklicken für Details.
+      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Nach Fach sortiert, Zeile anklicken für Details.
     </div>
     ${sections}`;
 }
@@ -4384,8 +4384,8 @@ function openHjDetail(userId, subjectKey) {
       </div>
       <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin-bottom:2px;">🎤👂 Talks (${sd.talkDetails.length})</div>
       ${list(sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
-      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📘 Input-Teilnahmen (${sd.inputDetails.length})</div>
-      ${list(sd.inputDetails, inputRow, 'Keine Input-Teilnahmen.')}
+      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📘 FaBü-Teilnahmen (${sd.inputDetails.length})</div>
+      ${list(sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
       ${isMathe ? `
       <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">🍀 LZK (${(b.lzk||[]).length})</div>
       ${list(b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')}

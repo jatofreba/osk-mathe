@@ -1469,7 +1469,7 @@ class App(tk.Tk):
                   if self.az._wb is not None else 0)
 
         # Je Halbjahr eine Zeile pro bearbeiteter Lerntheke (mit LZK-Terminen und
-        # Bearbeitungszeitraum) sowie eine fuer Talks/Input. Wiederholte Abrufe
+        # Bearbeitungszeitraum) sowie eine fuer Talks/Fachbuero. Wiederholte Abrufe
         # frischen diese Zeilen auf, statt sie zu haeufen.
         lerntheken = client.lerntheken_meta()
         try:

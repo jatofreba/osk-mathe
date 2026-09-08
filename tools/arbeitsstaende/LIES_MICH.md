@@ -2,7 +2,7 @@
 
 Zwei Richtungen:
 
-1. **Ergebnisse holen** — Talks, Input, Kleeblätter, Stationen und LZK aus der
+1. **Ergebnisse holen** — Talks, Fachbüro, Kleeblätter, Stationen und LZK aus der
    Lerntheken-App in die Arbeitsstände-Datei.
 2. **Konten anlegen** — die Zugänge für die Lerntheken-App aus der
    Arbeitsstände-Liste erzeugen.
@@ -51,7 +51,7 @@ nicht gespeichert, sondern bei jeder Aktion abgefragt.
 als Blatt **„App-Daten"** in die geöffnete Mappe: eine Zeile je Person und
 Halbjahr, je Fach eigene Spalten.
 
-| Vorname | Nachname | Account | Lerngruppe | Halbjahr | Mathe: Talks gehalten / zugehört / Input / Kleeblätter | Englisch: … | Deutsch: … | Stationen abgeschlossen | LZK bestanden | LZK-Kleeblätter | Stand |
+| Vorname | Nachname | Account | Lerngruppe | Halbjahr | Mathe: Talks gehalten / zugehört / FaBü / Kleeblätter | Englisch: … | Deutsch: … | Stationen abgeschlossen | LZK bestanden | LZK-Kleeblätter | Stand |
 
 Danach noch speichern. Personen, deren Alias zu keinem Konto passt, werden
 gemeldet.

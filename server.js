@@ -213,7 +213,8 @@ async function initDB() {
       END IF;
     END $$;
     -- Mathe-Input (2026-08-01): talking_slots dienen jetzt auch als Input-Termine (typ='input').
-    -- typ='talk' = Schüler-Vortrag (mit Pokalen), typ='input' = Input der Lernbegleitung, Solo-buchbar, ohne Pokale.
+    -- typ='talk' = Schüler-Vortrag (mit Pokalen), typ='input' = Angebot der Lernbegleitung, Solo-buchbar, ohne Pokale.
+    -- Sichtbar heißt typ='input' seit 2026-09 überall "Fachbüro" (kurz FaBü); der gespeicherte Wert bleibt 'input'.
     -- dauer (Minuten) für Überschneidungsschutz; uhrzeit bleibt Text, wird als HH:MM interpretiert.
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='typ') THEN
@@ -1914,7 +1915,7 @@ app.post('/api/talking-sessions/:id/request', requireLogin, async (req, res) => 
     `, [req.params.id, req.session.klasse]);
     if (!sess.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
     const s = sess.rows[0];
-    if (s.typ !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Input-Terminen' });
+    if (s.typ !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Fachbüro-Terminen' });
     if (s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
     if (s.presenterId === req.session.userId) return res.status(409).json({ error: 'Du hast diesen Termin selbst gebucht' });
 
@@ -2491,7 +2492,7 @@ app.get(['/montag','/dienstag','/mittwoch','/donnerstag','/freitag'], (req, res)
     const key = req.path.replace(/^\//, '').toLowerCase();
     const label = TAG_LABELS[key] || 'Tagesübersicht';
     const titel = `${label} · Lerngruppe ${PUBLIC_WEEK_KLASSE}`;
-    const beschreibung = `Talks und Input am ${label} der laufenden Woche – mit freien und schon gebuchten Terminen.`;
+    const beschreibung = `Talks und Fachbüro-Termine am ${label} der laufenden Woche – mit freien und schon gebuchten Terminen.`;
     // Host stammt aus dem Request-Header, deshalb wie alle Werte escaped.
     const url = `${req.protocol}://${req.get('host') || ''}${req.path}`;
     res.type('html').send(

@@ -5,7 +5,7 @@ Arbeitsstände-Excel-Datei.
 
 Ausgelesen wird je Schüler:in, Halbjahr und Fach:
   - Talks gehalten / zugehört
-  - Input-Teilnahmen
+  - Fachbuero-Teilnahmen (FaBü)
   - Kleeblätter aus Talks
   - abgeschlossene Lerntheken-Stationen (fachunabhängig, aktuell nur Mathe)
   - bestandene LZK samt Kleeblättern
@@ -379,7 +379,7 @@ def schreibe_app_daten(wb, treffer, daten: AppDaten):
     for fach in daten.faecher:
         kurz = fach["name"]
         kopf += [f"{kurz}: Talks gehalten", f"{kurz}: Talks zugehört",
-                 f"{kurz}: Input", f"{kurz}: Kleeblätter"]
+                 f"{kurz}: FaBü", f"{kurz}: Kleeblätter"]
     kopf += ["Stationen abgeschlossen", "LZK bestanden", "LZK-Kleeblätter",
              "Stand"]
 

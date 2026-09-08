@@ -106,7 +106,7 @@ Namen ändern sich.
   **gemeldet und nicht vergeben** -- sonst hätten beide denselben Zugang.
 - **Lerntheken-App → Einstellungen…**: Adresse der App und Admin-Benutzername.
   Das Passwort wird nicht gespeichert, sondern bei jeder Aktion abgefragt.
-- **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Input, Kleeblätter,
+- **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Fachbüro, Kleeblätter,
   Stationen und LZK und schreibt sie als Blatt **„App-Daten"** in die geöffnete
   Mappe -- eine Zeile je Person und Halbjahr, je Fach eigene Spalten. Danach
   noch speichern.

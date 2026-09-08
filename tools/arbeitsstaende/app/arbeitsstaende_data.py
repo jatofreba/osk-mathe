@@ -251,7 +251,7 @@ def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
 
 
 def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
-    """Bemerkungstext fuer die Talk-/Input-Zeile eines Halbjahres, oder None."""
+    """Bemerkungstext fuer die Talk-/Fachbuero-Zeile eines Halbjahres, oder None."""
     sub = (bucket.get("bySubject") or {}).get(fach_key) or {}
     geh = sub.get("talksPresented", 0) or 0
     zug = sub.get("talksListened", 0) or 0
@@ -265,7 +265,7 @@ def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
     if zug:
         teile.append(f"{zug}x zugehoert")
     if inp:
-        teile.append(f"{inp}x Input")
+        teile.append(f"{inp}x FaBü")
     if klee:
         teile.append(f"{klee} Kleeblaetter")
     return ", ".join(teile)
@@ -276,7 +276,7 @@ def lt_zeilen_aktualisieren(student, by_halbjahr: dict, progress: dict,
     """Traegt die App-Ergebnisse als Bausteinzeilen ein.
 
     Je bearbeiteter Lerntheke eine Zeile (Gesamtstand + LZK) und je Halbjahr
-    eine fuer Talks/Input.
+    eine fuer Talks/Fachbuero.
 
     Angefasst werden ausschliesslich Zeilen mit LT_MARKER in der Bemerkung.
     Von Hand gepflegte Bausteine bleiben unberuehrt -- auch namensgleiche.
