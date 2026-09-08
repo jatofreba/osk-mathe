@@ -542,8 +542,10 @@ function parseUhrzeitMin(uhrzeit) {
 }
 
 // Alle Zeitfenster, die eine Person schon belegt: eigene Buchungen (Talk halten / Input)
-// + Zuhör-Einladungen, die noch nicht abgelehnt wurden ('eingeladen' ODER 'angenommen') - eine
-// nur eingeladene, noch unbeantwortete Person soll trotzdem nirgends sonst zugewiesen werden können.
+// + Zuhör-Einladungen mit Status 'eingeladen' ODER 'angenommen' - eine nur eingeladene, noch
+// unbeantwortete Person soll trotzdem nirgends sonst zugewiesen werden können. Eine offene
+// Anfrage ('angefragt') belegt dagegen NICHTS: erst die Zusage der Lernbegleitung macht daraus
+// einen Termin, vorher soll sie andere Buchungen nicht blockieren.
 // datum als YYYY-MM-DD-Text (to_char) gegen Zeitzonen-Verschiebung.
 async function studentOccupiedIntervals(uid, excludeSlotId) {
   const r = await pool.query(`
@@ -555,7 +557,7 @@ async function studentOccupiedIntervals(uid, excludeSlotId) {
     FROM talking_invitations ti
     JOIN talking_sessions ts ON ts.id = ti.session_id
     JOIN talking_slots sl ON sl.id = ts.slot_id
-    WHERE ti.listener_id = $1 AND ti.status != 'abgelehnt'
+    WHERE ti.listener_id = $1 AND ti.status IN ('eingeladen','angenommen')
   `, [uid]);
   return r.rows
     .filter(row => row.slot_id !== excludeSlotId)
@@ -1898,6 +1900,74 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
 // Annehmen/Ablehnen geht nur, solange die TS des Presenters noch nicht bewertet wurde (presented_status
 // 'ausstehend'). Danach entscheidet ausschließlich die Zuhören-Bewertung der Lernbegleitung (attended_status),
 // ob die Person teilgenommen hat - das nachträgliche Ablehnen einer bereits stattgefundenen TS ergibt keinen Sinn.
+// Schüler:in fragt bei einem schon laufenden Input an ("darf ich mitmachen?"). Ergebnis ist eine
+// talking_invitations-Zeile mit Status 'angefragt' - erst die Zusage der Lernbegleitung macht
+// daraus eine echte Teilnahme ('angenommen'). Bewusst nur für Input: bei Talks lädt die
+// vortragende Person ein, da gibt es keine offene Anfrage.
+app.post('/api/talking-sessions/:id/request', requireLogin, async (req, res) => {
+  try {
+    if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können anfragen' });
+    const sess = await pool.query(`
+      SELECT ts.id, ts.slot_id AS "slotId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus", sl.typ
+      FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+      WHERE ts.id=$1 AND sl.klasse=$2
+    `, [req.params.id, req.session.klasse]);
+    if (!sess.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
+    const s = sess.rows[0];
+    if (s.typ !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Input-Terminen' });
+    if (s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
+    if (s.presenterId === req.session.userId) return res.status(409).json({ error: 'Du hast diesen Termin selbst gebucht' });
+
+    const existing = await pool.query(
+      'SELECT id, status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2',
+      [s.id, req.session.userId]
+    );
+    if (existing.rows.length) {
+      const st = existing.rows[0].status;
+      return res.status(409).json({ error: st === 'angefragt' ? 'Deine Anfrage läuft schon' : 'Du bist bei diesem Termin schon eingetragen' });
+    }
+    // Früh prüfen, damit niemand eine Anfrage stellt, die ohnehin kollidiert - beim Zusagen
+    // wird nochmal geprüft, weil sich bis dahin etwas geändert haben kann.
+    if (await hasScheduleConflict(req.session.userId, s.slotId))
+      return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit schon einen Termin' });
+
+    await pool.query(
+      `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angefragt')`,
+      [s.id, req.session.userId]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Lernbegleitung entscheidet über eine Anfrage: zusagen (-> 'angenommen') oder ablehnen
+// (Zeile wird gelöscht, damit die Person bei Bedarf erneut anfragen kann).
+app.post('/api/admin/talking-invitations/:id/decide', requireAdmin, async (req, res) => {
+  try {
+    const { accept } = req.body;
+    if (typeof accept !== 'boolean') return res.status(400).json({ error: 'Ungültig' });
+    const inv = await pool.query(`
+      SELECT ti.id, ti.status, ti.listener_id AS "listenerId", ts.slot_id AS "slotId", lu.username
+      FROM talking_invitations ti
+      JOIN talking_sessions ts ON ts.id = ti.session_id
+      JOIN talking_slots sl ON sl.id = ts.slot_id
+      JOIN users lu ON lu.id = ti.listener_id
+      WHERE ti.id=$1 AND sl.klasse=$2
+    `, [req.params.id, req.session.klasse]);
+    if (!inv.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const row = inv.rows[0];
+    if (row.status !== 'angefragt') return res.status(409).json({ error: 'Das ist keine offene Anfrage' });
+
+    if (!accept) {
+      await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
+      return res.json({ ok: true, accepted: false });
+    }
+    if (await hasScheduleConflict(row.listenerId, row.slotId))
+      return res.status(409).json({ error: `Zeitkonflikt: ${row.username} hat zu dieser Uhrzeit inzwischen einen anderen Termin` });
+    await pool.query(`UPDATE talking_invitations SET status='angenommen', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true, accepted: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
     const { accept } = req.body;

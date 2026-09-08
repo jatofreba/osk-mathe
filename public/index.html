@@ -3377,7 +3377,8 @@ function talkingGroupByHalbjahr(presenting, invitations) {
 // für die Detailansicht im Mathe-Talks-Tab, wo "Meine Einladungen" direkt in die Zuhören-Tabelle
 // einsortiert wird (mit Annehmen/Ablehnen statt Bewertung). Abgelehnte bleiben weiterhin ausgeblendet.
 function talkingGroupByHalbjahrFull(presenting, invitations) {
-  const relevant = (invitations || []).filter(i => i.status !== 'abgelehnt');
+  // Offene Anfragen sind noch keine Teilnahme und gehören deshalb nicht in die Zuhören-Tabelle.
+  const relevant = (invitations || []).filter(i => i.status !== 'abgelehnt' && i.status !== 'angefragt');
   const halbjahre = [...new Set([...(presenting || []).map(s => s.halbjahr), ...relevant.map(i => i.halbjahr)])].sort();
   return halbjahre.map(hj => ({
     halbjahr: hj,
@@ -3673,9 +3674,14 @@ function renderCalDetail() {
       if (!isAdmin && it.mineAsListener && it.myInvitationStatus === 'eingeladen' && it.presentedStatus === 'ausstehend') {
         actions = `<button class="btn-act btn-green" onclick="calRespondInvite(${it.myInvitationId}, true)">Annehmen</button>
                    <button class="btn-cancel" onclick="calRespondInvite(${it.myInvitationId}, false)">Ablehnen</button>`;
+      } else if (!isAdmin && it.mineAsListener && it.myInvitationStatus === 'angefragt') {
+        actions = `<span class="pill pill-yellow">⏳ Anfrage läuft</span>`;
       } else if (!isAdmin && it.mineAsListener) {
         const s = it.myInvitationStatus === 'angenommen' ? '✓ zugesagt' : it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt' : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`;
+      } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter && it.presentedStatus === 'ausstehend') {
+        // Bei einem schon laufenden Input, bei dem man nicht dabei ist, kann man mitmachen anfragen.
+        actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.session_id})">Mitmachen anfragen</button>`;
       }
     }
     if (isAdmin) {
@@ -4024,8 +4030,17 @@ async function deleteDeadline(id) {
 function calInviteeListHtml(it) {
   const inv = it.invitees || [];
   if (!inv.length) return it.typ === 'input' ? '' : '<div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:3px;">Niemand eingeladen</div>';
-  const canRemove = me && me.role === 'admin' && it.presentedStatus === 'ausstehend';
+  const isAdminView = me && me.role === 'admin';
+  const canRemove = isAdminView && it.presentedStatus === 'ausstehend';
   const pills = inv.map(iv => {
+    // Offene Anfragen sind gelb und bekommen für die Lernbegleitung ✓/✗ statt des ×-Buttons.
+    if (iv.status === 'angefragt') {
+      const decide = (isAdminView && it.presentedStatus === 'ausstehend' && iv.id)
+        ? ` <span onclick="calDecideRequest(${iv.id}, true)" style="cursor:pointer;font-weight:800;color:#15803d;" title="Anfrage zusagen">✓</span>`
+          + ` <span onclick="calDecideRequest(${iv.id}, false)" style="cursor:pointer;font-weight:800;color:var(--md-error);" title="Anfrage ablehnen">✗</span>`
+        : '';
+      return `<span class="pill pill-yellow" style="font-size:10px;" title="Möchte mitmachen">${escHtml(iv.username)} ⏳ fragt an${decide}</span>`;
+    }
     const s = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
     const att = iv.attendedStatus === 'erledigt' ? ' 👂' : iv.attendedStatus === 'nicht_erledigt' ? ' 🚫' : '';
     const removeBtn = (canRemove && iv.attendedStatus === 'ausstehend' && iv.id)
@@ -4075,6 +4090,26 @@ async function calDeleteSlot(slotId) {
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   loadCalendar();
 }
+// Schüler:in fragt an, bei einem schon laufenden Input mitzumachen.
+async function calRequestJoin(sessionId) {
+  const r = await fetch(`/api/talking-sessions/${sessionId}/request`, { method: 'POST' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Anfrage nicht möglich.'); return; }
+  alert('Anfrage gestellt - die Lernbegleitung entscheidet darüber.');
+  loadCalendar();
+}
+
+// Lernbegleitung sagt einer Anfrage zu oder lehnt sie ab.
+async function calDecideRequest(invitationId, accept) {
+  const r = await fetch(`/api/admin/talking-invitations/${invitationId}/decide`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ accept })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler.'); return; }
+  loadCalendar();
+}
+
 // Admin entfernt nachträglich eine einzelne Person aus einem Talk (Zuhören) oder Input (Teilnahme).
 async function calRemoveInvitee(invitationId) {
   if (!confirm('Diese Person wirklich aus dem Termin entfernen?')) return;
@@ -4170,7 +4205,7 @@ function renderAdminWeek() {
   // Teilnahmen = alle Personen, die diese Woche tatsächlich an einem Termin sind
   // (buchende Person + zugesagte/noch offene Eingeladene, ohne Absagen).
   const teilnahmen = weekSlots.reduce((sum, s) =>
-    sum + (s.presenterUsername ? 1 : 0) + (s.invitees || []).filter(iv => iv.status !== 'abgelehnt').length, 0);
+    sum + (s.presenterUsername ? 1 : 0) + (s.invitees || []).filter(iv => iv.status !== 'abgelehnt' && iv.status !== 'angefragt').length, 0);
 
   const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) =>
     `<div class="lw-dayhead">${name}
