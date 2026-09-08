@@ -2037,15 +2037,10 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       dates.push(datum);
     }
     for (const d of dates) {
-      // Das Halbjahr ergibt sich aus dem Datum, es wird nicht von Hand zugewiesen. Fachbüro-
-      // Termine schicken deshalb gar keins mit und bekommen es hier automatisch - je Datum
-      // einzeln, damit eine wiederkehrende Reihe über einen Halbjahres-Wechsel hinweg korrekt
-      // aufgeteilt wird. Ein explizit mitgeschicktes Halbjahr (Talks) bleibt unangetastet.
-      const slotHalbjahr = (halbjahr && String(halbjahr).trim()) || halbjahrForDate(d) || '';
       await pool.query(`
         INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      `, [req.session.klasse, d, uhrzeit || '', ort || '', slotHalbjahr, teacherUserId, slotTyp, slotDauer, subjId]);
+      `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', teacherUserId, slotTyp, slotDauer, subjId]);
     }
     res.json({ ok: true, count: dates.length });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -2299,13 +2294,12 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
 async function halbjahrOverview(klasse, onlyUid) {
   const uidFilter = onlyUid ? ' AND u.id = $2' : '';
   const params = onlyUid ? [klasse, onlyUid] : [klasse];
-  // Passive Schüler:innen tauchen in der Admin-Gesamtübersicht gar nicht auf (Nutzer-Vorgabe) -
-  // genau wie in der Lerntheken-Übersicht. Der Selbst-Aufruf einer einzelnen Person
-  // (/api/my-halbjahr) bleibt davon unberührt, sonst wäre die eigene Karte nach dem
-  // Passiv-Setzen leer. Verwaltet/reaktiviert werden sie über die Lerngruppen-Übersicht.
-  const aktivFilter = onlyUid ? '' : ' AND aktiv=true';
+  // Passive Schüler:innen werden hier NICHT mehr hart ausgefiltert - sonst verschwände auch
+  // ihre Vergangenheit aus den Halbjahren, in denen sie aktiv dabei waren. Stattdessen liefert
+  // die Route firstHalbjahr/lastHalbjahr mit; das Frontend blendet sie nur in den Halbjahren
+  // aus, die vor der Account-Erstellung oder nach dem Passiv-Setzen liegen.
   const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
-    pool.query(`SELECT id, username, created_at, passiv_seit FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    pool.query(`SELECT id, username, created_at, passiv_seit FROM users WHERE role='student' AND klasse=$1${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
     pool.query(`
       SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id

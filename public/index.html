@@ -3669,8 +3669,11 @@ function renderCalDetail() {
       body = '<span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>';
       if (!isAdmin) actions = `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
     } else {
-      const who = it.mineAsPresenter ? 'Du' : escHtml(it.presenterUsername || '?');
-      body = `<div><strong>${who}</strong> · ${escHtml(it.thema || '')}</div>` + calInviteeListHtml(it);
+      // Bei einem FaBü, das die Lernbegleitung angelegt und zugewiesen hat, gibt es keine
+      // vortragende Person - dann steht dort nur das Thema statt eines Platzhalters.
+      const who = it.mineAsPresenter ? 'Du' : escHtml(it.presenterUsername || '');
+      const kopf = [who ? `<strong>${who}</strong>` : '', escHtml(it.thema || '')].filter(Boolean).join(' · ');
+      body = `<div>${kopf || 'Gebucht'}</div>` + calInviteeListHtml(it);
       if (!isAdmin && it.mineAsListener && it.myInvitationStatus === 'eingeladen' && it.presentedStatus === 'ausstehend') {
         actions = `<button class="btn-act btn-green" onclick="calRespondInvite(${it.myInvitationId}, true)">Annehmen</button>
                    <button class="btn-cancel" onclick="calRespondInvite(${it.myInvitationId}, false)">Ablehnen</button>`;
@@ -4067,7 +4070,7 @@ function renderCalInvites() {
       const dl = new Date(s.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
       return `<div class="stat-card" style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-          <div>${icon} <strong>${escHtml(s.presenterUsername || '?')}</strong> · ${escHtml(s.thema || '')}<br>
+          <div>${icon} ${s.presenterUsername ? `<strong>${escHtml(s.presenterUsername)}</strong> · ` : ''}${escHtml(s.thema || '')}<br>
             <span style="color:var(--md-on-surface-variant);font-size:12px;">${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</span></div>
           <div style="display:flex;gap:6px;">
             <button class="btn-act btn-green" onclick="calRespondInvite(${s.myInvitationId}, true)">Annehmen</button>
@@ -5006,9 +5009,7 @@ function openTalkingSlotEditModal(id, source) {
   if (!s) return;
   _talkingEditSlotId = id;
   _talkingEditSlotSource = source || 'admin';
-  // Halbjahr ergibt sich aus dem Datum: Altbestand ohne gespeichertes Halbjahr (v.a. früher
-  // angelegte Fachbüro-Termine) wird daraus vorbelegt, statt ein leeres Pflichtfeld zu zeigen.
-  document.getElementById('tsedit-halbjahr').value = s.halbjahr || halbjahrForDateClient(s.datum) || '';
+  document.getElementById('tsedit-halbjahr').value = s.halbjahr || '';
   document.getElementById('tsedit-datum').value = new Date(s.datum).toISOString().slice(0, 10);
   document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
   document.getElementById('tsedit-dauer').value = s.dauer || 45;
