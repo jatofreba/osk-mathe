@@ -306,6 +306,18 @@ async function initDB() {
       ('englisch', 'Englisch', '#eab308', '#fefce8', 'Englisch-Fachbüro', 45),
       ('deutsch',  'Deutsch',  '#dc2626', '#fef2f2', 'Deutsch-Fachbüro',  45)
     ON CONFLICT (key) DO NOTHING;
+    -- Lernberatung (2026-09): kein echtes Fach, sondern ein Platz im Fach-Dropdown fuer
+    -- Termine, die nur einzelne Schüler:innen betreffen. nur_zugewiesen steuert alles
+    -- Weitere: solche Termine werden nirgends als Angebot ausgespielt, sondern nur denen
+    -- gezeigt, die ihnen zugeordnet sind - auch nicht auf der öffentlichen Wochenübersicht.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='nur_zugewiesen') THEN
+        ALTER TABLE subjects ADD COLUMN nur_zugewiesen BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+    INSERT INTO subjects (key, name, color, color_bg, default_ort, default_dauer, nur_zugewiesen) VALUES
+      ('lernberatung', 'Lernberatung', '#7c3aed', '#f5f3ff', '', 45, true)
+    ON CONFLICT (key) DO NOTHING;
     -- Bestehende Installationen hatten default_ort noch leer (Seed lief bereits vor dieser
     -- Änderung) - einmalig nachziehen, aber admin-editierte Werte nicht überschreiben.
     UPDATE subjects SET default_ort='Mathe-Fachbüro'    WHERE key='mathe'    AND default_ort='';
@@ -1303,6 +1315,7 @@ app.get('/api/subjects', requireLogin, async (req, res) => {
     const [r, ov] = await Promise.all([
       pool.query(`
         SELECT id, key, name, color, color_bg AS "colorBg", default_ort AS "defaultOrt",
+               nur_zugewiesen AS "nurZugewiesen",
                default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
                pflicht_zuhoeren AS "pflichtZuhoeren",
                optional_praesentieren AS "optionalPraesentieren",
@@ -1701,6 +1714,7 @@ app.get('/api/talking-slots/open', requireLogin, async (req, res) => {
       FROM talking_slots s
       JOIN subjects sub ON sub.id = s.subject_id
       WHERE s.klasse=$1 AND s.typ=$2 AND sub.key=$3 AND s.datum >= CURRENT_DATE
+        AND sub.nur_zugewiesen = false
         AND NOT EXISTS (SELECT 1 FROM talking_sessions ts WHERE ts.slot_id=s.id)
       ORDER BY s.datum, s.uhrzeit
     `, [req.session.klasse, typ, subjectKey]);
@@ -1781,12 +1795,19 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   try {
     await client.query('BEGIN');
     const slotCheck = await client.query(
-      'SELECT id, typ, thema FROM talking_slots WHERE id=$1 AND klasse=$2',
+      `SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen"
+       FROM talking_slots sl LEFT JOIN subjects sub ON sub.id = sl.subject_id
+       WHERE sl.id=$1 AND sl.klasse=$2`,
       [slotId, req.session.klasse]
     );
     if (!slotCheck.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Termin nicht gefunden' });
+    }
+    // Lernberatung & Co. vergibt ausschliesslich die Lernbegleitung.
+    if (slotCheck.rows[0].nurZugewiesen && req.session.role !== 'admin') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
     }
     // Ist am Termin schon ein Thema ausgeschrieben (Fachbüro), reicht es aus;
     // sonst muss die buchende Person eins angeben.
@@ -1924,13 +1945,17 @@ app.post('/api/talking-sessions/:id/request', requireLogin, async (req, res) => 
   try {
     if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können anfragen' });
     const sess = await pool.query(`
-      SELECT ts.id, ts.slot_id AS "slotId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus", sl.typ
+      SELECT ts.id, ts.slot_id AS "slotId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus", sl.typ,
+             COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen"
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+      LEFT JOIN subjects sub ON sub.id = sl.subject_id
       WHERE ts.id=$1 AND sl.klasse=$2
     `, [req.params.id, req.session.klasse]);
     if (!sess.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
     const s = sess.rows[0];
     if (s.typ !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Fachbüro-Terminen' });
+    // Zu einer Lernberatung meldet man sich nicht selbst an.
+    if (s.nurZugewiesen) return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
     if (s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
     if (s.presenterId === req.session.userId) return res.status(409).json({ error: 'Du hast diesen Termin selbst gebucht' });
 
@@ -2277,7 +2302,7 @@ app.delete('/api/admin/deadlines/:id', requireAdmin, async (req, res) => {
 app.get('/api/calendar', requireLogin, async (req, res) => {
   try {
     const uid = req.session.userId;
-    const [slots, deadlines] = await Promise.all([
+    const [slots, deadlines, nurZugewiesen] = await Promise.all([
       pool.query(`
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
                s.thema AS "slotThema",
@@ -2302,13 +2327,22 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
         `SELECT id, to_char(datum,'YYYY-MM-DD') AS datum, titel FROM math_deadlines WHERE klasse=$1 ORDER BY datum`,
         [req.session.klasse]
       ),
+      pool.query('SELECT id FROM subjects WHERE nur_zugewiesen = true'),
     ]);
+    const nurZugewiesenIds = new Set(nurZugewiesen.rows.map(r => r.id));
     const rows = slots.rows.map(s => ({
       ...s,
       booked: !!s.session_id,
       mineAsPresenter: s.presenterId === uid,
       mineAsListener: !!s.myInvitationId,
-    }));
+    })).filter(s => {
+      // Termine eines "nur zugewiesen"-Fachs (Lernberatung) gehen nur die an, die
+      // ihnen zugeordnet sind. Das wird hier serverseitig gefiltert, damit sie gar
+      // nicht erst beim Browser ankommen. Admins sehen weiterhin alles.
+      if (req.session.role === 'admin') return true;
+      if (!nurZugewiesenIds.has(s.subjectId)) return true;
+      return s.mineAsPresenter || s.mineAsListener;
+    });
     res.json({ slots: rows, deadlines: deadlines.rows });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -2509,7 +2543,9 @@ app.get('/api/public/week', async (req, res) => {
         FROM talking_slots s
         LEFT JOIN subjects sub ON sub.id = s.subject_id
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
-        WHERE s.klasse = $1
+        -- Lernberatung & Co. betreffen einzelne Personen und haben auf einer
+        -- oeffentlichen Seite nichts verloren - auch nicht ohne Namen.
+        WHERE s.klasse = $1 AND COALESCE(sub.nur_zugewiesen, false) = false
           AND s.datum >= date_trunc('week', CURRENT_DATE)::date
           AND s.datum <  date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
         ORDER BY s.datum, s.uhrzeit

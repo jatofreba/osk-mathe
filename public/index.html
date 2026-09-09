@@ -1387,7 +1387,11 @@ textarea.form-input{
 <!-- ══ MODAL: Fachbüro-Termin freischalten (Admin) ═══════════════════════════════ -->
 <div class="overlay" id="modal-input-slot">
   <div class="modal" style="max-width:400px;">
-    <div class="modal-title">Fachbüro-Termin freischalten</div>
+    <div class="modal-title" id="islot-modal-title">Fachbüro-Termin freischalten</div>
+    <div id="islot-nurzugewiesen-hinweis" style="display:none;font-size:12.5px;color:var(--md-on-surface-variant);background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:8px 10px;margin-bottom:12px;">
+      Diesen Termin sehen nur die Schüler:innen, die du ihm zuordnest &ndash; er taucht
+      weder als freies Angebot noch auf der öffentlichen Wochenübersicht auf.
+    </div>
     <div class="form-group">
       <label class="form-label" for="islot-subject">Fach</label>
       <select class="form-input" id="islot-subject" onchange="applyInputSlotSubjectDefaults()"></select>
@@ -1421,7 +1425,7 @@ textarea.form-input{
     <div class="form-group">
       <label class="form-label" for="islot-thema">Thema <span style="font-weight:400;color:var(--md-on-surface-variant);">(optional)</span></label>
       <input class="form-input" id="islot-thema" placeholder="z.B. Bruchrechnen üben">
-      <div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;">
+      <div id="islot-thema-hinweis" style="font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;">
         Steht dann schon am ausgeschriebenen Termin – Zuweisen ist nicht nötig.
       </div>
     </div>
@@ -1540,6 +1544,14 @@ function hjCountsForUser(hj, firstHalbjahr, lastHalbjahr) {
 }
 // Fächer-Liste mit dem persönlichen Default-Fach der Admin-Person zuerst (me.defaultSubjectId,
 // über setMyDefaultSubject() gewählt) - Rest bleibt in der natürlichen Reihenfolge dahinter.
+// Faecher, die als Angebot ausgespielt werden - also ohne die "nur zugewiesen"-Eintraege
+// (Lernberatung): dort gibt es keine Talks, nichts zu buchen und keine Kleeblatt-Vorgaben.
+// Solche Termine legt die Lernbegleitung an und ordnet sie einzelnen Personen zu.
+function angebotsFaecher() {
+  const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
+  return list.filter(s => !s.nurZugewiesen);
+}
+
 function orderedSubjects() {
   const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
   if (!me || me.defaultSubjectId == null) return list;
@@ -1938,7 +1950,7 @@ async function loadPickerData() {
   // "mine" je Fach laden (Mathe/Englisch/Deutsch) - jedes Fach bekommt unten seine eigene Übersichtskarte.
   await loadSubjectsMeta();
   const talkingMineBySubject = {};
-  await Promise.all(subjectsMeta.map(async subj => {
+  await Promise.all(angebotsFaecher().map(async subj => {
     talkingMineBySubject[subj.key] = { presenting: [], invitations: [], trophies: { earned: 0, max: 0 } };
     try {
       const tr = await fetch('/api/talking-sessions/mine?subject=' + encodeURIComponent(subj.key));
@@ -2049,7 +2061,7 @@ async function loadPickerData() {
             ${[
               ['📚', 'Mathe-Lerntheken', stationsEarned, stationsMax],
               ['🎓', 'LZK', lzkEarned, lzkMax],
-              ...subjectsMeta.map(subj => ['🗣️', subj.name + '-Talks', talkingMineBySubject[subj.key]?.trophies?.earned || 0, talkingMineBySubject[subj.key]?.trophies?.max || 0]),
+              ...angebotsFaecher().map(subj => ['🗣️', subj.name + '-Talks', talkingMineBySubject[subj.key]?.trophies?.earned || 0, talkingMineBySubject[subj.key]?.trophies?.max || 0]),
             ].map(([icon, label, earned, max]) => {
               const subPct = max ? Math.round(earned / max * 100) : 0;
               return `
@@ -2061,7 +2073,7 @@ async function loadPickerData() {
             }).join('')}
           </div>
         </div>
-        ${subjectsMeta.map(subj => buildTalkingPickerSummaryHtml(talkingMineBySubject[subj.key] || { presenting: [], invitations: [] }, subj)).join('')}
+        ${angebotsFaecher().map(subj => buildTalkingPickerSummaryHtml(talkingMineBySubject[subj.key] || { presenting: [], invitations: [] }, subj)).join('')}
       </div>
       <div class="trophy-lb-col rank-col">
         <div class="trophy-panel">
@@ -2472,7 +2484,7 @@ async function showApp() {
     // Super-Admin in der Lerngruppen-Übersicht fest, deshalb bleibt das Feld dort verborgen.
     const barSubj = document.getElementById('bar-default-subject');
     if (barSubj && me.superAdmin) {
-      barSubj.innerHTML = '<option value="">Fach: keine Präferenz</option>' + subjectsMeta.map(s => `<option value="${s.id}">Fach: ${escHtml(s.name)}</option>`).join('');
+      barSubj.innerHTML = '<option value="">Fach: keine Präferenz</option>' + angebotsFaecher().map(s => `<option value="${s.id}">Fach: ${escHtml(s.name)}</option>`).join('');
       barSubj.value = (me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
       barSubj.style.display = '';
     }
@@ -3065,7 +3077,7 @@ async function loadAdminPeers() {
             <select class="form-input" style="width:auto;padding:4px 8px;font-size:12px;"
               title="Fach dieser Lernbegleitung" onchange="setPeerDefaultSubject(${p.id}, this.value)">
               <option value="">Fach: keine Präferenz</option>
-              ${subjectsMeta.map(s => `<option value="${s.id}"${p.defaultSubjectId === s.id ? ' selected' : ''}>Fach: ${escHtml(s.name)}</option>`).join('')}
+              ${angebotsFaecher().map(s => `<option value="${s.id}"${p.defaultSubjectId === s.id ? ' selected' : ''}>Fach: ${escHtml(s.name)}</option>`).join('')}
             </select>
             <button class="btn-icon" title="${p.superAdmin ? 'Super-Admin-Status entziehen' : 'Zum Super-Admin machen'}"
               onclick="setPeerSuperAdmin(${p.id},'${escHtml(p.username)}',${p.superAdmin ? 'false' : 'true'})">${p.superAdmin ? '★' : '☆'}</button>` : ''}
@@ -3519,7 +3531,7 @@ function showSubjectTalking(key) {
 function renderSubjectSwitch() {
   const el = document.getElementById('talking-subject-switch');
   if (!el) return;
-  const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
+  const list = angebotsFaecher();
   el.innerHTML = list.map(s => {
     const on = s.key === activeSubject;
     return `<button type="button" class="subject-btn${on ? ' active' : ''}" aria-pressed="${on}"
@@ -3614,7 +3626,11 @@ function renderCalendar() {
   if (dowRow) dowRow.innerHTML = ['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => `<div class="cal-dow">${d}</div>`).join('');
 
   const legendSubj = document.getElementById('cal-legend-subjects');
-  if (legendSubj) legendSubj.innerHTML = subjectsMeta.map(s => `<span><i style="background:${s.color};"></i> ${escHtml(s.name)}</span>`).join('');
+  // "Nur zugewiesen"-Faecher stehen in der Legende erst, wenn im Kalender tatsaechlich
+  // so ein Termin liegt - sonst wuerde bei allen anderen ein leerer Farbpunkt erklaert.
+  const legendListe = subjectsMeta.filter(s => !s.nurZugewiesen
+    || (calData.slots || []).some(it => it.subjectId === s.id));
+  if (legendSubj) legendSubj.innerHTML = legendListe.map(s => `<span><i style="background:${s.color};"></i> ${escHtml(s.name)}</span>`).join('');
 
   const byDay = calItemsByDay();
   const todayStr = calDateStr(new Date());
@@ -3674,7 +3690,8 @@ function renderCalDetail() {
     }
     const icon = it.typ === 'input' ? '📘' : '🎤';
     const subj = subjectById(it.subjectId);
-    const typLabel = subj.name + '-' + (it.typ === 'input' ? 'FaBü' : 'Talk');
+    const typLabel = subj.nurZugewiesen ? subj.name
+      : subj.name + '-' + (it.typ === 'input' ? 'FaBü' : 'Talk');
     const teacherLabel = (it.typ === 'input' && it.teacherUsername) ? ' · Lernbegleitung: ' + escHtml(formatTeacherShort(it.teacherUsername)) : '';
     const meta = `${escHtml(it.uhrzeit || '–')}${it.dauer ? ' · ' + it.dauer + ' Min' : ''}${it.ort ? ' · ' + escHtml(it.ort) : ''}${teacherLabel}`;
     let body, actions = '';
@@ -3800,6 +3817,14 @@ function applyInputSlotSubjectDefaults() {
   const subj = subjectById(parseInt(sel.value));
   document.getElementById('islot-dauer').value = String(subj.defaultDauer || 45);
   document.getElementById('islot-ort').value = subj.defaultOrt || '';
+  // Lernberatung & Co. sind kein Fachbüro-Angebot: sie werden zugeordnet, nicht gebucht.
+  const titel = document.getElementById('islot-modal-title');
+  if (titel) titel.textContent = subj.nurZugewiesen
+    ? `${subj.name}-Termin anlegen` : 'Fachbüro-Termin freischalten';
+  const hinweis = document.getElementById('islot-nurzugewiesen-hinweis');
+  if (hinweis) hinweis.style.display = subj.nurZugewiesen ? '' : 'none';
+  const themaHinweis = document.getElementById('islot-thema-hinweis');
+  if (themaHinweis) themaHinweis.style.display = subj.nurZugewiesen ? 'none' : '';
 }
 async function openInputSlotModal(presetDate) {
   const subjSel = document.getElementById('islot-subject');
@@ -3878,7 +3903,8 @@ function openInputAssignModal(slotId) {
   if (!slot) return;
   _iassignSlot = slot;
   const subj = subjectById(slot.subjectId);
-  document.getElementById('iassign-title').textContent = `📘 ${subj.name}-FaBü: Schüler:innen zuweisen`;
+  document.getElementById('iassign-title').textContent =
+    `📘 ${subj.nurZugewiesen ? subj.name : subj.name + '-FaBü'}: Schüler:innen zuweisen`;
   document.getElementById('iassign-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}`;
   const themaGroup = document.getElementById('iassign-thema-group');
