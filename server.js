@@ -2340,7 +2340,10 @@ async function halbjahrOverview(klasse, onlyUid) {
       JOIN talking_sessions ts ON ts.id = ti.session_id
       JOIN talking_slots sl ON sl.id = ts.slot_id
       JOIN users u ON u.id = ti.listener_id
-      JOIN users pu ON pu.id = ts.presenter_id
+      -- LEFT JOIN: ein von der Lernbegleitung angelegtes Fachbuero hat keine
+      -- vortragende Person (presenter_id IS NULL). Mit INNER JOIN fielen genau
+      -- diese Teilnahmen lautlos aus der Auswertung.
+      LEFT JOIN users pu ON pu.id = ts.presenter_id
       WHERE u.klasse = $1${uidFilter}
     `, params),
     pool.query(`
@@ -2383,27 +2386,54 @@ async function halbjahrOverview(klasse, onlyUid) {
     if (!hjRow.bySubject[key]) hjRow.bySubject[key] = {
       subjectName: subj ? subj.name : 'Unbekannt', subjectColor: subj ? subj.color : '#94a3b8',
       talksPresented: 0, talksListened: 0, inputParticipated: 0, pokalePresented: 0, pokaleListened: 0,
+      // Anwesenheit im Fachbuero: teilgenommen (inputParticipated = bestaetigt),
+      // gefehlt, und offen = Termin vorbei, aber noch nicht eingetragen.
+      inputMissed: 0, inputOpen: 0,
       talkDetails: [], inputDetails: [], lastTalk: null, lastInput: null,
     };
     return hjRow.bySubject[key];
   };
   const halbjahre = new Set();
 
+  const heuteIso = new Date().toISOString().slice(0, 10);
+  // Fachbuero-Termine zaehlen nicht nur, wenn jemand da war: ein vergangener
+  // Termin ohne Eintrag ist "offen" und gehoert in die Auswertung, sonst faellt
+  // eine unbewertete Teilnahme einfach unter den Tisch. Termine, die noch
+  // bevorstehen, bleiben aussen vor.
+  const fabueGezaehlt = (s, r) => {
+    if (r.status === 'erledigt') { s.inputParticipated++; return true; }
+    if (r.status === 'nicht_erledigt') { s.inputMissed++; return true; }
+    if (r.datum && r.datum < heuteIso) { s.inputOpen++; return true; }
+    return false;
+  };
+  const fabueEintragen = (r, rolle, extra) => {
+    const hj = slotHj(r); if (!hj) return;
+    const s = ensureSubject(r.uid, hj, r.subjectId);
+    if (!fabueGezaehlt(s, r)) return;
+    halbjahre.add(hj);
+    s.inputDetails.push({ datum: r.datum, role: rolle, thema: r.thema, status: r.status, ...extra });
+    s.lastInput = maxD(s.lastInput, r.datum);
+  };
+
   presented.rows.forEach(r => {
+    if (r.typ === 'input') return fabueEintragen(r, 'selbst gebucht', {});
     if (r.status !== 'erledigt') return;
     const hj = slotHj(r); if (!hj) return;
     halbjahre.add(hj);
     const s = ensureSubject(r.uid, hj, r.subjectId);
-    if (r.typ === 'input') { s.inputParticipated++; s.inputDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema }); s.lastInput = maxD(s.lastInput, r.datum); }
-    else { s.talksPresented++; s.pokalePresented += r.pokale || 0; s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale }); s.lastTalk = maxD(s.lastTalk, r.datum); }
+    s.talksPresented++; s.pokalePresented += r.pokale || 0;
+    s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale });
+    s.lastTalk = maxD(s.lastTalk, r.datum);
   });
   attended.rows.forEach(r => {
+    if (r.typ === 'input') return fabueEintragen(r, 'teilgenommen', { presenter: r.presenter });
     if (r.status !== 'erledigt') return;
     const hj = slotHj(r); if (!hj) return;
     halbjahre.add(hj);
     const s = ensureSubject(r.uid, hj, r.subjectId);
-    if (r.typ === 'input') { s.inputParticipated++; s.inputDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter }); s.lastInput = maxD(s.lastInput, r.datum); }
-    else { s.talksListened++; s.pokaleListened += r.pokale || 0; s.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter, pokale: r.pokale }); s.lastTalk = maxD(s.lastTalk, r.datum); }
+    s.talksListened++; s.pokaleListened += r.pokale || 0;
+    s.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter, pokale: r.pokale });
+    s.lastTalk = maxD(s.lastTalk, r.datum);
   });
   lzkRows.rows.forEach(r => {
     const hj = halbjahrForDate(r.datum); if (!hj) return;

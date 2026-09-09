@@ -105,14 +105,18 @@ Namen ändern sich.
   Felder bleiben. Wenn zwei Personen denselben Vorschlag ergäben, wird das
   **gemeldet und nicht vergeben** -- sonst hätten beide denselben Zugang.
 - **Lerntheken-App → Einstellungen…**: Adresse der App und Admin-Benutzername.
-  Das Passwort wird nicht gespeichert, sondern bei jeder Aktion abgefragt.
+  Das Passwort wird nicht gespeichert, sondern einmal pro Programmstart
+  abgefragt (siehe „Passwort und Offline-Arbeiten").
 - **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Fachbüro, Kleeblätter,
-  Stationen und LZK und schreibt sie als Blatt **„App-Daten"** in die geöffnete
-  Mappe -- eine Zeile je Person und Halbjahr, je Fach eigene Spalten. Danach
-  noch speichern.
-- **Lerntheken-App → Konten anlegen…**: legt Zugänge für alle Personen an, die
-  einen Alias haben, aber noch kein Konto. Mit Vorschau und Rückfrage;
-  bestehende Konten werden nicht angefasst.
+  Stationen und LZK in die Bausteinlisten -- je Halbjahr eine Zeile pro
+  bearbeiteter Lerntheke und eine für Talks/Fachbüro. Arbeitest du gerade mit
+  einer Excel-Mappe, entsteht zusätzlich das Rohdaten-Blatt **„App-Daten"**.
+  Danach noch speichern.
+- **Beim Fachbüro zählt die Anwesenheit**, nicht die Zusage: für vergangene
+  Termine steht in der Zeile, wie oft jemand **da** war, wie oft **gefehlt**
+  hat und wie viele Termine noch **offen** sind -- offen heißt: der Termin ist
+  vorbei, aber in der App ist noch nicht eingetragen, wer da war. Termine, die
+  noch bevorstehen, tauchen gar nicht auf.
 - **Lerntheken-App → Aliasse exportieren…**: Textdatei `alias,passwort` zum
   Einfügen im Bulk-Dialog der Weboberfläche.
 

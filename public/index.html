@@ -4357,7 +4357,12 @@ function renderHalbjahr() {
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
         <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
         <td>${sd.talksListened ? '👂 ' + sd.talksListened + sub(lastRole(sd.talkDetails,'zugehört')) : dash}</td>
-        <td>${sd.inputParticipated ? '📘 ' + sd.inputParticipated + sub(sd.lastInput) : dash}</td>${extraCols}
+        <td>${(sd.inputParticipated || sd.inputMissed || sd.inputOpen)
+          ? '📘 ' + (sd.inputParticipated || 0)
+            + (sd.inputMissed ? ' <span style="color:var(--md-error);">✗' + sd.inputMissed + '</span>' : '')
+            + (sd.inputOpen ? ' <span style="color:#a16207;">⏳' + sd.inputOpen + '</span>' : '')
+            + sub(sd.lastInput)
+          : dash}</td>${extraCols}
       </tr>`;
     }).join('');
 
@@ -4390,7 +4395,10 @@ function openHjDetail(userId, subjectKey) {
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
   const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🍀'.repeat(t.pokale):''}</span></div>`;
-  const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
+  const fabuePill = st => st === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ da gewesen</span>'
+    : st === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ gefehlt</span>'
+    : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
+  const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> ${fabuePill(t.status)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🍀 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🍀'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 

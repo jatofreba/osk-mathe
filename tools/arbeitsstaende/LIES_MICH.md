@@ -4,8 +4,9 @@ Zwei Richtungen:
 
 1. **Ergebnisse holen** — Talks, Fachbüro, Kleeblätter, Stationen und LZK aus der
    Lerntheken-App in die Arbeitsstände-Datei.
-2. **Konten anlegen** — die Zugänge für die Lerntheken-App aus der
-   Arbeitsstände-Liste erzeugen.
+2. **Aliasse exportieren** — die Zugangsnamen für die Lerntheken-App aus der
+   Arbeitsstände-Liste erzeugen; angelegt werden die Konten in der
+   Weboberfläche.
 
 Beides geht **komplett über das Menü der Anwendung**, ein Terminal wird nur zum
 Starten gebraucht. Für Automatisierung gibt es dieselben Funktionen zusätzlich
@@ -54,11 +55,9 @@ Halbjahr, je Fach eigene Spalten.
 | Vorname | Nachname | Account | Lerngruppe | Halbjahr | Mathe: Talks gehalten / zugehört / FaBü / Kleeblätter | Englisch: … | Deutsch: … | Stationen abgeschlossen | LZK bestanden | LZK-Kleeblätter | Stand |
 
 Danach noch speichern. Personen, deren Alias zu keinem Konto passt, werden
-gemeldet.
-
-**Konten anlegen…** — legt Zugänge für alle Personen an, die einen Alias haben,
-aber noch **kein** Konto in der App. Vorhandene Konten werden nicht angefasst.
-Vorher gibt es eine Vorschau mit Rückfrage.
+gemeldet. Beim Fachbüro steht dabei die **Anwesenheit** in vergangenen
+Terminen: wie oft jemand da war, gefehlt hat und wie viele Termine noch nicht
+eingetragen sind.
 
 **Aliasse exportieren…** — schreibt eine Textdatei `alias,passwort` zum
 Einfügen im Bulk-Dialog der Lerntheken-App. Alternative, falls du lieber in der

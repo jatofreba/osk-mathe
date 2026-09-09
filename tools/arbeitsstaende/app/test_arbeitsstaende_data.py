@@ -11,7 +11,7 @@ import tempfile
 from datetime import date
 
 from arbeitsstaende_data import (
-    Arbeitsstaende, Baustein, Student, lt_lzk_aenderungen, LT_MARKER)
+    Arbeitsstaende, Baustein, Student, lt_lzk_aenderungen, lt_talk_zeile, LT_MARKER)
 
 TMP = tempfile.mkdtemp(prefix="arbeitsstaende_test_")
 
@@ -406,6 +406,28 @@ def test_lzk_abgleich_mit_dem_server():
     print("OK: test_lzk_abgleich_mit_dem_server")
 
 
+def test_fabue_anwesenheit_im_bericht():
+    """Beim Fachbuero zaehlt die Anwesenheit, nicht die Zusage.
+
+    Die App liefert je Halbjahr drei Zahlen: da gewesen, gefehlt und offen
+    (Termin vorbei, von der Lernbegleitung noch nicht eingetragen).
+    """
+    def bucket(**werte):
+        return {"bySubject": {"mathe": werte}}
+
+    assert lt_talk_zeile(bucket(inputParticipated=3)) == "3x FaBü da"
+    assert lt_talk_zeile(bucket(inputParticipated=3, inputMissed=1)) ==         "3x FaBü da, 1x FaBü gefehlt"
+    # Wer nur gefehlt hat, taucht trotzdem auf -- vorher fiel das voellig weg.
+    assert lt_talk_zeile(bucket(inputMissed=2)) == "2x FaBü gefehlt"
+    assert lt_talk_zeile(bucket(inputParticipated=2, inputMissed=1, inputOpen=2)) ==         "2x FaBü da, 1x FaBü gefehlt, 2x FaBü offen"
+    assert lt_talk_zeile(bucket(talksPresented=1, talksListened=2,
+                                inputParticipated=4, pokalePresented=3)) ==         "1x gehalten, 2x zugehoert, 4x FaBü da, 3 Kleeblaetter"
+    # Ohne jede Aktivitaet gibt es keine Zeile.
+    assert lt_talk_zeile(bucket()) is None
+    assert lt_talk_zeile({"bySubject": {}}) is None
+    print("OK: test_fabue_anwesenheit_im_bericht")
+
+
 if __name__ == "__main__":
     test_laden_testmappe()
     test_speichern_ohne_aenderung_erhaelt_daten()
@@ -421,5 +443,6 @@ if __name__ == "__main__":
     test_json_ist_lesbar_und_stabil()
     test_json_fremde_datei_warnt_statt_abzustuerzen()
     test_lzk_abgleich_mit_dem_server()
+    test_fabue_anwesenheit_im_bericht()
     print("\nAlle Tests erfolgreich.")
     print(f"(Testdateien lagen in {TMP})")

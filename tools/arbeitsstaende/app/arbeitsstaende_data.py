@@ -251,13 +251,20 @@ def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
 
 
 def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
-    """Bemerkungstext fuer die Talk-/Fachbuero-Zeile eines Halbjahres, oder None."""
+    """Bemerkungstext fuer die Talk-/Fachbuero-Zeile eines Halbjahres, oder None.
+
+    Beim Fachbuero zaehlt nicht nur die Zusage, sondern die Anwesenheit: die App
+    liefert je Halbjahr, wie oft jemand da war, gefehlt hat und wie viele
+    vergangene Termine die Lernbegleitung noch nicht eingetragen hat.
+    """
     sub = (bucket.get("bySubject") or {}).get(fach_key) or {}
     geh = sub.get("talksPresented", 0) or 0
     zug = sub.get("talksListened", 0) or 0
     inp = sub.get("inputParticipated", 0) or 0
+    fehlt = sub.get("inputMissed", 0) or 0
+    offen = sub.get("inputOpen", 0) or 0
     klee = (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0)
-    if not (geh or zug or inp or klee):
+    if not (geh or zug or inp or fehlt or offen or klee):
         return None
     teile = []
     if geh:
@@ -265,7 +272,11 @@ def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
     if zug:
         teile.append(f"{zug}x zugehoert")
     if inp:
-        teile.append(f"{inp}x FaBü")
+        teile.append(f"{inp}x FaBü da")
+    if fehlt:
+        teile.append(f"{fehlt}x FaBü gefehlt")
+    if offen:
+        teile.append(f"{offen}x FaBü offen")
     if klee:
         teile.append(f"{klee} Kleeblaetter")
     return ", ".join(teile)
