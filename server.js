@@ -1223,6 +1223,27 @@ app.delete('/api/admin/peer/:id', requireSuperAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Kontonamen (Alias) einer Schüler:in ändern. Ausdrücklich NUR das Namensfeld: sämtliche
+// Daten hängen an users.id (Fortschritt, LZK, Korrektur, Talks/Fachbüro, Stationen,
+// Kleeblätter, Kurs-Zuordnung) - der Name wird nirgends als Referenz gespeichert. Ein
+// Umbenennen lässt den kompletten Verlauf also unangetastet.
+// Wichtig für die Praxis: die Person meldet sich danach mit dem NEUEN Namen an.
+app.post('/api/admin/student/:id/rename', requireAdmin, async (req, res) => {
+  try {
+    const neu = String(req.body.username || '').trim().toLowerCase();
+    if (!neu) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const r = await pool.query(
+      'UPDATE users SET username=$1 WHERE id=$2 AND klasse=$3 AND role=$4 RETURNING id, username',
+      [neu, req.params.id, req.session.klasse, 'student']
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true, id: r.rows[0].id, username: r.rows[0].username });
+  } catch(e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 app.delete('/api/admin/student/:id', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(

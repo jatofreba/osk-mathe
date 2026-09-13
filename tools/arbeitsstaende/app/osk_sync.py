@@ -164,6 +164,25 @@ class AppClient:
             "pokale": int(pokale or 0),
         })
 
+    def umbenennen(self, user_id, neuer_name: str) -> str:
+        """Aendert NUR den Kontonamen auf dem Server. Fortschritt, LZK-Eintraege,
+        Talks/Fachbuero-Termine und Kleeblaetter bleiben vollstaendig erhalten --
+        auf dem Server haengt alles an der Konto-ID, nicht am Namen.
+
+        Gibt den neuen Namen zurueck; wirft ValueError mit lesbarem Text, wenn
+        der Name schon vergeben ist oder das Konto nicht gefunden wurde.
+        """
+        try:
+            antwort = self._post(f"/api/admin/student/{user_id}/rename",
+                                 {"username": neuer_name})
+        except error.HTTPError as e:
+            try:
+                grund = json.loads(e.read().decode("utf-8")).get("error", "")
+            except Exception:
+                grund = ""
+            raise ValueError(grund or f"Umbenennen fehlgeschlagen (HTTP {e.code}).")
+        return antwort.get("username", neuer_name)
+
     def lerntheken_meta(self) -> List[dict]:
         """Alle Lerntheken mit key, Titel und Stationszahl."""
         try:

@@ -439,6 +439,8 @@ class App(tk.Tk):
                                    command=self.app_lzk_senden)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
+        lerntheke_menu.add_command(label="Alias auf dem Server umbenennen…",
+                                   command=self.alias_umbenennen)
         lerntheke_menu.add_separator()
         cfg = self._lt_einstellungen_laden()
         # Offline: die Anwendung nimmt garantiert keine Verbindung auf. Alles
@@ -1295,6 +1297,91 @@ class App(tk.Tk):
             if len(ohne) > 10:
                 hinweis += f"\n... und {len(ohne) - 10} weitere"
         messagebox.showinfo("Aliasse exportieren", hinweis)
+
+    def alias_umbenennen(self):
+        """Benennt ein bestehendes Konto auf dem Server um.
+
+        Nur der Kontoname aendert sich. Fortschritt, LZK-Eintraege, Talks bzw.
+        Fachbuero-Termine und Kleeblaetter bleiben vollstaendig erhalten -- auf
+        dem Server haengt alles an der Konto-ID, nicht am Namen. Deshalb ist das
+        der richtige Weg statt "loeschen und neu anlegen", was den ganzen
+        Verlauf vernichten wuerde.
+        """
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            konten = client.studierende()
+        except Exception as e:
+            messagebox.showerror("Alias umbenennen",
+                                 f"Konten konnten nicht geladen werden:\n{e}")
+            return
+        konten = [k for k in konten if k.get("username")]
+        if not konten:
+            messagebox.showinfo("Alias umbenennen",
+                                f"Fuer {klasse} gibt es noch keine Konten.")
+            return
+
+        namen = sorted(k["username"] for k in konten)
+        alt = simpledialog.askstring(
+            "Alias umbenennen",
+            "Welches Konto soll umbenannt werden?\n\nVorhanden:\n"
+            + ", ".join(namen),
+            parent=self)
+        if not alt:
+            return
+        alt = alt.strip().lower()
+        treffer = [k for k in konten if k["username"].lower() == alt]
+        if not treffer:
+            messagebox.showerror("Alias umbenennen",
+                                 f"Kein Konto mit dem Namen '{alt}'.")
+            return
+
+        neu = simpledialog.askstring(
+            "Alias umbenennen", f"Neuer Name fuer '{alt}':",
+            initialvalue=alt, parent=self)
+        if not neu:
+            return
+        neu = neu.strip().lower()
+        if neu == alt:
+            return
+        if not messagebox.askyesno(
+                "Alias umbenennen",
+                f"'{alt}' in '{neu}' umbenennen?\n\n"
+                "Fortschritt, LZK-Termine, Talks und Kleeblaetter bleiben "
+                "erhalten.\nDie Person meldet sich ab sofort mit dem NEUEN "
+                "Namen an."):
+            return
+
+        try:
+            jetzt = client.umbenennen(treffer[0]["id"], neu)
+        except ValueError as e:          # z.B. Name schon vergeben
+            messagebox.showerror("Alias umbenennen", str(e))
+            return
+        except Exception as e:
+            messagebox.showerror("Alias umbenennen",
+                                 f"Umbenennen fehlgeschlagen:\n{e}")
+            return
+
+        # Lokalen Alias mitziehen, sonst laufen App und Server auseinander.
+        mitgezogen = [s for s in self.az.students
+                      if s.alias.strip().lower() == alt]
+        for s in mitgezogen:
+            s.alias = jetzt
+        if mitgezogen:
+            self._markiere_ungespeichert()
+            self._liste_aktualisieren()
+            if self.aktueller_schueler:
+                self.f_alias.set(self.aktueller_schueler.alias or "")
+
+        messagebox.showinfo(
+            "Alias umbenennen",
+            f"Konto heisst jetzt '{jetzt}'.\n\n"
+            + (f"Lokaler Alias mitgezogen: "
+               + ", ".join(s.voller_name for s in mitgezogen)
+               if mitgezogen else
+               "Lokal gab es zu diesem Alias keinen Eintrag."))
 
     # ------------------------------------------------------------------
     # Lerntheken-App: Einstellungen, Ergebnisse abrufen, LZK-Termine zurueckschreiben
