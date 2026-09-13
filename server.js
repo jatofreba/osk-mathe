@@ -499,8 +499,12 @@ async function mayManageSlot(req, slotId) {
   const r = await pool.query('SELECT admin_id FROM talking_slots WHERE id=$1 AND klasse=$2',
     [slotId, req.session.klasse]);
   if (!r.rows.length) return { ok: false, status: 404, error: 'Nicht gefunden' };
-  if (r.rows[0].admin_id === req.session.userId) return { ok: true };
-  if (await isSuperAdmin(req.session.userId)) return { ok: true };
+  // adminId = zuständige Lernbegleitung des Slots. Wird von der Terminkonflikt-Prüfung
+  // gebraucht, damit dort gegen DIESE Person geprüft wird und nicht gegen die aufrufende
+  // (ein Super-Admin darf fremde Termine verschieben).
+  const adminId = r.rows[0].admin_id;
+  if (adminId === req.session.userId) return { ok: true, adminId };
+  if (await isSuperAdmin(req.session.userId)) return { ok: true, adminId };
   return { ok: false, status: 403, error: 'Dieser Termin gehört einer anderen Lernbegleitung - nur Super-Admins dürfen ihn ändern' };
 }
 
@@ -2095,12 +2099,19 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
     if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
     const may = await mayManageSlot(req, req.params.id);
     if (!may.ok) return res.status(may.status).json({ error: may.error });
-    const conflict = await pool.query(
-      `SELECT id FROM talking_slots WHERE klasse=$1 AND datum=$2 AND uhrzeit=$3 AND id != $4`,
-      [req.session.klasse, datum, uhrzeit || '', req.params.id]
-    );
-    if (conflict.rows.length)
-      return res.status(409).json({ error: 'Terminkonflikt: An diesem Datum/dieser Uhrzeit existiert bereits ein anderer Termin.' });
+    // Kollisionsprüfung nur gegen Termine DERSELBEN Lernbegleitung: mehrere Fachbüros
+    // (Mathe/Englisch/Deutsch) laufen bewusst parallel zur selben Zeit. Verboten ist nur,
+    // dass eine Person zwei eigene Termine gleichzeitig hat. Slots ohne zuständige Person
+    // (Altbestand, admin_id NULL) werden übersprungen - da gibt es niemanden, der doppelt kann.
+    // Für Schüler:innen greift davon unabhängig hasScheduleConflict() beim Buchen/Zuweisen.
+    if (may.adminId != null) {
+      const conflict = await pool.query(
+        `SELECT id FROM talking_slots WHERE klasse=$1 AND datum=$2 AND uhrzeit=$3 AND id != $4 AND admin_id = $5`,
+        [req.session.klasse, datum, uhrzeit || '', req.params.id, may.adminId]
+      );
+      if (conflict.rows.length)
+        return res.status(409).json({ error: 'Terminkonflikt: Diese Lernbegleitung hat zu dieser Zeit bereits einen eigenen Termin.' });
+    }
     const slotDauer = Math.min(600, Math.max(5, parseInt(dauer) || 45));
     const r = await pool.query(
       // Das Thema wird nur angefasst, wenn es mitgeschickt wurde - sonst wuerde ein
