@@ -341,6 +341,97 @@ class VorlageDialog(tk.Toplevel):
         self.destroy()
 
 
+class AliasUmbenennenDialog(tk.Toplevel):
+    """Konto per Auswahlliste waehlen und neuen Alias eintragen.
+
+    `konten` sind die Server-Konten (dicts mit id/username). Zu jedem Konto wird
+    -- sofern vorhanden -- der lokale Name mit angezeigt, damit klar ist, wer
+    hinter einem Kuerzel wie "be.ja" steckt.
+    `result` ist nach dem Schliessen None (Abbruch) oder (konto, neuer_name).
+    """
+
+    def __init__(self, parent, konten: list, namen_zu_alias: dict):
+        super().__init__(parent)
+        self.title("Alias auf dem Server umbenennen")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+
+        self._konten = sorted(konten, key=lambda k: (k.get("username") or "").lower())
+        # Anzeigetext -> Konto, damit aus der Auswahl wieder das Konto wird.
+        self._nach_anzeige = {}
+        anzeigen = []
+        for k in self._konten:
+            name = k.get("username") or ""
+            klartext = namen_zu_alias.get(name.lower())
+            anzeige = f"{name}  –  {klartext}" if klartext else name
+            self._nach_anzeige[anzeige] = k
+            anzeigen.append(anzeige)
+
+        ttk.Label(self,
+                  text="Nur der Kontoname ändert sich.\n"
+                       "Fortschritt, LZK-Termine, Talks und Kleeblätter bleiben erhalten.",
+                  justify="left", wraplength=380).pack(padx=12, pady=(12, 8), anchor="w")
+
+        ttk.Label(self, text="Konto").pack(padx=12, anchor="w")
+        self.auswahl = tk.StringVar()
+        self.box = ttk.Combobox(self, textvariable=self.auswahl, values=anzeigen,
+                                width=46, state="readonly")
+        self.box.pack(padx=12, pady=(2, 8), fill="x")
+        self.box.bind("<<ComboboxSelected>>", self._auswahl_geaendert)
+
+        ttk.Label(self, text="Neuer Alias").pack(padx=12, anchor="w")
+        self.neu_var = tk.StringVar()
+        self.eingabe = ttk.Entry(self, textvariable=self.neu_var, width=46)
+        self.eingabe.pack(padx=12, pady=(2, 4), fill="x")
+
+        self.hinweis = ttk.Label(self, text="", foreground="#b3261e", wraplength=380,
+                                 justify="left")
+        self.hinweis.pack(padx=12, pady=(0, 6), anchor="w")
+
+        abschluss = ttk.Frame(self)
+        abschluss.pack(fill="x", padx=12, pady=(0, 12))
+        ttk.Button(abschluss, text="Umbenennen", command=self._uebernehmen).pack(side="left")
+        ttk.Button(abschluss, text="Abbrechen", command=self.destroy).pack(side="left", padx=6)
+
+        if anzeigen:
+            self.box.current(0)
+            self._auswahl_geaendert()
+        self.bind("<Return>", lambda e: self._uebernehmen())
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _gewaehltes_konto(self):
+        return self._nach_anzeige.get(self.auswahl.get())
+
+    def _auswahl_geaendert(self, _event=None):
+        konto = self._gewaehltes_konto()
+        if konto:
+            # Als Startwert der bisherige Name - so muss nur die Aenderung getippt werden.
+            self.neu_var.set(konto.get("username") or "")
+        self.hinweis.config(text="")
+
+    def _uebernehmen(self):
+        konto = self._gewaehltes_konto()
+        if not konto:
+            self.hinweis.config(text="Bitte ein Konto auswählen.")
+            return
+        neu = self.neu_var.get().strip().lower()
+        alt = (konto.get("username") or "").lower()
+        if not neu:
+            self.hinweis.config(text="Bitte einen neuen Alias eintragen.")
+            return
+        if neu == alt:
+            self.hinweis.config(text="Der Alias ist unverändert.")
+            return
+        # Kollision schon hier abfangen, statt erst den Server antworten zu lassen.
+        if any(neu == (k.get("username") or "").lower()
+               for k in self._konten if k is not konto):
+            self.hinweis.config(text=f"„{neu}“ ist auf dem Server schon vergeben.")
+            return
+        self.result = (konto, neu)
+        self.destroy()
+
+
 class LerntheckenEinstellungenDialog(tk.Toplevel):
     """Adresse und Admin-Benutzername der Lerntheken-App.
 
@@ -1323,29 +1414,21 @@ class App(tk.Tk):
                                 f"Fuer {klasse} gibt es noch keine Konten.")
             return
 
-        namen = sorted(k["username"] for k in konten)
-        alt = simpledialog.askstring(
-            "Alias umbenennen",
-            "Welches Konto soll umbenannt werden?\n\nVorhanden:\n"
-            + ", ".join(namen),
-            parent=self)
-        if not alt:
-            return
-        alt = alt.strip().lower()
-        treffer = [k for k in konten if k["username"].lower() == alt]
-        if not treffer:
-            messagebox.showerror("Alias umbenennen",
-                                 f"Kein Konto mit dem Namen '{alt}'.")
-            return
+        # Zu jedem Server-Konto den lokalen Klarnamen zeigen, damit in der Liste
+        # erkennbar ist, wer hinter einem Kuerzel steckt.
+        namen_zu_alias = {}
+        for s in self.az.students:
+            a = s.alias.strip().lower()
+            if a:
+                namen_zu_alias[a] = s.voller_name
 
-        neu = simpledialog.askstring(
-            "Alias umbenennen", f"Neuer Name fuer '{alt}':",
-            initialvalue=alt, parent=self)
-        if not neu:
+        dlg = AliasUmbenennenDialog(self, konten, namen_zu_alias)
+        self.wait_window(dlg)
+        if not dlg.result:
             return
-        neu = neu.strip().lower()
-        if neu == alt:
-            return
+        konto, neu = dlg.result
+        alt = (konto.get("username") or "").lower()
+
         if not messagebox.askyesno(
                 "Alias umbenennen",
                 f"'{alt}' in '{neu}' umbenennen?\n\n"
@@ -1355,7 +1438,7 @@ class App(tk.Tk):
             return
 
         try:
-            jetzt = client.umbenennen(treffer[0]["id"], neu)
+            jetzt = client.umbenennen(konto["id"], neu)
         except ValueError as e:          # z.B. Name schon vergeben
             messagebox.showerror("Alias umbenennen", str(e))
             return
