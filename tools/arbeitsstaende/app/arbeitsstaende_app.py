@@ -342,63 +342,101 @@ class VorlageDialog(tk.Toplevel):
 
 
 class AliasUmbenennenDialog(tk.Toplevel):
-    """Konto per Auswahlliste waehlen und neuen Alias eintragen.
+    """Mehrere Kontonamen in einem Durchgang umbenennen.
 
-    `konten` sind die Server-Konten (dicts mit id/username). Zu jedem Konto wird
-    -- sofern vorhanden -- der lokale Name mit angezeigt, damit klar ist, wer
-    hinter einem Kuerzel wie "be.ja" steckt.
-    `result` ist nach dem Schliessen None (Abbruch) oder (konto, neuer_name).
+    Ablauf: Konto auswaehlen, neuen Alias eintragen, vormerken -- beliebig oft.
+    Erst "Alle umbenennen" schickt die Liste an den Server. Das vermeidet einen
+    Dialog mit N Eingabefeldern und erlaubt trotzdem Sammel-Umbenennungen.
+
+    `konten` sind die Server-Konten (dicts mit id/username). `result` ist nach
+    dem Schliessen None (Abbruch) oder eine Liste [(konto, neuer_name), ...].
     """
 
     def __init__(self, parent, konten: list, namen_zu_alias: dict):
         super().__init__(parent)
-        self.title("Alias auf dem Server umbenennen")
+        self.title("Aliasse auf dem Server umbenennen")
         self.result = None
         self.transient(parent)
         self.grab_set()
 
         self._konten = sorted(konten, key=lambda k: (k.get("username") or "").lower())
-        # Anzeigetext -> Konto, damit aus der Auswahl wieder das Konto wird.
-        self._nach_anzeige = {}
-        anzeigen = []
-        for k in self._konten:
-            name = k.get("username") or ""
-            klartext = namen_zu_alias.get(name.lower())
-            anzeige = f"{name}  –  {klartext}" if klartext else name
-            self._nach_anzeige[anzeige] = k
-            anzeigen.append(anzeige)
+        self._namen_zu_alias = namen_zu_alias
+        self._vorgemerkt = []            # [(konto, neuer_name), ...]
 
         ttk.Label(self,
-                  text="Nur der Kontoname ändert sich.\n"
+                  text="Nur die Kontonamen ändern sich.\n"
                        "Fortschritt, LZK-Termine, Talks und Kleeblätter bleiben erhalten.",
-                  justify="left", wraplength=380).pack(padx=12, pady=(12, 8), anchor="w")
+                  justify="left", wraplength=420).pack(padx=12, pady=(12, 8), anchor="w")
 
         ttk.Label(self, text="Konto").pack(padx=12, anchor="w")
         self.auswahl = tk.StringVar()
-        self.box = ttk.Combobox(self, textvariable=self.auswahl, values=anzeigen,
-                                width=46, state="readonly")
+        self.box = ttk.Combobox(self, textvariable=self.auswahl, width=50, state="readonly")
         self.box.pack(padx=12, pady=(2, 8), fill="x")
         self.box.bind("<<ComboboxSelected>>", self._auswahl_geaendert)
 
         ttk.Label(self, text="Neuer Alias").pack(padx=12, anchor="w")
+        zeile = ttk.Frame(self)
+        zeile.pack(padx=12, pady=(2, 4), fill="x")
         self.neu_var = tk.StringVar()
-        self.eingabe = ttk.Entry(self, textvariable=self.neu_var, width=46)
-        self.eingabe.pack(padx=12, pady=(2, 4), fill="x")
+        self.eingabe = ttk.Entry(zeile, textvariable=self.neu_var)
+        self.eingabe.pack(side="left", fill="x", expand=True)
+        ttk.Button(zeile, text="+ Vormerken", command=self._vormerken).pack(side="left", padx=(6, 0))
 
-        self.hinweis = ttk.Label(self, text="", foreground="#b3261e", wraplength=380,
+        self.hinweis = ttk.Label(self, text="", foreground="#b3261e", wraplength=420,
                                  justify="left")
         self.hinweis.pack(padx=12, pady=(0, 6), anchor="w")
 
+        ttk.Label(self, text="Vorgemerkt").pack(padx=12, anchor="w")
+        liste_rahmen = ttk.Frame(self)
+        liste_rahmen.pack(fill="both", expand=True, padx=12)
+        self.liste = tk.Listbox(liste_rahmen, height=8, activestyle="dotbox")
+        self.liste.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(liste_rahmen, command=self.liste.yview)
+        sb.pack(side="right", fill="y")
+        self.liste.config(yscrollcommand=sb.set)
+        ttk.Button(self, text="− Entfernen", command=self._entfernen).pack(padx=12, pady=4, anchor="w")
+
         abschluss = ttk.Frame(self)
-        abschluss.pack(fill="x", padx=12, pady=(0, 12))
-        ttk.Button(abschluss, text="Umbenennen", command=self._uebernehmen).pack(side="left")
+        abschluss.pack(fill="x", padx=12, pady=(4, 12))
+        self.ausfuehren_btn = ttk.Button(abschluss, text="Alle umbenennen",
+                                         command=self._ausfuehren, state="disabled")
+        self.ausfuehren_btn.pack(side="left")
         ttk.Button(abschluss, text="Abbrechen", command=self.destroy).pack(side="left", padx=6)
 
-        if anzeigen:
+        self._auswahl_neu_aufbauen()
+        self.bind("<Return>", lambda e: self._vormerken())
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    # -- Hilfen ---------------------------------------------------------
+    def _anzeige(self, konto) -> str:
+        """Kontoname plus lokalen Klarnamen, damit Kuerzel zuordenbar sind."""
+        name = konto.get("username") or ""
+        klartext = self._namen_zu_alias.get(name.lower())
+        return f"{name}  –  {klartext}" if klartext else name
+
+    def _offene_konten(self):
+        """Konten, die noch nicht vorgemerkt sind."""
+        schon = {id(k) for k, _ in self._vorgemerkt}
+        return [k for k in self._konten if id(k) not in schon]
+
+    def _belegte_namen(self):
+        """Namen, die nach allen Vormerkungen vergeben waeren."""
+        umbenannt = {id(k) for k, _ in self._vorgemerkt}
+        belegt = {(k.get("username") or "").lower()
+                  for k in self._konten if id(k) not in umbenannt}
+        belegt |= {n for _, n in self._vorgemerkt}
+        return belegt
+
+    def _auswahl_neu_aufbauen(self):
+        offen = self._offene_konten()
+        self._nach_anzeige = {self._anzeige(k): k for k in offen}
+        self.box.config(values=list(self._nach_anzeige))
+        if offen:
             self.box.current(0)
             self._auswahl_geaendert()
-        self.bind("<Return>", lambda e: self._uebernehmen())
-        self.bind("<Escape>", lambda e: self.destroy())
+        else:
+            self.auswahl.set("")
+            self.neu_var.set("")
 
     def _gewaehltes_konto(self):
         return self._nach_anzeige.get(self.auswahl.get())
@@ -406,14 +444,21 @@ class AliasUmbenennenDialog(tk.Toplevel):
     def _auswahl_geaendert(self, _event=None):
         konto = self._gewaehltes_konto()
         if konto:
-            # Als Startwert der bisherige Name - so muss nur die Aenderung getippt werden.
+            # Bisheriger Name als Startwert - so muss nur die Aenderung getippt werden.
             self.neu_var.set(konto.get("username") or "")
         self.hinweis.config(text="")
 
-    def _uebernehmen(self):
+    def _liste_neu_zeichnen(self):
+        self.liste.delete(0, "end")
+        for konto, neu in self._vorgemerkt:
+            self.liste.insert("end", f"{konto.get('username')}  →  {neu}")
+        self.ausfuehren_btn.config(state="normal" if self._vorgemerkt else "disabled")
+
+    # -- Aktionen -------------------------------------------------------
+    def _vormerken(self):
         konto = self._gewaehltes_konto()
         if not konto:
-            self.hinweis.config(text="Bitte ein Konto auswählen.")
+            self.hinweis.config(text="Kein Konto mehr übrig – alle sind schon vorgemerkt.")
             return
         neu = self.neu_var.get().strip().lower()
         alt = (konto.get("username") or "").lower()
@@ -423,12 +468,27 @@ class AliasUmbenennenDialog(tk.Toplevel):
         if neu == alt:
             self.hinweis.config(text="Der Alias ist unverändert.")
             return
-        # Kollision schon hier abfangen, statt erst den Server antworten zu lassen.
-        if any(neu == (k.get("username") or "").lower()
-               for k in self._konten if k is not konto):
-            self.hinweis.config(text=f"„{neu}“ ist auf dem Server schon vergeben.")
+        if neu in self._belegte_namen():
+            self.hinweis.config(text=f"„{neu}“ ist schon vergeben oder bereits vorgemerkt.")
             return
-        self.result = (konto, neu)
+        self._vorgemerkt.append((konto, neu))
+        self._liste_neu_zeichnen()
+        self._auswahl_neu_aufbauen()
+        self.hinweis.config(text="")
+
+    def _entfernen(self):
+        auswahl = self.liste.curselection()
+        if not auswahl:
+            return
+        self._vorgemerkt.pop(auswahl[0])
+        self._liste_neu_zeichnen()
+        self._auswahl_neu_aufbauen()
+
+    def _ausfuehren(self):
+        if not self._vorgemerkt:
+            self.hinweis.config(text="Noch nichts vorgemerkt.")
+            return
+        self.result = list(self._vorgemerkt)
         self.destroy()
 
 
@@ -530,7 +590,7 @@ class App(tk.Tk):
                                    command=self.app_lzk_senden)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
-        lerntheke_menu.add_command(label="Alias auf dem Server umbenennen…",
+        lerntheke_menu.add_command(label="Aliasse auf dem Server umbenennen…",
                                    command=self.alias_umbenennen)
         lerntheke_menu.add_separator()
         cfg = self._lt_einstellungen_laden()
@@ -1426,46 +1486,52 @@ class App(tk.Tk):
         self.wait_window(dlg)
         if not dlg.result:
             return
-        konto, neu = dlg.result
-        alt = (konto.get("username") or "").lower()
+        auftraege = dlg.result
 
+        uebersicht = "\n".join(f"{k.get('username')} -> {n}" for k, n in auftraege)
         if not messagebox.askyesno(
-                "Alias umbenennen",
-                f"'{alt}' in '{neu}' umbenennen?\n\n"
+                "Aliasse umbenennen",
+                f"{len(auftraege)} Konto(s) umbenennen?\n\n{uebersicht}\n\n"
                 "Fortschritt, LZK-Termine, Talks und Kleeblaetter bleiben "
-                "erhalten.\nDie Person meldet sich ab sofort mit dem NEUEN "
+                "erhalten.\nDie Personen melden sich ab sofort mit dem NEUEN "
                 "Namen an."):
             return
 
-        try:
-            jetzt = client.umbenennen(konto["id"], neu)
-        except ValueError as e:          # z.B. Name schon vergeben
-            messagebox.showerror("Alias umbenennen", str(e))
-            return
-        except Exception as e:
-            messagebox.showerror("Alias umbenennen",
-                                 f"Umbenennen fehlgeschlagen:\n{e}")
-            return
+        # Jede Umbenennung einzeln: schlaegt eine fehl, laufen die uebrigen
+        # trotzdem durch. Am Ende steht, was geklappt hat und was nicht.
+        erledigt, fehler, mitgezogen = [], [], []
+        for konto, neu in auftraege:
+            alt = (konto.get("username") or "").lower()
+            try:
+                jetzt = client.umbenennen(konto["id"], neu)
+            except ValueError as e:      # z.B. Name schon vergeben
+                fehler.append(f"{alt}: {e}")
+                continue
+            except Exception as e:
+                fehler.append(f"{alt}: {e}")
+                continue
+            erledigt.append(f"{alt} -> {jetzt}")
+            # Lokalen Alias mitziehen, sonst laufen App und Server auseinander.
+            for s in self.az.students:
+                if s.alias.strip().lower() == alt:
+                    s.alias = jetzt
+                    mitgezogen.append(s.voller_name)
 
-        # Lokalen Alias mitziehen, sonst laufen App und Server auseinander.
-        mitgezogen = [s for s in self.az.students
-                      if s.alias.strip().lower() == alt]
-        for s in mitgezogen:
-            s.alias = jetzt
         if mitgezogen:
             self._markiere_ungespeichert()
             self._liste_aktualisieren()
             if self.aktueller_schueler:
                 self.f_alias.set(self.aktueller_schueler.alias or "")
 
-        messagebox.showinfo(
-            "Alias umbenennen",
-            f"Konto heisst jetzt '{jetzt}'.\n\n"
-            + (f"Lokaler Alias mitgezogen: "
-               + ", ".join(s.voller_name for s in mitgezogen)
-               if mitgezogen else
-               "Lokal gab es zu diesem Alias keinen Eintrag."))
-
+        text = f"{len(erledigt)} von {len(auftraege)} umbenannt."
+        if erledigt:
+            text += "\n\n" + "\n".join(erledigt)
+        if mitgezogen:
+            text += "\n\nLokale Aliasse mitgezogen: " + ", ".join(mitgezogen)
+        if fehler:
+            text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
+        (messagebox.showwarning if fehler else messagebox.showinfo)(
+            "Aliasse umbenennen", text)
     # ------------------------------------------------------------------
     # Lerntheken-App: Einstellungen, Ergebnisse abrufen, LZK-Termine zurueckschreiben
     # ------------------------------------------------------------------
