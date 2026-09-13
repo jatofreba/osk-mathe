@@ -106,10 +106,13 @@ function timeRange(uhrzeit, dauer) {
 }
 function dateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
 function fmtDate(d) { return pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.' + d.getFullYear(); }
-// Montag der laufenden Woche - passend zu Postgres date_trunc('week') im Endpunkt.
+// Montag der angezeigten Woche. Ab Samstag schon die KOMMENDE Woche - muss mit lwMonday()
+// in index.html und publicWeekMonday() im Server übereinstimmen.
 function monday() {
   var d = new Date(); d.setHours(0,0,0,0);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  var day = d.getDay();                         // 0 = So, 1 = Mo, ... 6 = Sa
+  d.setDate(d.getDate() - ((day + 6) % 7));     // Montag dieser Woche
+  if (day === 6 || day === 0) d.setDate(d.getDate() + 7);
   return d;
 }
 function dayIndex() {

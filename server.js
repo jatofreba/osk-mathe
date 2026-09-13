@@ -2532,8 +2532,20 @@ app.get('/api/my-halbjahr', requireLogin, async (req, res) => {
 // Lerngruppe vorerst fest; ein Selector auf der Login-Seite kann diese Konstante
 // später durch einen validierten Query-Parameter ersetzen.
 const PUBLIC_WEEK_KLASSE = 'M3M4';
+// Montag der angezeigten Woche als 'YYYY-MM-DD'. Ab Samstag schon die KOMMENDE Woche -
+// identische Regel wie lwMonday() in index.html und monday() in tag.html. Bewusst in JS
+// gerechnet statt per date_trunc('week', CURRENT_DATE), damit die Regel an einer lesbaren
+// Stelle steht und nicht zwischen SQL und Frontend auseinanderlaufen kann.
+function publicWeekMonday() {
+  const d = new Date(); d.setHours(0,0,0,0);
+  const day = d.getDay();                       // 0 = So, 1 = Mo, ... 6 = Sa
+  d.setDate(d.getDate() - ((day + 6) % 7));     // Montag dieser Woche
+  if (day === 6 || day === 0) d.setDate(d.getDate() + 7);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 app.get('/api/public/week', async (req, res) => {
   try {
+    const weekStart = publicWeekMonday();
     const [slots, deadlines] = await Promise.all([
       pool.query(`
         SELECT s.id, s.typ, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort,
@@ -2546,18 +2558,18 @@ app.get('/api/public/week', async (req, res) => {
         -- Lernberatung & Co. betreffen einzelne Personen und haben auf einer
         -- oeffentlichen Seite nichts verloren - auch nicht ohne Namen.
         WHERE s.klasse = $1 AND COALESCE(sub.nur_zugewiesen, false) = false
-          AND s.datum >= date_trunc('week', CURRENT_DATE)::date
-          AND s.datum <  date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
+          AND s.datum >= $2::date
+          AND s.datum <  $2::date + INTERVAL '7 days'
         ORDER BY s.datum, s.uhrzeit
-      `, [PUBLIC_WEEK_KLASSE]),
+      `, [PUBLIC_WEEK_KLASSE, weekStart]),
       pool.query(`
         SELECT id, to_char(datum,'YYYY-MM-DD') AS datum, titel
         FROM math_deadlines
         WHERE klasse = $1
-          AND datum >= date_trunc('week', CURRENT_DATE)::date
-          AND datum <  date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
+          AND datum >= $2::date
+          AND datum <  $2::date + INTERVAL '7 days'
         ORDER BY datum
-      `, [PUBLIC_WEEK_KLASSE]),
+      `, [PUBLIC_WEEK_KLASSE, weekStart]),
     ]);
     res.json({ klasse: PUBLIC_WEEK_KLASSE, slots: slots.rows, deadlines: deadlines.rows });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
