@@ -188,8 +188,8 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
 .lw-chip.mw-mine{border-left-width:4px;box-shadow:inset 0 0 0 1.5px currentColor;}
-.lw-chip.mw-invited{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
-.lw-chip.mw-invited .mw-chip-status{color:#854d0e;}
+.lw-chip.mw-invited,.lw-chip.mw-requested{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
+.lw-chip.mw-invited .mw-chip-status,.lw-chip.mw-requested .mw-chip-status{color:#854d0e;}
 /* "belegt": nur der Rahmen ist neutral, Fach-Badge und -Symbol bleiben farbig -
    man kann sich ueber die Lernbegleitung noch dazubuchen. */
 .lw-chip.mw-taken{border-left-color:var(--md-outline-variant);}
@@ -2194,6 +2194,8 @@ async function showHome() {
 function mwState(s) {
   if (s.mineAsPresenter || (s.mineAsListener && s.myInvitationStatus === 'angenommen')) return 'mine';
   if (s.mineAsListener && s.myInvitationStatus === 'eingeladen') return 'invited';
+  // Eigene offene Anfrage: der Termin ist weder "frei" noch fremd "belegt".
+  if (s.mineAsListener && s.myInvitationStatus === 'angefragt') return 'requested';
   // _conflict wird in loadMyWeek() gesetzt: der Termin ueberschneidet sich mit einer
   // eigenen Buchung und ist deshalb fuer mich nicht belegbar (Server: 409).
   if (s._conflict) return 'conflict';
@@ -2210,6 +2212,7 @@ function mwChip(s) {
   const label = {
     mine:     '✓ von dir gebucht',
     invited:  '✉ Einladung offen',
+    requested:'⏳ Anfrage läuft',
     free:     'frei',
     taken:    'belegt',
     conflict: '✕ Terminkonflikt',
@@ -3704,7 +3707,13 @@ function renderCalDetail() {
       // Ein ausgeschriebenes Thema steht auch dann schon da, wenn noch niemand gebucht ist.
       body = (it.slotThema ? `<div><strong>${escHtml(it.slotThema)}</strong></div>` : '')
            + '<span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>';
-      if (!isAdmin) actions = `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
+      // Hat die Lernbegleitung schon ein Thema ausgeschrieben, gehoert ihr der Termin: dann
+      // wird angefragt statt gebucht, damit die Buchung das Thema nicht ueberschreibt.
+      // Ein eigenes Thema setzt man nur auf einem komplett freien Termin.
+      const nurAnfragen = it.typ === 'input' && !!it.slotThema && !subj.nurZugewiesen;
+      if (!isAdmin) actions = nurAnfragen
+        ? `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`
+        : `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
     } else {
       // Bei einem FaBü, das die Lernbegleitung angelegt und zugewiesen hat, gibt es keine
       // vortragende Person - dann steht dort nur das Thema statt eines Platzhalters.
@@ -3721,7 +3730,7 @@ function renderCalDetail() {
         if (s) actions = `<span class="pill pill-blue">${s}</span>`;
       } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter && it.presentedStatus === 'ausstehend') {
         // Bei einem schon laufenden Fachbüro, bei dem man nicht dabei ist, kann man mitmachen anfragen.
-        actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.session_id})">Mitmachen anfragen</button>`;
+        actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`;
       }
     }
     if (isAdmin) {
@@ -4142,9 +4151,11 @@ async function calDeleteSlot(slotId) {
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   loadCalendar();
 }
-// Schüler:in fragt an, bei einem schon laufenden Fachbüro mitzumachen.
-async function calRequestJoin(sessionId) {
-  const r = await fetch(`/api/talking-sessions/${sessionId}/request`, { method: 'POST' });
+// Schüler:in fragt an, bei einem Fachbüro mitzumachen - egal ob schon jemand gebucht hat
+// oder ob die Lernbegleitung erst ein Thema ausgeschrieben hat (dann entsteht die Runde
+// mit der ersten Anfrage). Deshalb geht die Anfrage über den Termin, nicht über die Session.
+async function calRequestJoin(slotId) {
+  const r = await fetch(`/api/talking-slots/${slotId}/request`, { method: 'POST' });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Anfrage nicht möglich.'); return; }
   alert('Anfrage gestellt - die Lernbegleitung entscheidet darüber.');
@@ -5073,10 +5084,13 @@ function openTalkingSlotEditModal(id, source) {
   document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
   document.getElementById('tsedit-dauer').value = s.dauer || 45;
   document.getElementById('tsedit-ort').value = s.ort || '';
-  // Das ausgeschriebene Thema gehoert zum Fachbuero-Angebot. Bei Talks kommt das Thema
-  // von der vortragenden Person, und bei einem schon gebuchten Termin gilt das der Buchung -
-  // in beiden Faellen waere das Feld hier irrefuehrend.
-  const themaEditierbar = s.typ === 'input' && !s.session_id;
+  // Das ausgeschriebene Thema gehoert zum Fachbuero-Angebot und darf auch nachtraeglich
+  // geaendert werden - ein neuer Termin ist dafuer nicht noetig. Tabu ist es nur, wenn eine
+  // Schueler:in selbst gebucht hat (dann gehoert das Thema ihr) und bei Talks, wo es von der
+  // vortragenden Person kommt. presenterId liefert der Kalender, presenter_username der
+  // Talks-Admin-Tab - beide Quellen speisen diesen Dialog.
+  const fremdeBuchung = !!(s.presenterId || s.presenter_username);
+  const themaEditierbar = s.typ === 'input' && !fremdeBuchung;
   document.getElementById('tsedit-thema-group').style.display = themaEditierbar ? '' : 'none';
   document.getElementById('tsedit-thema').value = themaEditierbar ? (s.slotThema || '') : '';
   document.getElementById('tsedit-error').style.display = 'none';

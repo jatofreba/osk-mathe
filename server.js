@@ -604,6 +604,19 @@ async function hasScheduleConflict(uid, slotId) {
   return occ.some(o => o.datum === datum && start < o.start + o.dauer && o.start < start + dauer);
 }
 
+// Räumt eine Session weg, an der niemand mehr hängt: keine vortragende Person und keine
+// eingetragene Person. Sonst bliebe z.B. nach einer abgelehnten Anfrage eine leere Session
+// stehen und der Termin sähe für alle "gebucht" aus, obwohl niemand ihn hat.
+async function dropEmptySession(sessionId) {
+  if (!sessionId) return;
+  await pool.query(
+    `DELETE FROM talking_sessions ts
+      WHERE ts.id=$1 AND ts.presenter_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM talking_invitations ti WHERE ti.session_id = ts.id)`,
+    [sessionId]
+  );
+}
+
 // Weist einer bestehenden Session mehrere Schüler:innen zu (Admin-Zuweisung bei Input, seit 2026-08-06).
 // Prüft je Person auf Terminkonflikt (global über alle Fächer/Typen) und gibt zurück, wer angenommen wurde
 // bzw. wegen Konflikt ausgelassen wurde (Person + Grund) - für Feedback im Admin-UI.
@@ -1834,9 +1847,16 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
     }
-    // Ist am Termin schon ein Thema ausgeschrieben (Fachbüro), reicht es aus;
-    // sonst muss die buchende Person eins angeben.
-    const sessionThema = (thema || '').trim() || (slotCheck.rows[0].thema || '').trim();
+    // Ein ausgeschriebenes Thema gehört der Lernbegleitung - eine Buchung darf es nicht
+    // überschreiben. Bei einem Fachbüro mit Thema wird deshalb gar nicht mehr gebucht,
+    // sondern angefragt (POST /api/talking-slots/:id/request). Ein eigenes Thema setzen
+    // Schüler:innen nur auf komplett freien Terminen.
+    const slotThema = (slotCheck.rows[0].thema || '').trim();
+    if (slotThema && (slotCheck.rows[0].typ || 'talk') === 'input' && req.session.role !== 'admin') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Für dieses Fachbüro hat die Lernbegleitung schon ein Thema gesetzt - frage an, ob du mitmachen darfst.' });
+    }
+    const sessionThema = slotThema || (thema || '').trim();
     if (!sessionThema) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Fehlende Angaben' });
@@ -1940,7 +1960,7 @@ app.delete('/api/talking-invitations/:id', requireLogin, async (req, res) => {
 app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) => {
   try {
     const inv = await pool.query(
-      `SELECT ti.id, ti.attended_status, ts.presented_status, sl.klasse
+      `SELECT ti.id, ti.attended_status, ts.id AS "sessionId", ts.presented_status, sl.klasse
        FROM talking_invitations ti
        JOIN talking_sessions ts ON ts.id = ti.session_id
        JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -1955,6 +1975,9 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
     if (row.attended_status !== 'ausstehend')
       return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden' });
     await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
+    // Ohne vortragende Person und ohne verbliebene Teilnehmende hängt am Termin nichts
+    // mehr - dann wird er wieder frei, statt als leere Buchung stehen zu bleiben.
+    await dropEmptySession(row.sessionId);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1966,40 +1989,63 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
 // talking_invitations-Zeile mit Status 'angefragt' - erst die Zusage der Lernbegleitung macht
 // daraus eine echte Teilnahme ('angenommen'). Bewusst nur für Input: bei Talks lädt die
 // vortragende Person ein, da gibt es keine offene Anfrage.
-app.post('/api/talking-sessions/:id/request', requireLogin, async (req, res) => {
+// Schüler:in fragt an, bei einem Fachbüro mitzumachen. Einstieg ist der SLOT, nicht die
+// Session: Auch ein noch ungebuchter Termin kann bereits ein ausgeschriebenes Thema haben.
+// Dann gehört das Thema der Lernbegleitung, gebucht wird er nicht mehr, und die Runde
+// entsteht erst mit der ersten Anfrage - ohne vortragende Person, genau wie bei einer
+// Zuweisung durch die Lernbegleitung.
+app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
   try {
     if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können anfragen' });
-    const sess = await pool.query(`
-      SELECT ts.id, ts.slot_id AS "slotId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus", sl.typ,
-             COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen"
-      FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+    const slotRes = await pool.query(`
+      SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
+             ts.id AS "sessionId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus"
+      FROM talking_slots sl
       LEFT JOIN subjects sub ON sub.id = sl.subject_id
-      WHERE ts.id=$1 AND sl.klasse=$2
+      LEFT JOIN talking_sessions ts ON ts.slot_id = sl.id
+      WHERE sl.id=$1 AND sl.klasse=$2
     `, [req.params.id, req.session.klasse]);
-    if (!sess.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
-    const s = sess.rows[0];
-    if (s.typ !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Fachbüro-Terminen' });
+    if (!slotRes.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
+    const s = slotRes.rows[0];
+    if ((s.typ || 'talk') !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Fachbüro-Terminen' });
     // Zu einer Lernberatung meldet man sich nicht selbst an.
     if (s.nurZugewiesen) return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
-    if (s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
+    if (s.sessionId && s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
     if (s.presenterId === req.session.userId) return res.status(409).json({ error: 'Du hast diesen Termin selbst gebucht' });
+    const slotThema = (s.thema || '').trim();
+    // Ein ganz freier Termin (weder Thema noch Session) wird gebucht, nicht angefragt.
+    if (!s.sessionId && !slotThema) return res.status(400).json({ error: 'Dieser Termin ist noch ganz frei - du kannst ihn direkt buchen.' });
 
-    const existing = await pool.query(
-      'SELECT id, status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2',
-      [s.id, req.session.userId]
-    );
-    if (existing.rows.length) {
-      const st = existing.rows[0].status;
-      return res.status(409).json({ error: st === 'angefragt' ? 'Deine Anfrage läuft schon' : 'Du bist bei diesem Termin schon eingetragen' });
+    if (s.sessionId) {
+      const existing = await pool.query(
+        'SELECT status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2',
+        [s.sessionId, req.session.userId]
+      );
+      if (existing.rows.length) {
+        const st = existing.rows[0].status;
+        return res.status(409).json({ error: st === 'angefragt' ? 'Deine Anfrage läuft schon' : 'Du bist bei diesem Termin schon eingetragen' });
+      }
     }
     // Früh prüfen, damit niemand eine Anfrage stellt, die ohnehin kollidiert - beim Zusagen
     // wird nochmal geprüft, weil sich bis dahin etwas geändert haben kann.
-    if (await hasScheduleConflict(req.session.userId, s.slotId))
+    if (await hasScheduleConflict(req.session.userId, s.id))
       return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit schon einen Termin' });
 
+    let sessionId = s.sessionId;
+    if (!sessionId) {
+      // slot_id ist UNIQUE: fragen zwei Personen gleichzeitig an, gewinnt ein INSERT und das
+      // andere bekommt über den Konflikt dieselbe Session-ID zurück (statt eines 500ers).
+      const ins = await pool.query(
+        `INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,NULL,$2)
+         ON CONFLICT (slot_id) DO UPDATE SET slot_id = EXCLUDED.slot_id RETURNING id`,
+        [s.id, slotThema]
+      );
+      sessionId = ins.rows[0].id;
+    }
     await pool.query(
-      `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angefragt')`,
-      [s.id, req.session.userId]
+      `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angefragt')
+       ON CONFLICT (session_id, listener_id) DO NOTHING`,
+      [sessionId, req.session.userId]
     );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -2012,7 +2058,7 @@ app.post('/api/admin/talking-invitations/:id/decide', requireAdmin, async (req, 
     const { accept } = req.body;
     if (typeof accept !== 'boolean') return res.status(400).json({ error: 'Ungültig' });
     const inv = await pool.query(`
-      SELECT ti.id, ti.status, ti.listener_id AS "listenerId", ts.slot_id AS "slotId", lu.username
+      SELECT ti.id, ti.status, ti.listener_id AS "listenerId", ts.id AS "sessionId", ts.slot_id AS "slotId", lu.username
       FROM talking_invitations ti
       JOIN talking_sessions ts ON ts.id = ti.session_id
       JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -2025,6 +2071,9 @@ app.post('/api/admin/talking-invitations/:id/decide', requireAdmin, async (req, 
 
     if (!accept) {
       await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
+      // War das die einzige Anfrage an einem nur ausgeschriebenen Fachbüro, ist der Termin
+      // danach wieder frei - sonst blockierte ihn eine abgelehnte Anfrage dauerhaft.
+      await dropEmptySession(row.sessionId);
       return res.json({ ok: true, accepted: false });
     }
     if (await hasScheduleConflict(row.listenerId, row.slotId))
@@ -2144,6 +2193,15 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
        thema !== undefined, (thema || '').trim()]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    // Ein nachträglich geändertes Fachbüro-Thema muss auch in einer schon angelegten Session
+    // ankommen (Zuweisung oder Anfrage, presenter_id IS NULL) - sonst stünde im Kalender
+    // weiter der alte Titel. Selbst gebuchte Themen von Schüler:innen bleiben unangetastet.
+    if (thema !== undefined && (thema || '').trim()) {
+      await pool.query(
+        `UPDATE talking_sessions SET thema=$1, updated_at=NOW() WHERE slot_id=$2 AND presenter_id IS NULL`,
+        [(thema || '').trim(), req.params.id]
+      );
+    }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
