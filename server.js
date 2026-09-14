@@ -2523,11 +2523,17 @@ async function halbjahrOverview(klasse, onlyUid) {
   // Fachbuero-Termine zaehlen nicht nur, wenn jemand da war: ein vergangener
   // Termin ohne Eintrag ist "offen" und gehoert in die Auswertung, sonst faellt
   // eine unbewertete Teilnahme einfach unter den Tisch. Termine, die noch
-  // bevorstehen, bleiben aussen vor.
+  // bevorstehen, bleiben aussen vor - auch dann, wenn die Lernbegleitung den
+  // Haken schon gesetzt hat: das ist bis zum Termin eine Zusage und noch keine
+  // Teilnahme. Ab dem Tag des Termins zaehlt der Haken, "offen" wird ein Termin
+  // erst am Tag danach (am Termintag selbst ist noch nichts ueberfaellig).
   const fabueGezaehlt = (s, r) => {
-    if (r.status === 'erledigt') { s.inputParticipated++; return true; }
-    if (r.status === 'nicht_erledigt') { s.inputMissed++; return true; }
-    if (r.datum && r.datum < heuteIso) { s.inputOpen++; return true; }
+    if (!r.datum) return false;
+    if (r.datum <= heuteIso) {
+      if (r.status === 'erledigt') { s.inputParticipated++; return true; }
+      if (r.status === 'nicht_erledigt') { s.inputMissed++; return true; }
+    }
+    if (r.datum < heuteIso) { s.inputOpen++; return true; }
     return false;
   };
   const fabueEintragen = (r, rolle, extra) => {
