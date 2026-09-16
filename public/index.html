@@ -217,6 +217,18 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .aw-btn.aw-btn-weg{color:var(--md-on-surface-variant);font-size:13px;}
 .mw-bar-btn.mw-bar-btn-rot{background:var(--md-error);}
 .mw-bar-btn.mw-bar-btn-blau{background:#2563eb;}
+/* Aufklappbare Rubriken in der Halbjahr-Auswertung. Das Standard-Dreieck des Browsers
+   sitzt je nach System woanders, deshalb ein eigenes vor der Überschrift. */
+.hj-rubrik{margin:8px 0 2px;}
+.hj-rubrik>summary{
+  cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;
+  margin-bottom:4px;border-radius:6px;padding:2px 4px;
+}
+.hj-rubrik>summary::-webkit-details-marker{display:none;}
+.hj-rubrik>summary::before{content:'▸';font-size:10px;width:10px;flex-shrink:0;}
+.hj-rubrik[open]>summary::before{content:'▾';}
+.hj-rubrik>summary:hover{background:var(--md-outline-variant);}
+.hj-rubrik>summary:focus-visible{outline:2px solid var(--md-primary);outline-offset:1px;}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -5105,6 +5117,20 @@ function hjDetailHtml(s, subjectKey) {
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
   const subjList = subjectKey ? orderedSubjects().filter(x => x.key === subjectKey) : orderedSubjects();
+  // Aufklappbare Rubrik. Bewusst natives <details>: kein eigenes JavaScript, von Haus
+  // aus mit Tastatur bedienbar. Was Einträge hat, ist gleich offen; leere Rubriken
+  // starten zugeklappt - dreimal "Keine ... in diesem Halbjahr" untereinander war nur
+  // Rauschen und schob das Wesentliche nach unten.
+  // anzahl weicht nur bei den Stationen von der Listenlänge ab (gezählt wird dort der
+  // Gesamtstand, aufgelistet nur, was mit Datum erfasst ist).
+  const rubrik = (titel, items, render, leer, anzahl) => {
+    const n = anzahl != null ? anzahl : (items || []).length;
+    return `<details class="hj-rubrik"${n ? ' open' : ''}>
+      <summary class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);">${titel} (${n})</summary>
+      ${list(items, render, leer)}
+    </details>`;
+  };
+
   const subjSections = subjList.map(subj => {
     const sd = (b.bySubject || {})[subj.key] || { talkDetails: [], inputDetails: [] };
     const isMathe = subj.key === 'mathe';
@@ -5113,15 +5139,12 @@ function hjDetailHtml(s, subjectKey) {
         <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
         <span class="admin-title" style="font-size:14px;">${escHtml(subj.name)}</span>
       </div>
-      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin-bottom:2px;">🎤👂 Talks (${sd.talkDetails.length})</div>
-      ${list(sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
-      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📘 FaBü-Teilnahmen (${sd.inputDetails.length})</div>
-      ${list(sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
-      ${isMathe ? `
-      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">🍀 LZK (${(b.lzk||[]).length})</div>
-      ${list(b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')}
-      <div class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);margin:8px 0 2px;">📚 Stationen (${b.stationsCompleted||0})</div>
-      ${list(b.stationDetails, stationRow, 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.')}` : ''}`;
+      ${rubrik('🎤👂 Talks', sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
+      ${rubrik('📘 FaBü-Teilnahmen', sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
+      ${isMathe ? rubrik('🍀 LZK', b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')
+        + rubrik('📚 Stationen', b.stationDetails, stationRow,
+                 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.', b.stationsCompleted || 0)
+        : ''}`;
   }).join('');
 
   return `
