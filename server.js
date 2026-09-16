@@ -1988,7 +1988,7 @@ app.delete('/api/talking-invitations/:id', requireLogin, async (req, res) => {
 app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) => {
   try {
     const inv = await pool.query(
-      `SELECT ti.id, ti.attended_status, ts.id AS "sessionId", ts.presented_status, sl.klasse
+      `SELECT ti.id, ti.attended_status, ts.id AS "sessionId", ts.presented_status, sl.klasse, sl.typ
        FROM talking_invitations ti
        JOIN talking_sessions ts ON ts.id = ti.session_id
        JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -1998,10 +1998,16 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
     if (!inv.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     const row = inv.rows[0];
     if (row.klasse !== req.session.klasse) return res.status(403).json({ error: 'Kein Zugriff' });
-    if (row.presented_status !== 'ausstehend')
-      return res.status(409).json({ error: 'Vortrag bereits bewertet, Teilnahme kann nicht mehr entfernt werden' });
-    if (row.attended_status !== 'ausstehend')
-      return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden' });
+    // Der Schutz "schon bewertet" gilt nur fuer TALKS: dort haengen an der Bewertung
+    // Kleeblaetter, die beim Loeschen lautlos verschwaenden. Am Fachbuero gibt es keine
+    // Kleeblaetter - der Haken ist reine Anwesenheit und muss korrigierbar bleiben, auch
+    // wenn schon "da gewesen" oder "gefehlt" eingetragen ist.
+    if ((row.typ || 'talk') !== 'input') {
+      if (row.presented_status !== 'ausstehend')
+        return res.status(409).json({ error: 'Vortrag bereits bewertet, Teilnahme kann nicht mehr entfernt werden' });
+      if (row.attended_status !== 'ausstehend')
+        return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden' });
+    }
     await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
     // Ohne vortragende Person und ohne verbliebene Teilnehmende hängt am Termin nichts
     // mehr - dann wird er wieder frei, statt als leere Buchung stehen zu bleiben.

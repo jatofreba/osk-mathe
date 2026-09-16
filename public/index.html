@@ -4291,7 +4291,9 @@ function calInviteeListHtml(it) {
   const inv = it.invitees || [];
   if (!inv.length) return it.typ === 'input' ? '' : '<div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:3px;">Niemand eingeladen</div>';
   const isAdminView = me && me.role === 'admin';
-  const canRemove = isAdminView && it.presentedStatus === 'ausstehend';
+  // Am Fachbüro auch nach dem Eintragen noch entfernbar (kein Ergebnis, nur Anwesenheit) -
+  // bei Talks nur, solange nichts bewertet ist, sonst verschwaenden Kleeblaetter.
+  const canRemove = isAdminView && (it.typ === 'input' || it.presentedStatus === 'ausstehend');
   const pills = inv.map(iv => {
     // Offene Anfragen sind gelb und bekommen für die Lernbegleitung ✓/✗ statt des ×-Buttons.
     if (iv.status === 'angefragt') {
@@ -4303,7 +4305,7 @@ function calInviteeListHtml(it) {
     }
     const s = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
     const att = iv.attendedStatus === 'erledigt' ? ' 👂' : iv.attendedStatus === 'nicht_erledigt' ? ' 🚫' : '';
-    const removeBtn = (canRemove && iv.attendedStatus === 'ausstehend' && iv.id)
+    const removeBtn = (canRemove && (it.typ === 'input' || iv.attendedStatus === 'ausstehend') && iv.id)
       ? ` <span onclick="calRemoveInvitee(${iv.id})" style="cursor:pointer;font-weight:800;color:var(--md-error);" title="Entfernen">×</span>`
       : '';
     return `<span class="pill pill-blue" style="font-size:10px;">${escHtml(iv.username)} ${s}${att}${removeBtn}</span>`;
@@ -4374,7 +4376,7 @@ async function calDecideRequest(invitationId, accept) {
 
 // Admin entfernt nachträglich eine einzelne Person aus einem Talk (Zuhören) oder Fachbüro (Teilnahme).
 async function calRemoveInvitee(invitationId) {
-  if (!confirm('Diese Person wirklich aus dem Termin entfernen?')) return;
+  if (!confirm('Diese Person wirklich aus dem Termin entfernen?\n\nEin schon eingetragenes "da gewesen"/"gefehlt" wird damit ebenfalls gelöscht.')) return;
   const r = await fetch(`/api/admin/talking-invitations/${invitationId}`, { method:'DELETE' });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Entfernen.'); return; }
@@ -4487,8 +4489,11 @@ function awRenderBar() {
   // keine Fehlzeit stehen - wer faelschlich auf dem Termin stand, soll keine bekommen.
   // Geht nur, solange nichts bewertet ist; genau so prueft es auch der Server.
   const weg = (id) => ` <span class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen">×</span>`;
-  const entfernbar = iv => darf && iv.id && iv.attendedStatus !== 'erledigt'
-    && iv.attendedStatus !== 'nicht_erledigt' && s.presentedStatus === 'ausstehend';
+  // Am Fachbüro bleibt Entfernen IMMER moeglich - ein "da gewesen"/"gefehlt" ist dort
+  // reine Anwesenheit und kein Ergebnis, das verloren gehen koennte. Bei Talks haengen
+  // Kleeblaetter an der Bewertung, deshalb dort nur solange nichts bewertet ist.
+  const entfernbar = iv => darf && iv.id && (s.typ === 'input'
+    || (iv.attendedStatus === 'ausstehend' && s.presentedStatus === 'ausstehend'));
 
   const leute = [];
   if (s.presenterUsername) {
