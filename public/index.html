@@ -4339,10 +4339,19 @@ function calInviteeListHtml(it) {
 // derselben Stelle wie die Einladungen der Schueler:innen. Ohne diesen Banner
 // muesste man jeden Termin einzeln aufklappen, um zu merken, dass jemand wartet;
 // eine unbeantwortete Anfrage blockiert fuer die Person auch den Zeitraum.
+// Der Banner ist eine To-do-Liste, keine Berechtigungsfrage: er zeigt ausschliesslich
+// Anfragen an Terminen, fuer die DIESE Lernbegleitung eingetragen ist. Super-Admins
+// duerfen zwar ueberall entscheiden (awDarfVerwalten), bekaemen sonst aber die Anfragen
+// aller Faecher in ihre Liste. Termine ohne zustaendige Person (Altbestand, admin_id
+// NULL) gehoeren niemandem und wuerden bei allen auftauchen - deshalb auch die raus.
+function awMeinTermin(s) {
+  return !!me && me.role === 'admin' && s.teacherId != null && s.teacherId === me.userId;
+}
+
 function adminAnfragenHtml() {
   const offen = [];
   (calData.slots || []).forEach(s => {
-    if (!awDarfVerwalten(s) || slotVorbei(s) || s.presentedStatus !== 'ausstehend') return;
+    if (!awMeinTermin(s) || slotVorbei(s) || s.presentedStatus !== 'ausstehend') return;
     (s.invitees || []).forEach(iv => { if (iv.status === 'angefragt') offen.push({ s, iv }); });
   });
   if (!offen.length) return '';
@@ -4355,7 +4364,7 @@ function adminAnfragenHtml() {
       return `<div class="stat-card" style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
           <div><strong>${escHtml(iv.username)}</strong> möchte mitmachen<br>
-            <span style="color:var(--md-on-surface-variant);font-size:12px;">📘 ${escHtml(subj.name)} · ${escHtml(s.thema || s.slotThema || '')} · ${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</span></div>
+            <span style="color:var(--md-on-surface-variant);font-size:12px;">${s.typ === 'input' ? '📘' : '🎤'} ${escHtml(subj.name)} · ${escHtml(s.thema || s.slotThema || '')} · ${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</span></div>
           <div style="display:flex;gap:6px;">
             <button class="btn-act btn-green" onclick="awEntscheiden(${iv.id}, true)">Zusagen</button>
             <button class="btn-cancel" onclick="awEntscheiden(${iv.id}, false)">Ablehnen</button>
