@@ -1067,7 +1067,7 @@ textarea.form-input{
   <div id="view-halbjahr">
     <div style="max-width:1000px;margin:0 auto;">
       <div class="admin-top">
-        <div class="admin-title" style="font-size:18px;">🎓 Schüler:innen-Übersicht nach Halbjahr</div>
+        <div class="admin-title" style="font-size:18px;" id="hj-view-title">🎓 Schüler:innen-Übersicht nach Halbjahr</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <label style="font-size:13px;font-weight:600;">Halbjahr:</label>
           <select class="form-input" id="hj-select" style="width:auto;" onchange="renderHalbjahr()"></select>
@@ -2609,8 +2609,6 @@ async function showApp() {
     // Admins anlegen/löschen ist Super-Admin-Sache.
     const btnCreateAdmin = document.getElementById('btn-create-admin');
     if (btnCreateAdmin && me.superAdmin) btnCreateAdmin.style.display = '';
-    const tabHalbjahr = document.getElementById('tab-halbjahr');
-    if (tabHalbjahr) tabHalbjahr.style.display = '';
     const tabKlasse = document.getElementById('tab-klasse');
     if (tabKlasse) tabKlasse.style.display = '';
     // Kein eigenständiger Lerntheke-/Start-Tab für Admins: die Vorschau einer Lerntheke
@@ -2619,6 +2617,14 @@ async function showApp() {
     if (tabLerntheke) tabLerntheke.style.display = 'none';
     if (tabHome) tabHome.style.display = 'none';
   }
+
+  // Die Halbjahr-Übersicht gibt es fuer beide Rollen: Lernbegleitungen sehen die ganze
+  // Lerngruppe, Schueler:innen dieselbe Auswertung nur fuer sich selbst.
+  const tabHalbjahr = document.getElementById('tab-halbjahr');
+  if (tabHalbjahr) tabHalbjahr.style.display = '';
+  const hjTitel = document.getElementById('hj-view-title');
+  if (hjTitel) hjTitel.textContent = (me.role === 'admin')
+    ? '🎓 Schüler:innen-Übersicht nach Halbjahr' : '🎓 Mein Halbjahr';
 
   if (me.mustChangePassword) {
     forcePasswordChange = true;
@@ -4643,8 +4649,19 @@ async function loadHalbjahr() {
   if (el) el.innerHTML = '<div style="padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
     if (!ltMeta.length) { const mr = await fetch('/api/lerntheken-meta'); if (mr.ok) ltMeta = await mr.json(); }
-    const r = await fetch('/api/admin/halbjahr-uebersicht');
-    hjData = r.ok ? await r.json() : { halbjahre: [], students: [] };
+    await loadSubjectsMeta();
+    if (hjNurEigene()) {
+      // Schüler:innen sehen dieselbe Auswertung, aber nur die eigene: /api/my-halbjahr
+      // ist genau dieselbe Rechnung mit onlyUid - hier nur in die Form gebracht, die
+      // hjDetailHtml() erwartet.
+      const r = await fetch('/api/my-halbjahr');
+      const d = r.ok ? await r.json() : { halbjahre: [], byHalbjahr: {} };
+      hjData = { halbjahre: d.halbjahre || [],
+                 students: [{ id: me.userId, username: me.username, byHalbjahr: d.byHalbjahr || {} }] };
+    } else {
+      const r = await fetch('/api/admin/halbjahr-uebersicht');
+      hjData = r.ok ? await r.json() : { halbjahre: [], students: [] };
+    }
   } catch { hjData = { halbjahre: [], students: [] }; }
   const sel = document.getElementById('hj-select');
   if (sel) {
@@ -4658,11 +4675,23 @@ async function loadHalbjahr() {
 function hjFmtDate(d) { return d ? new Date(d + 'T00:00:00').toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' }) : ''; }
 function hjLtTitle(key) { const lt = ltMeta.find(l => l.key === key || (l.key && key && l.key.split('_v')[0] === String(key).split('_v')[0])); return lt ? lt.title : (key || '–'); }
 
+// Schüler:innen sehen dieselbe Halbjahr-Auswertung wie die Lernbegleitung, nur auf
+// den eigenen Account reduziert - also ohne Tabelle über die Lerngruppe.
+function hjNurEigene() { return !!me && me.role !== 'admin'; }
+
 function renderHalbjahr() {
   const el = document.getElementById('hj-content');
   if (!el) return;
   const sel = document.getElementById('hj-select');
   if (sel && sel.value) hjSelected = sel.value;
+
+  if (hjNurEigene()) {
+    const ich = hjData.students[0];
+    el.innerHTML = (!ich || !hjSelected)
+      ? '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten erfasst. Sobald du einen Talk hältst, im Fachbüro warst oder eine LZK schreibst, steht das hier.</div>'
+      : hjDetailHtml(ich, null);
+    return;
+  }
   if (!hjData.students.length) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen.</div>'; return; }
   if (!hjSelected) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten in irgendeinem Halbjahr erfasst.</div>'; return; }
 
@@ -4731,9 +4760,11 @@ function renderHalbjahr() {
 // Detailansicht einer Schüler:in für das gewählte Halbjahr (Klick auf Tabellenzeile) - zeigt nur
 // das Fach, dessen Zeile angeklickt wurde (subjectKey); LZK/Stationen nur im Mathe-Abschnitt
 // (fach-unabhängig, siehe renderHalbjahr()).
-function openHjDetail(userId, subjectKey) {
-  const s = hjData.students.find(x => x.id === userId);
-  if (!s) return;
+// Inhalt einer Halbjahr-Auswertung (Talks, Fachbüros, LZK, Stationen) als HTML.
+// Zwei Aufrufer: das Detail-Modal der Lernbegleitung (Klick auf eine Tabellenzeile,
+// dann nur das angeklickte Fach) und die eigene Übersicht der Schüler:innen
+// (subjectKey null -> alle Fächer). subjectKey null zeigt alle Fächer.
+function hjDetailHtml(s, subjectKey) {
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
   const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🍀'.repeat(t.pokale):''}</span></div>`;
@@ -4769,12 +4800,18 @@ function openHjDetail(userId, subjectKey) {
       ${list(b.stationDetails, stationRow, 'Keine erfassten Stationsabschlüsse in diesem Halbjahr.')}` : ''}`;
   }).join('');
 
-  const subjMeta = subjectKey ? subjectByKey(subjectKey) : null;
-  document.getElementById('hjd-name').textContent = `🎓 ${s.username}${subjMeta ? ' · ' + subjMeta.name : ''} · Halbjahr ${hjSelected}`;
-  document.getElementById('hjd-content').innerHTML = `
+  return `
     ${b.lastActivity ? `<div style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:10px;">Zuletzt aktiv: ${hjFmtDate(b.lastActivity)}</div>` : ''}
     ${subjSections}
   `;
+}
+
+function openHjDetail(userId, subjectKey) {
+  const s = hjData.students.find(x => x.id === userId);
+  if (!s) return;
+  const subjMeta = subjectKey ? subjectByKey(subjectKey) : null;
+  document.getElementById('hjd-name').textContent = `🎓 ${s.username}${subjMeta ? ' · ' + subjMeta.name : ''} · Halbjahr ${hjSelected}`;
+  document.getElementById('hjd-content').innerHTML = hjDetailHtml(s, subjectKey);
   openModal('modal-hj-detail');
 }
 
