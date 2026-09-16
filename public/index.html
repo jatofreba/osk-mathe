@@ -2322,7 +2322,7 @@ function mwAktion(s) {
     const meins = { status: s.myInvitationStatus, herkunft: s.myInvitationHerkunft, gesehen: s.myInvitationGesehen };
     if (invEingeteilt(meins) && !meins.gesehen && !slotVorbei(s))
       return { text: 'Alles klar', ruf: `calGesehen(${s.myInvitationId})` };
-    if (invEingeteilt(meins)) return { hinweis: '📋 Von der Lernbegleitung eingeteilt.' };
+    if (invEingeteilt(meins)) return { hinweis: '📋 Von der Lernbegleitung eingeladen.' };
     return { hinweis: '✓ Den Termin hast du schon.' };
   }
   // Ab hier gilt: was vorbei ist, gehoert der Lernbegleitung - auch das Zurueckziehen
@@ -3973,12 +3973,12 @@ function renderCalDetail() {
                    <button class="btn-cancel" onclick="calWithdrawRequest(${it.myInvitationId})">Zurückziehen</button>`;
       } else if (!isAdmin && it.mineAsListener) {
         // Aus eigener Sicht: "zugesagt" nur, wenn man wirklich zugesagt hat. Bei einer
-        // Zuweisung steht dort, dass die Lernbegleitung einen eingeteilt hat - mit dem
+        // Zuweisung steht dort, dass die Lernbegleitung einen eingeladen hat - mit dem
         // Knopf, das zur Kenntnis zu nehmen.
         const meins = { status: it.myInvitationStatus, herkunft: it.myInvitationHerkunft, gesehen: it.myInvitationGesehen };
         const s = it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt'
           : it.myInvitationStatus === 'angenommen'
-            ? (invEingeteilt(meins) ? '📋 Von der Lernbegleitung eingeteilt' : '✓ zugesagt')
+            ? (invEingeteilt(meins) ? '📋 Von der Lernbegleitung eingeladen' : '✓ zugesagt')
             : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`
           + (invEingeteilt(meins) && !meins.gesehen && !slotVorbei(it)
@@ -4346,7 +4346,7 @@ async function deleteDeadline(id) {
 // Eingeladene Personen eines gebuchten Slots (für Admin + Presenter sichtbar) mit Status.
 // ── Herkunft einer Teilnahme ──────────────────────────────────────────────────
 // status beantwortet "ist die Person dabei?", herkunft "hat sie dem zugestimmt?".
-// Ohne die Trennung stand bei jemandem, den die Lernbegleitung eingeteilt hat,
+// Ohne die Trennung stand bei jemandem, den die Lernbegleitung eingeladen hat,
 // "zugesagt" - obwohl sie nie gefragt wurde und oft noch gar nichts davon weiß.
 function invEingeteilt(iv) { return !!iv && iv.herkunft === 'zugewiesen'; }
 
@@ -4355,11 +4355,15 @@ function invStatusText(iv) {
   if (!iv) return '';
   if (iv.status === 'angefragt') return '⏳ fragt an';
   if (iv.status === 'abgelehnt') return '✗ abgelehnt';
-  if (iv.status !== 'angenommen') return '⏳ eingeladen';
+  // "eingeladen" ist fuer die Zuweisung durch die Lernbegleitung reserviert - so nennt
+  // sie es selbst. Die unbeantwortete Einladung EINER MITSCHUELER:IN heisst deshalb nach
+  // dem, was dort fehlt: eine Antwort. Sonst stuenden zwei verschiedene Dinge unter
+  // demselben Wort, und genau das war ja der Ausgangsfehler.
+  if (iv.status !== 'angenommen') return '⏳ noch keine Antwort';
   if (!invEingeteilt(iv)) return '✓ zugesagt';
   // "gesehen" heißt: die Person hat den Termin zur Kenntnis genommen. Fehlt das,
   // muss die Lernbegleitung sie vermutlich noch ansprechen.
-  return iv.gesehen ? '📋 eingeteilt · gesehen' : '📋 eingeteilt';
+  return iv.gesehen ? '📋 eingeladen · gesehen' : '📋 eingeladen';
 }
 function invStatusIcon(iv) {
   if (!iv) return '';
@@ -4434,19 +4438,20 @@ function adminAnfragenHtml() {
   </div>`;
 }
 
-// Termine, in die die Lernbegleitung einen eingeteilt hat und die man noch nicht
+// Termine, zu denen die Lernbegleitung einen eingeladen hat und die man noch nicht
 // bestätigt hat. Stehen ganz oben, weil man sie nirgends "annehmen" muss und sie
 // im Raster sonst genauso aussehen wie alles andere, was man selbst gebucht hat.
-function eingeteiltHtml(nachDatum) {
+// Bewusst getrennt vom Kasten darunter: dort liegen Einladungen von Mitschüler:innen,
+// die eine Antwort brauchen - hier ist nichts zu entscheiden.
+function eingeladenHtml(nachDatum) {
   const neu = (calData.slots || []).filter(s =>
     s.mineAsListener && s.myInvitationHerkunft === 'zugewiesen' && !s.myInvitationGesehen
     && s.presentedStatus === 'ausstehend' && !slotVorbei(s)).sort(nachDatum);
   if (!neu.length) return '';
   return `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
-    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">📋 Für dich eingeteilt (${neu.length})</div>
+    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">📋 Deine Lernbegleitung hat dich eingeladen (${neu.length})</div>
     <div style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:8px;">
-      Deine Lernbegleitung hat dich zu diesen Terminen dazugenommen. Du musst nichts zusagen –
-      tippe nur kurz „Alles klar“, damit sie weiß, dass du Bescheid weißt.
+      Du musst nichts zusagen – tippe nur kurz „Alles klar“, damit sie weiß, dass du Bescheid weißt.
     </div>
     ${neu.map(s => {
       const icon = s.typ === 'input' ? '📘' : '🎤';
@@ -4469,10 +4474,10 @@ function renderCalInvites() {
   const pending = (calData.slots || [])
     .filter(s => s.mineAsListener && s.myInvitationStatus === 'eingeladen' && s.presentedStatus === 'ausstehend')
     .sort(nachDatum);
-  const eingeteilt = eingeteiltHtml(nachDatum);
-  if (!pending.length) { el.innerHTML = eingeteilt; return; }
-  el.innerHTML = eingeteilt + `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
-    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">📬 Deine offenen Einladungen (${pending.length})</div>
+  const vonLb = eingeladenHtml(nachDatum);
+  if (!pending.length) { el.innerHTML = vonLb; return; }
+  el.innerHTML = vonLb + `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">📬 Einladungen von Mitschüler:innen – bitte antworten (${pending.length})</div>
     ${pending.map(s => {
       const icon = s.typ === 'input' ? '📘' : '🎤';
       const dl = new Date(s.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
@@ -4582,8 +4587,8 @@ function awChip(s) {
     const cls = offen ? 'aw-person aw-person-pending' : 'aw-person';
     const titel = angefragt ? 'möchte mitmachen - wartet auf deine Zusage'
       : invEingeteilt(iv)
-        ? (iv.gesehen ? 'von dir eingeteilt, hat es gesehen' : 'von dir eingeteilt - weiß es vermutlich noch nicht')
-        : (iv.status === 'angenommen' ? 'zugesagt' : 'eingeladen, noch keine Antwort');
+        ? (iv.gesehen ? 'von dir eingeladen, hat es gesehen' : 'von dir eingeladen - weiß es vermutlich noch nicht')
+        : (iv.status === 'angenommen' ? 'zugesagt' : 'von einer Mitschüler:in eingeladen, noch keine Antwort');
     teilnehmende.push(`<span class="${cls}" title="${titel}">${escHtml(iv.username)} ${icon}</span>`);
   });
 
@@ -4823,8 +4828,8 @@ function renderAdminWeek() {
            <span>${lwIcon('input')} FaBü</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>✓ zugesagt</span>
-           <span>📋 eingeteilt (weiß es noch nicht) · 📋✓ eingeteilt und gesehen</span>
-           <span>⏳ eingeladen, noch offen</span>
+           <span>📋 von dir eingeladen (weiß es noch nicht) · 📋✓ eingeladen und gesehen</span>
+           <span>⏳ wartet noch auf eine Antwort</span>
            <span>Termin antippen, um Anfragen und Teilnahmen einzutragen.</span>
          </div>`
       : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
