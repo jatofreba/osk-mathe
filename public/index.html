@@ -3897,20 +3897,28 @@ function renderCalendar() {
     const evs = items.slice(0, 3).map(it => {
       if (it.kind === 'deadline') return `<div class="cal-ev cal-ev-deadline" title="${escHtml(it.titel)}">⏰ ${escHtml(it.titel)}</div>`;
       const subj = subjectById(it.subjectId);
-      const icon = it.typ === 'input' ? '📘' : '🎤';
+      // Piktogramm als SVG statt Emoji: 📘/🎤 sind immer gleich eingefaerbt, egal zu
+      // welchem Fach der Termin gehoert - dadurch sah das ganze Raster blau aus. Das
+      // SVG erbt per currentColor die Fachfarbe.
       const zustand = calSlotState(it);
       const st = { mine: 'dein Termin', join: 'mitmachen anfragen möglich',
                    free: 'offen – buchbar',
                    closed: isAdminView ? 'gebucht' : 'ausgebucht' }[zustand];
-      // Gefüllt = eigener Termin, weiß = direkt buchbar, Fachfarbe getönt = da geht noch
-      // was (mitmachen anfragen), grau = wirklich nichts mehr zu holen.
+      // Die FACHFARBE bleibt in jedem Zustand erhalten - sie ist die Orientierung im
+      // Raster. Der Zustand steckt nur in der Fuellung: gefuellt = eigener Termin,
+      // weiss = frei, getoent = da geht noch was.
+      // Neutralgrau NUR fuer Schueler:innen bei "ausgebucht" ("fuer dich nichts zu holen").
+      // Fuer die Lernbegleitung ist "gebucht" der Normalfall und darf die Farbe nicht
+      // verlieren - sonst ist der ganze Monat grau und die Faecher-Legende gelogen.
       const style = {
         mine:   `background:${subj.color};color:#fff;border-color:${subj.color};`,
         join:   `background:${subj.colorBg};color:${subj.color};border-color:${subj.color}66;`,
         free:   `background:#fff;color:${subj.color};border-color:${subj.color}88;`,
-        closed: 'background:#eef1f5;color:#64748b;border-color:#cbd5e1;',
+        closed: isAdminView
+          ? `background:${subj.colorBg};color:${subj.color};border-color:${subj.color}66;`
+          : 'background:#eef1f5;color:#64748b;border-color:#cbd5e1;',
       }[zustand];
-      return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Fachbüro':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'FaBü':'Talk'))}</div>`;
+      return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Fachbüro':'Talk') + ' · ' + st)}">${lwIcon(it.typ)}${escHtml(it.uhrzeit || (it.typ==='input'?'FaBü':'Talk'))}</div>`;
     }).join('');
     const more = items.length > 3 ? `<div class="cal-more">+${items.length - 3} mehr</div>` : '';
     const cls = ['cal-cell'];
@@ -3939,8 +3947,10 @@ function renderCalDetail() {
           ${isAdmin ? `<button class="btn-icon red" onclick="deleteDeadline(${it.id})" title="Deadline löschen">🗑</button>` : ''}
         </div></div>`;
     }
-    const icon = it.typ === 'input' ? '📘' : '🎤';
     const subj = subjectById(it.subjectId);
+    // Farbiges SVG statt Emoji: 📘 war bei jedem Fach gleich blau, dadurch sah ein
+    // Englisch-Fachbüro aus wie ein Mathe-Termin.
+    const icon = `<span style="color:${subj.color};">${lwIcon(it.typ)}</span>`;
     const typLabel = subj.nurZugewiesen ? subj.name
       : subj.name + '-' + (it.typ === 'input' ? 'FaBü' : 'Talk');
     const teacherLabel = (it.typ === 'input' && it.teacherUsername) ? ' · Lernbegleitung: ' + escHtml(formatTeacherShort(it.teacherUsername)) : '';
@@ -4870,9 +4880,11 @@ function renderAdminWeek() {
            <span>${lwIcon('talk')} Talk</span>
            <span>${lwIcon('input')} FaBü</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
-           <span>✓ zugesagt</span>
-           <span>📋 von dir eingeladen (weiß es noch nicht) · 📋✓ eingeladen und gesehen</span>
-           <span>⏳ wartet noch auf eine Antwort</span>
+           <span>Name ohne Zeichen = alles erledigt</span>
+           <span>❓ wartet auf DEINE Antwort (möchte mitmachen)</span>
+           <span>⏳ wartet auf die Antwort der Schüler:in (von einer Mitschüler:in eingeladen)</span>
+           <span>📋 von dir eingeladen – weiß es noch nicht</span>
+           <span>👥 = Anzahl statt Namen, wenn es viele sind</span>
            <span>Termin antippen, um Anfragen und Teilnahmen einzutragen.</span>
          </div>`
       : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
