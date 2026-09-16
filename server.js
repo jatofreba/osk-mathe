@@ -1854,7 +1854,8 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   try {
     await client.query('BEGIN');
     const slotCheck = await client.query(
-      `SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen"
+      `SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
+              (sl.datum < CURRENT_DATE) AS vorbei
        FROM talking_slots sl LEFT JOIN subjects sub ON sub.id = sl.subject_id
        WHERE sl.id=$1 AND sl.klasse=$2`,
       [slotId, req.session.klasse]
@@ -1867,6 +1868,12 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
     if (slotCheck.rows[0].nurZugewiesen && req.session.role !== 'admin') {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
+    }
+    // Vergangene Termine sind fuer Schueler:innen zu - nachtraeglich buchen ergibt keinen
+    // Sinn. Nachpflegen darf das nur die Lernbegleitung.
+    if (slotCheck.rows[0].vorbei && req.session.role !== 'admin') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Dieser Termin ist vorbei - sprich die Lernbegleitung an, wenn du nachgetragen werden willst.' });
     }
     // Ein ausgeschriebenes Thema gehört der Lernbegleitung - eine Buchung darf es nicht
     // überschreiben. Bei einem Fachbüro mit Thema wird deshalb gar nicht mehr gebucht,
@@ -2020,6 +2027,7 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
     if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können anfragen' });
     const slotRes = await pool.query(`
       SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
+             (sl.datum < CURRENT_DATE) AS vorbei,
              ts.id AS "sessionId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus"
       FROM talking_slots sl
       LEFT JOIN subjects sub ON sub.id = sl.subject_id
@@ -2031,6 +2039,9 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
     if ((s.typ || 'talk') !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Fachbüro-Terminen' });
     // Zu einer Lernberatung meldet man sich nicht selbst an.
     if (s.nurZugewiesen) return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
+    // Nach dem Termin gibt es nichts mehr anzufragen - wer doch da war, wird von der
+    // Lernbegleitung nachgetragen.
+    if (s.vorbei) return res.status(409).json({ error: 'Dieser Termin ist vorbei - sprich die Lernbegleitung an, wenn du nachgetragen werden willst.' });
     if (s.sessionId && s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
     if (s.presenterId === req.session.userId) return res.status(409).json({ error: 'Du hast diesen Termin selbst gebucht' });
     const slotThema = (s.thema || '').trim();

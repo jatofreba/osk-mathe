@@ -2303,6 +2303,7 @@ function mwAktion(s) {
   if (st === 'mine')      return { hinweis: '✓ Den Termin hast du schon.' };
   if (st === 'requested') return { hinweis: '⏳ Deine Anfrage läuft – die Lernbegleitung entscheidet.' };
   if (st === 'conflict')  return { hinweis: '✕ Überschneidet sich mit einem deiner Termine.' };
+  if (slotVorbei(s))      return { hinweis: 'Dieser Termin ist vorbei.' };
   if (st === 'invited')   return { text: 'Einladung beantworten', ruf: `mwZumKalender(${s.id})` };
   if (subjectById(s.subjectId).nurZugewiesen) return { hinweis: 'Diesen Termin vergibt die Lernbegleitung.' };
   const istFabue = s.typ === 'input';
@@ -3779,9 +3780,17 @@ function calItemsByDay() {
 // Wichtig: ein Fachbüro ist NICHT ausgebucht, nur weil schon jemand drauf ist -
 // solange es noch nicht gelaufen ist, kann man mitmachen anfragen. Dieselbe
 // Unterscheidung trifft mwAktion() in "Meine Woche".
+// Ein Termin, der vorbei ist, steht fuer Schueler:innen nicht mehr zur Verfuegung:
+// weder buchen noch mitmachen anfragen. Wer trotzdem da war, wird von der
+// Lernbegleitung nachgetragen. Der Server lehnt beides ebenfalls ab.
+function slotVorbei(s) {
+  return !!s.datum && s.datum < new Date().toISOString().slice(0, 10);
+}
+
 function calSlotState(it) {
   if (it.mineAsPresenter || it.mineAsListener) return 'mine';
   if (me && me.role === 'admin') return it.booked ? 'closed' : 'free';
+  if (slotVorbei(it)) return 'closed';
   // Lernberatung & Co. vergibt die Lernbegleitung; solche Termine sieht man ohnehin
   // nur, wenn man zugeordnet ist - dann greift schon 'mine' oben.
   if (subjectById(it.subjectId).nurZugewiesen) return 'closed';
@@ -3898,9 +3907,11 @@ function renderCalDetail() {
       // wird angefragt statt gebucht, damit die Buchung das Thema nicht ueberschreibt.
       // Ein eigenes Thema setzt man nur auf einem komplett freien Termin.
       const nurAnfragen = it.typ === 'input' && !!it.slotThema && !subj.nurZugewiesen;
-      if (!isAdmin) actions = nurAnfragen
-        ? `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`
-        : `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
+      if (!isAdmin) actions = slotVorbei(it)
+        ? `<span class="pill" style="font-size:10px;">Termin ist vorbei</span>`
+        : nurAnfragen
+          ? `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`
+          : `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
     } else {
       // Bei einem FaBü, das die Lernbegleitung angelegt und zugewiesen hat, gibt es keine
       // vortragende Person - dann steht dort nur das Thema statt eines Platzhalters.
@@ -3915,7 +3926,8 @@ function renderCalDetail() {
       } else if (!isAdmin && it.mineAsListener) {
         const s = it.myInvitationStatus === 'angenommen' ? '✓ zugesagt' : it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt' : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`;
-      } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter && it.presentedStatus === 'ausstehend') {
+      } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter
+                 && it.presentedStatus === 'ausstehend' && !slotVorbei(it)) {
         // Bei einem schon laufenden Fachbüro, bei dem man nicht dabei ist, kann man mitmachen anfragen.
         actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`;
       }
