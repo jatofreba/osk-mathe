@@ -37,10 +37,21 @@ def fmt_datum(d):
     return d.strftime("%d.%m.%Y")
 
 
+def _einzeilig(text):
+    """Mehrzeiligen Text fuer eine Tabellenzelle zusammenfalten.
+
+    Bemerkungen duerfen mehrere Zeilen haben; eine Treeview-Zelle kann nur eine
+    anzeigen und wuerde den Rest verschlucken. Deshalb werden die Zeilen sichtbar
+    mit " / " verbunden -- so geht beim Ueberfliegen nichts verloren.
+    """
+    zeilen = [z.strip() for z in str(text or "").splitlines() if z.strip()]
+    return " / ".join(zeilen)
+
+
 def _mit_bemerkung(text, bemerkung):
     """Datum und zugehoerige Bemerkung in einer Zelle -- spart eine Spalte
     in der ohnehin breiten Baustein-Tabelle."""
-    bemerkung = (bemerkung or "").strip()
+    bemerkung = _einzeilig(bemerkung)
     if not bemerkung:
         return text
     return f"{text} · {bemerkung}" if text else bemerkung
@@ -76,12 +87,15 @@ class BausteinDialog(tk.Toplevel):
             ("Bausteinarbeit", "bausteinarbeit", "entry", None),
             ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
             ("LZK-Note 1", "lzk_note_1", "entry", None),
-            ("Bemerkung zur LZK 1", "lzk_bem_1", "entry", None),
+            # Mehrzeilig: in eine LZK-Bemerkung gehoeren oft mehrere Punkte
+            # ("Bruchrechnen sicher / Textaufgaben ueben"), und die passten nicht
+            # in eine Zeile. Die vierte Spalte ist bei "text" die Zeilenzahl.
+            ("Bemerkung zur LZK 1", "lzk_bem_1", "text", 3),
             ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
             ("LZK-Note 2", "lzk_note_2", "entry", None),
-            ("Bemerkung zur LZK 2", "lzk_bem_2", "entry", None),
+            ("Bemerkung zur LZK 2", "lzk_bem_2", "text", 3),
             ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
-            ("Bemerkung", "bemerkung", "text", None),
+            ("Bemerkung", "bemerkung", "text", 10),
         ]
 
         self.vars = {}
@@ -103,12 +117,16 @@ class BausteinDialog(tk.Toplevel):
             elif art == "text":
                 text_rahmen = ttk.Frame(self)
                 text_rahmen.grid(row=row, column=1, sticky="w", padx=8, pady=4)
-                w = tk.Text(text_rahmen, width=45, height=10, wrap="word")
+                w = tk.Text(text_rahmen, width=45, height=optionen or 10, wrap="word")
                 w.pack(side="left", fill="both", expand=True)
                 sb = ttk.Scrollbar(text_rahmen, command=w.yview)
                 sb.pack(side="right", fill="y")
                 w.config(yscrollcommand=sb.set)
                 w.insert("1.0", wert)
+                # Enter macht hier eine neue Zeile und schliesst NICHT den Dialog.
+                # Ohne das lief der Tastendruck nach der Zeilenschaltung weiter an das
+                # Fenster und loeste "Uebernehmen" aus -- mehrzeilig tippen war unmoeglich.
+                w.bind("<Return>", self._zeilenumbruch)
                 var = w  # Text-Widget selbst als "var" merken
             else:
                 var = tk.StringVar(value=wert)
@@ -124,6 +142,12 @@ class BausteinDialog(tk.Toplevel):
 
         self.bind("<Return>", lambda e: self._uebernehmen())
         self.bind("<Escape>", lambda e: self.destroy())
+
+    @staticmethod
+    def _zeilenumbruch(event):
+        """Enter im Textfeld: Zeile umbrechen, Ereignis nicht weiterreichen."""
+        event.widget.insert("insert", "\n")
+        return "break"
 
     def _uebernehmen(self):
         try:
@@ -1278,7 +1302,7 @@ class App(tk.Tk):
                                          b.lzk_note_1,
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_2), b.lzk_bem_2),
                                          b.lzk_note_2,
-                                         b.halbjahr, b.bemerkung),
+                                         b.halbjahr, _einzeilig(b.bemerkung)),
                                  tags=tuple(tags))
 
     def _baustein_key(self, b: Baustein, spalte):
