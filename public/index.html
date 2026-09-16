@@ -204,7 +204,13 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .mw-bar-btn:hover{filter:brightness(1.08);}
 /* ✓/✗ direkt in der Teilnehmenden-Marke: gross genug zum Tippen, ohne die Marke
    zu sprengen. Farbe sagt, was passiert - Text braucht es dafuer nicht. */
-.aw-btn{cursor:pointer;font-weight:800;color:#15803d;padding:0 2px;}
+.aw-btn{
+  cursor:pointer;font-weight:800;color:#15803d;
+  background:none;border:none;font-family:inherit;font-size:inherit;
+  padding:1px 3px;border-radius:4px;line-height:1;
+}
+.aw-btn:hover{background:rgba(0,0,0,.06);}
+.aw-btn:focus-visible{outline:2px solid var(--md-primary);outline-offset:1px;}
 .aw-btn.aw-btn-rot{color:var(--md-error);}
 /* Entfernen ist keine Bewertung, sondern raeumt auf - deshalb neutral und nicht rot,
    damit es sich nicht mit "hat gefehlt" verwechseln laesst. */
@@ -2294,6 +2300,15 @@ function mwApplyPick() {
 function mwSelect(id) {
   _mwPicked = (_mwPicked === id) ? null : id;   // nochmal antippen hebt die Auswahl auf
   mwApplyPick();
+  barInsBlickfeld('mw-actionbar');
+}
+
+// Das Raster ist hoch - auf iPad und Handy kann die Leiste sonst unter dem
+// sichtbaren Bereich liegen und die Auswahl sieht aus, als waere nichts passiert.
+// 'nearest' scrollt nur, wenn noetig; nach einem blossen Neuzeichnen gar nicht.
+function barInsBlickfeld(id) {
+  const bar = document.getElementById(id);
+  if (bar && bar.style.display !== 'none') bar.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 // Was kann man mit dem ausgewaehlten Termin tun? Entweder ein Knopf (text + ruf) oder
@@ -2341,13 +2356,19 @@ function mwRenderBar() {
 // Buchen braucht ein Thema (und beim Talk die Eingeladenen) - den Dialog dafuer gibt es
 // im Kalender schon. Statt ihn hier nachzubauen, springen wir hin und oeffnen ihn direkt.
 async function mwBuchen(slotId) {
-  showView('calendar');
-  await loadCalendar();
+  await mwZumKalender(slotId);
   openCalBookModal(slotId);
 }
-async function mwZumKalender() {
+// Springt in den Kalender UND schlaegt den Tag des Termins auf - sonst landet man
+// im laufenden Monat und muss die Einladung erst suchen.
+async function mwZumKalender(slotId) {
+  const s = _mwSlots.find(x => x.id === slotId);
   showView('calendar');
   await loadCalendar();
+  const d = s && s.datum ? new Date(s.datum + 'T00:00:00') : null;
+  if (!d || isNaN(d)) return;
+  calYear = d.getFullYear(); calMonth = d.getMonth();
+  calSelectDay(s.datum);
 }
 
 // Nach einer Aktion die Ansicht auffrischen, aus der sie kam: Kalender und "Meine Woche"
@@ -4298,15 +4319,15 @@ function calInviteeListHtml(it) {
     // Offene Anfragen sind gelb und bekommen für die Lernbegleitung ✓/✗ statt des ×-Buttons.
     if (iv.status === 'angefragt') {
       const decide = (isAdminView && it.presentedStatus === 'ausstehend' && iv.id)
-        ? ` <span onclick="calDecideRequest(${iv.id}, true)" style="cursor:pointer;font-weight:800;color:#15803d;" title="Anfrage zusagen">✓</span>`
-          + ` <span onclick="calDecideRequest(${iv.id}, false)" style="cursor:pointer;font-weight:800;color:var(--md-error);" title="Anfrage ablehnen">✗</span>`
+        ? ` <button type="button" class="aw-btn" onclick="calDecideRequest(${iv.id}, true)" title="Anfrage zusagen" aria-label="Anfrage zusagen">✓</button>`
+          + ` <button type="button" class="aw-btn aw-btn-rot" onclick="calDecideRequest(${iv.id}, false)" title="Anfrage ablehnen" aria-label="Anfrage ablehnen">✗</button>`
         : '';
       return `<span class="pill pill-yellow" style="font-size:10px;" title="Möchte mitmachen">${escHtml(iv.username)} ⏳ fragt an${decide}</span>`;
     }
     const s = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
     const att = iv.attendedStatus === 'erledigt' ? ' 👂' : iv.attendedStatus === 'nicht_erledigt' ? ' 🚫' : '';
     const removeBtn = (canRemove && (it.typ === 'input' || iv.attendedStatus === 'ausstehend') && iv.id)
-      ? ` <span onclick="calRemoveInvitee(${iv.id})" style="cursor:pointer;font-weight:800;color:var(--md-error);" title="Entfernen">×</span>`
+      ? ` <button type="button" class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${iv.id})" title="Aus dem Termin entfernen" aria-label="Aus dem Termin entfernen">×</button>`
       : '';
     return `<span class="pill pill-blue" style="font-size:10px;">${escHtml(iv.username)} ${s}${att}${removeBtn}</span>`;
   }).join(' ');
@@ -4314,10 +4335,40 @@ function calInviteeListHtml(it) {
 }
 
 // Prominente Liste aller offenen Einladungen (monatsunabhängig), damit Eingeladene sie nicht verpassen.
+// Offene Mitmach-Anfragen an den eigenen Terminen - fuer die Lernbegleitung an
+// derselben Stelle wie die Einladungen der Schueler:innen. Ohne diesen Banner
+// muesste man jeden Termin einzeln aufklappen, um zu merken, dass jemand wartet;
+// eine unbeantwortete Anfrage blockiert fuer die Person auch den Zeitraum.
+function adminAnfragenHtml() {
+  const offen = [];
+  (calData.slots || []).forEach(s => {
+    if (!awDarfVerwalten(s) || slotVorbei(s) || s.presentedStatus !== 'ausstehend') return;
+    (s.invitees || []).forEach(iv => { if (iv.status === 'angefragt') offen.push({ s, iv }); });
+  });
+  if (!offen.length) return '';
+  offen.sort((a, b) => ((a.s.datum || '') + (a.s.uhrzeit || '')).localeCompare((b.s.datum || '') + (b.s.uhrzeit || '')));
+  return `<div style="background:#fef9c3;border:1px solid #ca8a04;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-weight:800;color:#854d0e;margin-bottom:8px;">❓ Offene Mitmach-Anfragen (${offen.length})</div>
+    ${offen.map(({ s, iv }) => {
+      const dl = new Date(s.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
+      const subj = subjectById(s.subjectId);
+      return `<div class="stat-card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div><strong>${escHtml(iv.username)}</strong> möchte mitmachen<br>
+            <span style="color:var(--md-on-surface-variant);font-size:12px;">📘 ${escHtml(subj.name)} · ${escHtml(s.thema || s.slotThema || '')} · ${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</span></div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-act btn-green" onclick="awEntscheiden(${iv.id}, true)">Zusagen</button>
+            <button class="btn-cancel" onclick="awEntscheiden(${iv.id}, false)">Ablehnen</button>
+          </div>
+        </div></div>`;
+    }).join('')}
+  </div>`;
+}
+
 function renderCalInvites() {
   const el = document.getElementById('cal-invites');
   if (!el) return;
-  if (me && me.role === 'admin') { el.innerHTML = ''; return; }
+  if (me && me.role === 'admin') { el.innerHTML = adminAnfragenHtml(); return; }
   const pending = (calData.slots || [])
     .filter(s => s.mineAsListener && s.myInvitationStatus === 'eingeladen' && s.presentedStatus === 'ausstehend')
     .sort((a,b) => ((a.datum||'') + (a.uhrzeit||'')).localeCompare((b.datum||'') + (b.uhrzeit||'')));
@@ -4405,9 +4456,14 @@ function awChip(s) {
   }
   (s.invitees || []).forEach(iv => {
     if (iv.status === 'abgelehnt') return; // abgesagt - nimmt nicht teil
-    const icon = iv.status === 'angenommen' ? '✓' : '⏳';
+    // Eine ANFRAGE ist keine offene Einladung: dort wartet die Schueler:in auf DICH.
+    // Vorher stand an beiden dasselbe "eingeladen, noch keine Antwort".
+    const angefragt = iv.status === 'angefragt';
+    const icon = iv.status === 'angenommen' ? '✓' : angefragt ? '❓' : '⏳';
     const cls = iv.status === 'angenommen' ? 'aw-person' : 'aw-person aw-person-pending';
-    teilnehmende.push(`<span class="${cls}" title="${iv.status === 'angenommen' ? 'zugesagt' : 'eingeladen, noch keine Antwort'}">${escHtml(iv.username)} ${icon}</span>`);
+    const titel = iv.status === 'angenommen' ? 'zugesagt'
+      : angefragt ? 'möchte mitmachen - wartet auf deine Zusage' : 'eingeladen, noch keine Antwort';
+    teilnehmende.push(`<span class="${cls}" title="${titel}">${escHtml(iv.username)} ${icon}</span>`);
   });
 
   const chipStyle = state === 'taken' ? '' : ` style="border-left-color:${color};color:${color};"`;
@@ -4458,6 +4514,7 @@ function awApplyPick() {
 function awSelect(id) {
   _awPicked = (_awPicked === id) ? null : id;
   awApplyPick();
+  barInsBlickfeld('aw-actionbar');
 }
 
 // Eigene Termine verwaltet jede Lernbegleitung selbst, fremde nur Super-Admins -
@@ -4483,12 +4540,14 @@ function awRenderBar() {
   // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Kleeblaetter und
   // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
   const schnell = darf && gelaufen && s.typ === 'input';
-  const ja = (ruf, titel) => ` <span class="aw-btn" onclick="${ruf}" title="${titel}">✓</span>`;
-  const nein = (ruf, titel) => ` <span class="aw-btn aw-btn-rot" onclick="${ruf}" title="${titel}">✗</span>`;
+  // Echte <button>, keine anklickbaren <span>: nur so sind die Entscheidungen auch
+  // per Tastatur erreichbar, und aria-label sagt an, was ✓/✗/× bedeuten.
+  const ja = (ruf, titel) => ` <button type="button" class="aw-btn" onclick="${ruf}" title="${titel}" aria-label="${titel}">✓</button>`;
+  const nein = (ruf, titel) => ` <button type="button" class="aw-btn aw-btn-rot" onclick="${ruf}" title="${titel}" aria-label="${titel}">✗</button>`;
   // Entfernen ist etwas anderes als "hat gefehlt": der Eintrag verschwindet ganz, es bleibt
   // keine Fehlzeit stehen - wer faelschlich auf dem Termin stand, soll keine bekommen.
   // Geht nur, solange nichts bewertet ist; genau so prueft es auch der Server.
-  const weg = (id) => ` <span class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen">×</span>`;
+  const weg = (id) => ` <button type="button" class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen" aria-label="Aus dem Termin entfernen">×</button>`;
   // Am Fachbüro bleibt Entfernen IMMER moeglich - ein "da gewesen"/"gefehlt" ist dort
   // reine Anwesenheit und kein Ergebnis, das verloren gehen koennte. Bei Talks haengen
   // Kleeblaetter an der Bewertung, deshalb dort nur solange nichts bewertet ist.
@@ -4547,7 +4606,7 @@ function awRenderBar() {
       ${hinweis ? `<div class="mw-bar-hint" style="margin-top:4px;">${escHtml(hinweis)}</div>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>
+      ${darf ? `<button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>` : ''}
       ${(darf && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-rot" onclick="calCancelSession(${s.session_id})">Stornieren</button>` : ''}
     </div>`;
 }
@@ -4677,6 +4736,7 @@ function renderMyHalbjahr() {
       <span class="pill pill-blue">📚 ${b.stationsCompleted} Stationen</span>
       ${lzkB}
     </div>
+    <button class="btn-sm" style="margin-top:10px;" onclick="showView('halbjahr')">→ Alles ansehen (auch ältere Halbjahre)</button>
   </div>`;
 }
 
@@ -4729,7 +4789,9 @@ function renderHalbjahr() {
     const ich = hjData.students[0];
     el.innerHTML = (!ich || !hjSelected)
       ? '<div style="color:var(--md-on-surface-variant);font-size:13px;">Noch keine Aktivitäten erfasst. Sobald du einen Talk hältst, im Fachbüro warst oder eine LZK schreibst, steht das hier.</div>'
-      : hjDetailHtml(ich, null);
+      : `<div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:8px;">
+           Alles, was im Halbjahr ${escHtml(hjSelected)} zusammengekommen ist. Oben das Halbjahr wechseln, um ältere anzusehen.
+         </div>${hjDetailHtml(ich, null)}`;
     return;
   }
   if (!hjData.students.length) { el.innerHTML = '<div style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen.</div>'; return; }
