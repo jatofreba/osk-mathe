@@ -1726,7 +1726,7 @@ class App(tk.Tk):
         stand = datetime.now().strftime("%d.%m.%Y")
         nach_alias = {st.alias.strip().lower(): st
                       for st in self.az.students if st.alias.strip()}
-        neu = akt = 0
+        neu = akt = besuche = 0
         ohne_daten = []
         for _, _, _, alias in treffer:
             student = nach_alias.get(alias)
@@ -1735,7 +1735,7 @@ class App(tk.Tk):
                 if student and alias not in je_konto:
                     ohne_daten.append(f"{student.voller_name} ({alias})")
                 continue
-            n, a = lt_zeilen_aktualisieren(
+            n, a, b = lt_zeilen_aktualisieren(
                 student,
                 daten.nach_account.get(alias, {}).get("byHalbjahr", {}),
                 konto.get("all_progress") or {},
@@ -1743,7 +1743,12 @@ class App(tk.Tk):
                 lerntheken, stand)
             neu += n
             akt += a
+            besuche += b
         self._detail_anzeigen()
+        # Neue FB-Besuche aendern den Farbindikator in der Liste (🟢/🟡/🔴) und
+        # das "Letzter Besuch"-Feld - ohne Neuaufbau bliebe die alte Farbe stehen.
+        if besuche:
+            self._liste_aktualisieren()
 
         self._markiere_ungespeichert()
 
@@ -1756,6 +1761,8 @@ class App(tk.Tk):
 
         text = (f"Lerngruppe {klasse}, nur Mathe.\n"
                 f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n")
+        if besuche:
+            text += f"Fachbüro-Besuche übernommen: {besuche}.\n"
         if zeilen:
             text += f"Rohdaten im Blatt 'App-Daten': {zeilen} Zeilen.\n"
         text += "\nNoch speichern nicht vergessen."

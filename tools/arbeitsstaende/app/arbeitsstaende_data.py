@@ -250,29 +250,47 @@ def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
     return aenderungen, uebersprungen
 
 
-def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
-    """Bemerkungstext fuer die Talk-/Fachbuero-Zeile eines Halbjahres, oder None.
+def lt_fb_besuche(by_halbjahr: dict, fach_key: str = "mathe") -> List[date]:
+    """Tage, an denen jemand nachweislich im Fachbuero war.
 
-    Beim Fachbuero zaehlt nicht nur die Zusage, sondern die Anwesenheit: die App
-    liefert je Halbjahr, wie oft jemand da war, gefehlt hat und wie viele
-    vergangene Termine die Lernbegleitung noch nicht eingetragen hat.
+    Gewertet wird nur, was die Lernbegleitung auf "ok" gesetzt hat; kuenftige
+    Termine liefert die App ohnehin nicht als erledigt. Diese Tage gehoeren in
+    die FB-Besuchsliste der Person (und damit in den Farbindikator der
+    Uebersicht) -- nicht in eine Bausteinzeile, wo sie nur als Zahl stuenden.
+    """
+    tage = set()
+    for bucket in (by_halbjahr or {}).values():
+        sub = ((bucket or {}).get("bySubject") or {}).get(fach_key) or {}
+        for eintrag in sub.get("inputDetails") or []:
+            if (eintrag or {}).get("status") != "erledigt":
+                continue
+            tag = _to_date((eintrag or {}).get("datum"))
+            if tag:
+                tage.add(tag)
+    return sorted(tage)
+
+
+def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
+    """Bemerkungstext fuer die Talk-Zeile eines Halbjahres, oder None.
+
+    Die Fachbuero-TEILNAHMEN stehen hier bewusst nicht mehr: sie landen als
+    echte Termine in der FB-Besuchsliste (siehe lt_fb_besuche). Was hier bleibt,
+    hat dort keinen Platz, weil es kein Besuch ist: versaeumte Termine und
+    vergangene, die die Lernbegleitung noch nicht eingetragen hat.
     """
     sub = (bucket.get("bySubject") or {}).get(fach_key) or {}
     geh = sub.get("talksPresented", 0) or 0
     zug = sub.get("talksListened", 0) or 0
-    inp = sub.get("inputParticipated", 0) or 0
     fehlt = sub.get("inputMissed", 0) or 0
     offen = sub.get("inputOpen", 0) or 0
     klee = (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0)
-    if not (geh or zug or inp or fehlt or offen or klee):
+    if not (geh or zug or fehlt or offen or klee):
         return None
     teile = []
     if geh:
         teile.append(f"{geh}x gehalten")
     if zug:
         teile.append(f"{zug}x zugehoert")
-    if inp:
-        teile.append(f"{inp}x FaBü da")
     if fehlt:
         teile.append(f"{fehlt}x FaBü gefehlt")
     if offen:
@@ -284,10 +302,12 @@ def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
 
 def lt_zeilen_aktualisieren(student, by_halbjahr: dict, progress: dict,
                             lzk_liste, lerntheken, stand: str = ""):
-    """Traegt die App-Ergebnisse als Bausteinzeilen ein.
+    """Traegt die App-Ergebnisse ein und meldet (neu, aktualisiert, fb_besuche).
 
-    Je bearbeiteter Lerntheke eine Zeile (Gesamtstand + LZK) und je Halbjahr
-    eine fuer Talks/Fachbuero.
+    Je bearbeiteter Lerntheke eine Bausteinzeile (Gesamtstand + LZK) und je
+    Halbjahr eine fuer die Talks. Fachbuero-TEILNAHMEN werden dagegen als
+    Besuchstage eingetragen -- sie gehoeren in die FB-Besuchsliste, nicht in
+    eine Bausteinzeile.
 
     Angefasst werden ausschliesslich Zeilen mit LT_MARKER in der Bemerkung.
     Von Hand gepflegte Bausteine bleiben unberuehrt -- auch namensgleiche.
@@ -325,7 +345,16 @@ def lt_zeilen_aktualisieren(student, by_halbjahr: dict, progress: dict,
         if talk:
             _setze(f"{LT_TALK_NAME} {hj}", hj, talk, "Sonstiges")
 
-    return neu, aktualisiert
+    # Fachbuero-Teilnahmen aus der App in die Besuchsliste uebernehmen. Von Hand
+    # eingetragene Besuche bleiben erhalten: fb_besuch_eintragen() fuegt nur
+    # hinzu, was noch nicht dasteht.
+    besuche_neu = 0
+    for tag in lt_fb_besuche(by_halbjahr):
+        if tag not in student.fb_besuche:
+            student.fb_besuch_eintragen(tag)
+            besuche_neu += 1
+
+    return neu, aktualisiert, besuche_neu
 
 
 def alias_vorschlag(vorname: str, nachname: str) -> str:

@@ -11,7 +11,8 @@ import tempfile
 from datetime import date
 
 from arbeitsstaende_data import (
-    Arbeitsstaende, Baustein, Student, lt_lzk_aenderungen, lt_talk_zeile, LT_MARKER)
+    Arbeitsstaende, Baustein, Student, lt_fb_besuche, lt_lzk_aenderungen,
+    lt_talk_zeile, lt_zeilen_aktualisieren, LT_MARKER)
 
 TMP = tempfile.mkdtemp(prefix="arbeitsstaende_test_")
 
@@ -407,25 +408,74 @@ def test_lzk_abgleich_mit_dem_server():
 
 
 def test_fabue_anwesenheit_im_bericht():
-    """Beim Fachbuero zaehlt die Anwesenheit, nicht die Zusage.
+    """Die Bausteinzeile meldet nur noch, was KEIN Besuch ist.
 
-    Die App liefert je Halbjahr drei Zahlen: da gewesen, gefehlt und offen
-    (Termin vorbei, von der Lernbegleitung noch nicht eingetragen).
+    Die Teilnahmen selbst wandern in die FB-Besuchsliste (siehe
+    test_fabue_teilnahmen_werden_zu_besuchen). Uebrig bleiben hier versaeumte
+    Termine und vergangene, die die Lernbegleitung noch nicht eingetragen hat.
     """
     def bucket(**werte):
         return {"bySubject": {"mathe": werte}}
 
-    assert lt_talk_zeile(bucket(inputParticipated=3)) == "3x FaBü da"
-    assert lt_talk_zeile(bucket(inputParticipated=3, inputMissed=1)) ==         "3x FaBü da, 1x FaBü gefehlt"
+    # Reine Teilnahmen ergeben keine Bausteinzeile mehr -- sie stehen als
+    # Besuchstage in der Liste und waeren hier eine doppelte Buchfuehrung.
+    assert lt_talk_zeile(bucket(inputParticipated=3)) is None
+    assert lt_talk_zeile(bucket(inputParticipated=3, inputMissed=1)) == "1x FaBü gefehlt"
     # Wer nur gefehlt hat, taucht trotzdem auf -- vorher fiel das voellig weg.
     assert lt_talk_zeile(bucket(inputMissed=2)) == "2x FaBü gefehlt"
-    assert lt_talk_zeile(bucket(inputParticipated=2, inputMissed=1, inputOpen=2)) ==         "2x FaBü da, 1x FaBü gefehlt, 2x FaBü offen"
+    assert lt_talk_zeile(bucket(inputParticipated=2, inputMissed=1, inputOpen=2)) == \
+        "1x FaBü gefehlt, 2x FaBü offen"
     assert lt_talk_zeile(bucket(talksPresented=1, talksListened=2,
-                                inputParticipated=4, pokalePresented=3)) ==         "1x gehalten, 2x zugehoert, 4x FaBü da, 3 Kleeblaetter"
+                                inputParticipated=4, pokalePresented=3)) == \
+        "1x gehalten, 2x zugehoert, 3 Kleeblaetter"
     # Ohne jede Aktivitaet gibt es keine Zeile.
     assert lt_talk_zeile(bucket()) is None
     assert lt_talk_zeile({"bySubject": {}}) is None
     print("OK: test_fabue_anwesenheit_im_bericht")
+
+
+def test_fabue_teilnahmen_werden_zu_besuchen():
+    """Teilnahmen aus der App landen in der FB-Besuchsliste, nicht im Baustein.
+
+    Die Liste speist den Farbindikator der Uebersicht (🟢/🟡/🔴) und das Feld
+    "Letzter Besuch" -- als Zahl in einer Bausteinzeile waere beides blind.
+    """
+    def eintrag(datum, status="erledigt"):
+        return {"datum": datum, "status": status, "role": "teilgenommen"}
+
+    by_hj = {
+        "2627_1": {"bySubject": {"mathe": {"inputParticipated": 2, "inputDetails": [
+            eintrag("2026-09-01"), eintrag("2026-09-08"),
+            eintrag("2026-09-09", "nicht_erledigt"),   # gefehlt -> kein Besuch
+            eintrag("2026-09-10", "ausstehend"),       # nicht eingetragen -> kein Besuch
+        ]}}},
+        "2526_2": {"bySubject": {"mathe": {"inputDetails": [eintrag("2026-02-02")]}}},
+    }
+
+    # Nur bestaetigte Teilnahmen, ueber alle Halbjahre hinweg, aufsteigend.
+    assert lt_fb_besuche(by_hj) == [date(2026, 2, 2), date(2026, 9, 1), date(2026, 9, 8)]
+    # Englisch-Fachbueros gehoeren nicht in die Mathe-Besuchsliste.
+    assert lt_fb_besuche({"2627_1": {"bySubject": {"englisch": {
+        "inputDetails": [eintrag("2026-09-01")]}}}}) == []
+    assert lt_fb_besuche({}) == [] and lt_fb_besuche(None) == []
+
+    # Eintragen: von Hand gepflegte Besuche bleiben erhalten, nichts doppelt.
+    person = Student(vorname="Ben", nachname="Jansen", alias="be.ja")
+    person.fb_besuch_eintragen(date(2026, 9, 1))     # kannte die Liste schon
+    person.fb_besuch_eintragen(date(2026, 8, 20))    # rein von Hand
+    neu, akt, besuche = lt_zeilen_aktualisieren(person, by_hj, {}, [], [])
+    assert besuche == 2, besuche                      # 02.02. und 08.09.
+    assert person.fb_besuche == [date(2026, 2, 2), date(2026, 8, 20),
+                                 date(2026, 9, 1), date(2026, 9, 8)], person.fb_besuche
+    assert person.letzter_besuch_fb == date(2026, 9, 8)
+
+    # Zweiter Abruf traegt nichts erneut ein.
+    _, _, nochmal = lt_zeilen_aktualisieren(person, by_hj, {}, [], [])
+    assert nochmal == 0, nochmal
+
+    # Und die Teilnahmen stehen nicht zusaetzlich als Bausteinzeile da.
+    assert not [b for b in person.bausteine if "FaBü da" in (b.bemerkung or "")]
+    print("OK: test_fabue_teilnahmen_werden_zu_besuchen")
 
 
 if __name__ == "__main__":
@@ -444,5 +494,6 @@ if __name__ == "__main__":
     test_json_fremde_datei_warnt_statt_abzustuerzen()
     test_lzk_abgleich_mit_dem_server()
     test_fabue_anwesenheit_im_bericht()
+    test_fabue_teilnahmen_werden_zu_besuchen()
     print("\nAlle Tests erfolgreich.")
     print(f"(Testdateien lagen in {TMP})")
