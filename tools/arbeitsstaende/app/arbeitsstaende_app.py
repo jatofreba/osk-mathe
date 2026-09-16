@@ -641,6 +641,14 @@ class App(tk.Tk):
         # Klick auf einen Spaltenkopf sortiert die Liste danach, erneuter Klick
         # kehrt die Richtung um. Standard bleibt Jahrgangsstufe + Nachname.
         self._liste_sortierung = None       # None = Standardsortierung
+        # Beim Tippen im Kopfbereich aendert sich potenziell die Frist-Spalte der Liste.
+        # Sie bei JEDEM Zeichen neu zu bauen liess sie flackern -- und das Wiederherstellen
+        # der Markierung loeste <<TreeviewSelect>> aus, wodurch die Eingabefelder mitten im
+        # Tippen aus dem Modell zurueckgeschrieben wurden. Ein unfertig getipptes Datum war
+        # damit sofort wieder weg. Deshalb: Neuaufbau entprellt (_liste_timer) und die
+        # wiederhergestellte Markierung als "keine neue Auswahl" markiert (_markierung_sperre).
+        self._liste_timer = None
+        self._markierung_sperre = False
         self._liste_umgekehrt = False
         for spalte, titel in (("#0", "Name"), ("jahrgang", "Jgst."),
                               ("deadline", "Deadline"), ("anlass", "Anlass"),
@@ -1121,9 +1129,17 @@ class App(tk.Tk):
         vorhanden = set(self.liste.get_children())
         neue_markierung = [m for m in markierung if m in vorhanden]
         if neue_markierung:
-            self.liste.selection_set(neue_markierung)
+            # Dieselbe Person wieder markieren ist keine neue Auswahl -- ohne die Sperre
+            # wuerde _detail_anzeigen() die gerade getippten Felder ueberschreiben.
+            self._markierung_sperre = True
+            try:
+                self.liste.selection_set(neue_markierung)
+            finally:
+                self._markierung_sperre = False
 
     def _auswahl_geaendert(self, event=None):
+        if self._markierung_sperre:
+            return
         auswahl = self.liste.selection()
         if not auswahl:
             return
@@ -1322,8 +1338,19 @@ class App(tk.Tk):
             except ValueError:
                 self.deadline_hinweis.config(text="Datum bitte als TT.MM.JJJJ")
         self._markiere_ungespeichert()
+        # Kein selection_set mehr: die Markierung stellt _liste_aktualisieren() selbst
+        # wieder her, und ein zweites Setzen loeste erneut <<TreeviewSelect>> aus.
+        self._liste_spaeter_aktualisieren()
+
+    def _liste_spaeter_aktualisieren(self, verzoegerung=500):
+        """Liste erst kurz nach dem letzten Tastendruck neu aufbauen."""
+        if self._liste_timer is not None:
+            self.after_cancel(self._liste_timer)
+        self._liste_timer = self.after(verzoegerung, self._liste_jetzt_aktualisieren)
+
+    def _liste_jetzt_aktualisieren(self):
+        self._liste_timer = None
         self._liste_aktualisieren()
-        self.liste.selection_set(s.voller_name)
 
     # ------------------------------------------------------------------
     # Lerntheken-App: Aliasse pflegen und exportieren
