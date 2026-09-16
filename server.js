@@ -2121,6 +2121,29 @@ app.post('/api/admin/talking-invitations/:id/decide', requireAdmin, async (req, 
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Schüler:in zieht die eigene, noch offene Mitmach-Anfrage zurück. Die Zeile wird
+// gelöscht statt auf 'abgelehnt' gesetzt - genau wie beim Ablehnen durch die
+// Lernbegleitung, damit man später erneut anfragen kann.
+app.post('/api/talking-invitations/:id/withdraw', requireLogin, async (req, res) => {
+  try {
+    const inv = await pool.query(`
+      SELECT ti.id, ti.status, ts.id AS "sessionId"
+      FROM talking_invitations ti
+      JOIN talking_sessions ts ON ts.id = ti.session_id
+      JOIN talking_slots sl ON sl.id = ts.slot_id
+      WHERE ti.id=$1 AND ti.listener_id=$2 AND sl.klasse=$3
+    `, [req.params.id, req.session.userId, req.session.klasse]);
+    if (!inv.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    // Nur die eigene ANFRAGE: eine Einladung wird beantwortet (respond), nicht zurückgezogen.
+    if (inv.rows[0].status !== 'angefragt') return res.status(409).json({ error: 'Das ist keine offene Anfrage mehr' });
+    await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
+    // War das die einzige Anfrage an einem nur ausgeschriebenen Fachbüro, ist der
+    // Termin danach wieder frei.
+    await dropEmptySession(inv.rows[0].sessionId);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
     const { accept } = req.body;

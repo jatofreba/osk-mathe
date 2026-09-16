@@ -2316,9 +2316,19 @@ function barInsBlickfeld(id) {
 function mwAktion(s) {
   const st = mwState(s);
   if (st === 'mine')      return { hinweis: '✓ Den Termin hast du schon.' };
-  if (st === 'requested') return { hinweis: '⏳ Deine Anfrage läuft – die Lernbegleitung entscheidet.' };
-  if (st === 'conflict')  return { hinweis: '✕ Überschneidet sich mit einem deiner Termine.' };
+  // Ab hier gilt: was vorbei ist, gehoert der Lernbegleitung - auch das Zurueckziehen
+  // einer Anfrage. Nur der eigene Termin (oben) bleibt als solcher erkennbar.
   if (slotVorbei(s))      return { hinweis: 'Dieser Termin ist vorbei.' };
+  // Eine laufende Anfrage war bisher eine Sackgasse: wer sich vertippt hatte, musste
+  // warten, bis die Lernbegleitung entscheidet. Jetzt kann man sie selbst zurueckziehen.
+  if (st === 'requested') return { text: 'Anfrage zurückziehen', ruf: `calWithdrawRequest(${s.myInvitationId})` };
+  if (st === 'conflict') {
+    const eigen = s._conflict && s._conflict.slot;
+    const was = eigen
+      ? `${subjectById(eigen.subjectId).name}-${eigen.typ === 'input' ? 'Fachbüro' : 'Talk'}${eigen.uhrzeit ? ' um ' + eigen.uhrzeit : ''}`
+      : 'einem deiner Termine';
+    return { hinweis: `✕ Überschneidet sich mit deinem ${was}.` };
+  }
   if (st === 'invited')   return { text: 'Einladung beantworten', ruf: `mwZumKalender(${s.id})` };
   if (subjectById(s.subjectId).nurZugewiesen) return { hinweis: 'Diesen Termin vergibt die Lernbegleitung.' };
   const istFabue = s.typ === 'input';
@@ -2407,10 +2417,13 @@ async function loadMyWeek() {
   // gibt und warum es fuer einen selbst nicht in Frage kommt. Offene Einladungen
   // zaehlen NICHT als Blocker (noch keine Zusage) und werden nie als Konflikt
   // markiert - dort muss man bewusst ab- oder zusagen koennen.
+  // Den eigenen Termin mitschleppen: "überschneidet sich mit deinem Mathe-Talk um 10:45"
+  // hilft weiter, ein blosses "Terminkonflikt" laesst einen suchen.
   const busy = weekSlots.filter(s => mwState(s) === 'mine').map(s => ({
     datum: s.datum,
     von: lwMin(s.uhrzeit),
     bis: (lwMin(s.uhrzeit) ?? 0) + (parseInt(s.dauer, 10) || 45),
+    slot: s,
   })).filter(b => b.von !== null);
 
   weekSlots.forEach(s => {
@@ -2420,7 +2433,8 @@ async function loadMyWeek() {
     const von = lwMin(s.uhrzeit);
     if (von === null) return; // ohne Uhrzeit nicht beurteilbar
     const bis = von + (parseInt(s.dauer, 10) || 45);
-    s._conflict = busy.some(b => b.datum === s.datum && von < b.bis && b.von < bis);
+    // Objekt statt true: mwState() prueft nur auf "wahr", die Leiste kann den Termin nennen.
+    s._conflict = busy.find(b => b.datum === s.datum && von < b.bis && b.von < bis) || false;
   });
   const visible = weekSlots;
   // Fuer die Aktionsleiste: sie arbeitet mit der Termin-ID aus der angetippten Kachel.
@@ -2647,7 +2661,10 @@ async function showApp() {
   // Die Halbjahr-Übersicht gibt es fuer beide Rollen: Lernbegleitungen sehen die ganze
   // Lerngruppe, Schueler:innen dieselbe Auswertung nur fuer sich selbst.
   const tabHalbjahr = document.getElementById('tab-halbjahr');
-  if (tabHalbjahr) tabHalbjahr.style.display = '';
+  if (tabHalbjahr) {
+    tabHalbjahr.style.display = '';
+    tabHalbjahr.textContent = (me.role === 'admin') ? '🎓 Halbjahr-Übersicht' : '🎓 Mein Halbjahr';
+  }
   const hjTitel = document.getElementById('hj-view-title');
   if (hjTitel) hjTitel.textContent = (me.role === 'admin')
     ? '🎓 Schüler:innen-Übersicht nach Halbjahr' : '🎓 Mein Halbjahr';
@@ -3943,7 +3960,8 @@ function renderCalDetail() {
         actions = `<button class="btn-act btn-green" onclick="calRespondInvite(${it.myInvitationId}, true)">Annehmen</button>
                    <button class="btn-cancel" onclick="calRespondInvite(${it.myInvitationId}, false)">Ablehnen</button>`;
       } else if (!isAdmin && it.mineAsListener && it.myInvitationStatus === 'angefragt') {
-        actions = `<span class="pill pill-yellow">⏳ Anfrage läuft</span>`;
+        actions = `<span class="pill pill-yellow">⏳ Anfrage läuft</span>
+                   <button class="btn-cancel" onclick="calWithdrawRequest(${it.myInvitationId})">Zurückziehen</button>`;
       } else if (!isAdmin && it.mineAsListener) {
         const s = it.myInvitationStatus === 'angenommen' ? '✓ zugesagt' : it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt' : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`;
@@ -4420,6 +4438,15 @@ async function calRequestJoin(slotId) {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Anfrage nicht möglich.'); return; }
   alert('Anfrage gestellt - die Lernbegleitung entscheidet darüber.');
+  calReload();
+}
+
+// Schüler:in nimmt die eigene Anfrage zurück - erneut anfragen bleibt möglich.
+async function calWithdrawRequest(invitationId) {
+  if (!confirm('Deine Anfrage zurückziehen?\n\nDu kannst später wieder anfragen.')) return;
+  const r = await fetch(`/api/talking-invitations/${invitationId}/withdraw`, { method: 'POST' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Zurückziehen nicht möglich.'); return; }
   calReload();
 }
 
@@ -4958,6 +4985,12 @@ function renderTalkingStudent() {
   // zuerst, ältere danach; nur Halbjahre mit echter Beteiligung tauchen überhaupt auf.
   const currentHj = currentHalbjahrGuess();
   const groupsFull = talkingGroupByHalbjahrFull(talkingMine.presenting, talkingMine.invitations);
+  // Ein Halbjahr, in dem jemand NUR im Fachbüro war, hatte bisher gar keine Kachel -
+  // dann sah es aus, als waere nichts passiert.
+  (talkingMine.fabue || []).forEach(f => {
+    const hj = fabueHalbjahr(f);
+    if (hj && !groupsFull.some(g => g.halbjahr === hj)) groupsFull.push({ halbjahr: hj, presenting: [], listening: [] });
+  });
   groupsFull.sort((a, b) => {
     if (a.halbjahr === currentHj) return -1;
     if (b.halbjahr === currentHj) return 1;
