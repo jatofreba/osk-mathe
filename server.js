@@ -168,6 +168,14 @@ async function initDB() {
       session_id         INTEGER NOT NULL REFERENCES talking_sessions(id) ON DELETE CASCADE,
       listener_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       status             TEXT NOT NULL DEFAULT 'eingeladen',
+      -- WIE ist die Person auf die Liste gekommen? Bewusst getrennt von status:
+      -- der beantwortet "ist sie dabei?", das hier "hat sie dem zugestimmt?".
+      -- 'selbst'     = Einladung angenommen oder Anfrage gestellt
+      -- 'zugewiesen' = von der Lernbegleitung eingeteilt, wurde nie gefragt
+      herkunft           TEXT NOT NULL DEFAULT 'selbst',
+      -- Nur bei 'zugewiesen' relevant: wann die Person den Termin zur Kenntnis
+      -- genommen hat ("Alles klar"). NULL = weiß vermutlich noch nichts davon.
+      gesehen_am         TIMESTAMPTZ,
       attended_status    TEXT NOT NULL DEFAULT 'ausstehend',
       admin_id           INTEGER REFERENCES users(id),
       updated_at         TIMESTAMPTZ DEFAULT NOW(),
@@ -210,6 +218,28 @@ async function initDB() {
         ALTER TABLE talking_invitations ADD COLUMN IF NOT EXISTS attended_status TEXT NOT NULL DEFAULT 'ausstehend';
         UPDATE talking_invitations SET attended_status = CASE WHEN attended_confirmed THEN 'erledigt' ELSE 'ausstehend' END;
         ALTER TABLE talking_invitations DROP COLUMN attended_confirmed;
+      END IF;
+    END $$;
+    -- Herkunft/Kenntnisnahme (2026-09-16). Die Nachrüstung läuft genau einmal - im
+    -- IF-Zweig, bevor die Spalte existiert. Für Altbestand lässt sich die Herkunft nicht
+    -- mehr sicher rekonstruieren, deshalb eine Heuristik: Einladungen an einem Fachbüro
+    -- OHNE buchende Person sind so gut wie immer Zuweisungen der Lernbegleitung
+    -- (Schüler:innen erzeugen presenterlose Sessions nur über Anfragen, und die gibt es
+    -- erst seit wenigen Tagen). Alles andere gilt als 'selbst'.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='talking_invitations' AND column_name='herkunft') THEN
+        ALTER TABLE talking_invitations ADD COLUMN herkunft TEXT NOT NULL DEFAULT 'selbst';
+        UPDATE talking_invitations ti SET herkunft = 'zugewiesen'
+          FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+         WHERE ts.id = ti.session_id AND ts.presenter_id IS NULL AND sl.typ = 'input';
+      END IF;
+    END $$;
+    -- Eigener Wächter je Spalte: sonst bliebe gesehen_am aus, wenn herkunft schon da ist.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='talking_invitations' AND column_name='gesehen_am') THEN
+        ALTER TABLE talking_invitations ADD COLUMN gesehen_am TIMESTAMPTZ;
       END IF;
     END $$;
     -- Mathe-Input (2026-08-01): talking_slots dienen jetzt auch als Input-Termine (typ='input').
@@ -1779,7 +1809,8 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
                COALESCE(json_agg(json_build_object(
                  'id', ti.id, 'listenerId', u.id, 'username', u.username,
-                 'status', ti.status, 'attendedStatus', ti.attended_status,
+                 'status', ti.status, 'herkunft', ti.herkunft, 'gesehen', ti.gesehen_am IS NOT NULL,
+                 'attendedStatus', ti.attended_status,
                  'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
                )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
         FROM talking_sessions ts
@@ -1791,7 +1822,8 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid, subject.id]),
       pool.query(`
-        SELECT ti.id, ti.status, ti.attended_status AS "attendedStatus", ti.pokale, ti.quality_emoji AS "qualityEmoji",
+        SELECT ti.id, ti.status, ti.herkunft, (ti.gesehen_am IS NOT NULL) AS gesehen,
+               ti.attended_status AS "attendedStatus", ti.pokale, ti.quality_emoji AS "qualityEmoji",
                ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus",
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
                pu.username AS presenter_username
@@ -2144,6 +2176,25 @@ app.post('/api/talking-invitations/:id/withdraw', requireLogin, async (req, res)
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Schüler:in nimmt einen ihr ZUGEWIESENEN Termin zur Kenntnis ("Alles klar").
+// Das ist ausdrücklich KEINE Zusage - abgelehnt wird eine Zuweisung nicht, dafür gibt es
+// das Gespräch. Es beantwortet nur die Frage, die sich die Lernbegleitung sonst selbst
+// beantworten muss: "weiß die Person schon davon, oder muss ich sie noch ansprechen?"
+app.post('/api/talking-invitations/:id/gesehen', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      UPDATE talking_invitations ti SET gesehen_am = NOW(), updated_at = NOW()
+      FROM talking_sessions ts, talking_slots sl
+      WHERE ti.session_id = ts.id AND ts.slot_id = sl.id
+        AND ti.id = $1 AND ti.listener_id = $2 AND sl.klasse = $3
+        AND ti.herkunft = 'zugewiesen' AND ti.gesehen_am IS NULL
+      RETURNING ti.id
+    `, [req.params.id, req.session.userId, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden oder schon bestätigt' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) => {
   try {
     const { accept } = req.body;
@@ -2278,7 +2329,8 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
              ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji", pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
-               'status', ti.status, 'attendedStatus', ti.attended_status,
+               'status', ti.status, 'herkunft', ti.herkunft, 'gesehen', ti.gesehen_am IS NOT NULL,
+               'attendedStatus', ti.attended_status,
                'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
              )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
       FROM talking_slots s
@@ -2335,7 +2387,10 @@ app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
     const sessionId = sessionResult.rows[0].id;
     for (const uid of okIds) {
       await pool.query(
-        `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angenommen')`,
+        // herkunft='zugewiesen': die Person ist dabei, hat aber nie zugestimmt - sonst
+        // stünde in der Liste "zugesagt", obwohl sie nichts davon weiß.
+        `INSERT INTO talking_invitations (session_id, listener_id, status, herkunft)
+         VALUES ($1,$2,'angenommen','zugewiesen')`,
         [sessionId, uid]
       );
     }
@@ -2358,7 +2413,8 @@ app.post('/api/admin/talking-sessions/:id/assign', requireAdmin, async (req, res
     const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, sess.rows[0].slotId, studentIds);
     for (const uid of okIds) {
       await pool.query(
-        `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angenommen')
+        `INSERT INTO talking_invitations (session_id, listener_id, status, herkunft)
+         VALUES ($1,$2,'angenommen','zugewiesen')
          ON CONFLICT (session_id, listener_id) DO NOTHING`,
         [req.params.id, uid]
       );
@@ -2462,7 +2518,10 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
                tu.username AS "teacherUsername", s.admin_id AS "teacherId",
                (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
                (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
-               COALESCE(json_agg(json_build_object('id', inv.id, 'username', lu.username, 'status', inv.status, 'attendedStatus', inv.attended_status))
+               (SELECT ti.herkunft FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationHerkunft",
+               (SELECT ti.gesehen_am IS NOT NULL FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationGesehen",
+               COALESCE(json_agg(json_build_object('id', inv.id, 'username', lu.username, 'status', inv.status,
+                 'herkunft', inv.herkunft, 'gesehen', inv.gesehen_am IS NOT NULL, 'attendedStatus', inv.attended_status))
                  FILTER (WHERE inv.id IS NOT NULL), '[]') AS invitees
         FROM talking_slots s
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
