@@ -184,6 +184,24 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 }
 .mw-book-btn:hover{filter:brightness(1.08);}
 .mw-chip-status{font-weight:700;}
+/* Kachel-Auswahl: ein Termin wird angetippt, die Leiste darunter sagt, was damit geht.
+   Bewusst nur EIN Knopf - die Kacheln sind winzig, und alles Weitere (Thema eintippen,
+   Einladungen beantworten) gehoert weiterhin in den Kalender. */
+.lw-chip[data-mw]{cursor:pointer;}
+.lw-chip.mw-picked{outline:2px solid var(--md-primary);outline-offset:1px;}
+.mw-bar{
+  display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  margin-top:10px;padding:8px 12px;border:1px solid var(--md-outline-variant);
+  border-radius:10px;background:#f6f6f8;font-size:12px;
+}
+.mw-bar-kopf{font-weight:700;}
+.mw-bar-thema,.mw-bar-hint{color:var(--md-on-surface-variant);}
+.mw-bar-btn{
+  padding:7px 16px;border:none;border-radius:99px;cursor:pointer;white-space:nowrap;
+  background:var(--md-primary);color:var(--md-on-primary);
+  font-size:12.5px;font-weight:700;font-family:inherit;
+}
+.mw-bar-btn:hover{filter:brightness(1.08);}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -2214,7 +2232,7 @@ function mwChip(s) {
     invited:  '✉ Einladung offen',
     requested:'⏳ Anfrage läuft',
     free:     'frei',
-    taken:    'belegt',
+    taken:    'gebucht',
     conflict: '✕ Terminkonflikt',
   }[state];
   // Komplett ausgegraut wird NUR der Terminkonflikt - dort ist wirklich nichts zu
@@ -2224,29 +2242,112 @@ function mwChip(s) {
   // Fach nur als Buchstaben-Badge, Talk/Fachbüro nur als Piktogramm - kein Fliesstext.
   // Damit dadurch nichts verloren geht, tragen die Kacheln die volle Information
   // in title (Maus) UND aria-label (Screenreader).
+  // Das Thema steht auch an einem noch FREIEN Fachbüro: die Lernbegleitung schreibt es
+  // beim Anlegen aus, und ohne Titel kann niemand einschaetzen, ob sich das Angebot fuer
+  // ihn lohnt. Ist gebucht, gilt das Thema der Buchung, sonst das ausgeschriebene.
+  const themaText = (s.booked ? s.thema : s.slotThema) || '';
   const full = [subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
-    s.booked && s.thema ? 'Thema: ' + s.thema : '', label]
+    themaText ? 'Thema: ' + themaText : '', label]
     .filter(Boolean).join(' · ');
   const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
   const badge = `<span class="lw-chip-subj" style="background:${neutral ? 'var(--md-outline-variant)' : color};">${escHtml(subjLetter)}</span>`;
   const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
 
-  // Thema steht bei gebuchten Terminen hinter dem Status in derselben Zeile: auch
-  // bei fremd belegten kann man sich nachtraeglich dazubuchen, indem man die
-  // Lernbegleitung anspricht - dafuer braucht man Thema UND Lernbegleitung.
-  const thema = s.booked && s.thema ? ` · „${escHtml(s.thema)}“` : '';
+  // Thema steht hinter dem Status in derselben Zeile - zusammen mit der Lernbegleitung
+  // ist das alles, was man braucht, um sich fuer ein Angebot zu entscheiden.
+  const thema = themaText ? ` · „${escHtml(themaText)}“` : '';
   const meta = [
     s.ort ? escHtml(s.ort) : '',
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean).join(' · ');
 
   const chipStyle = (neutral || state === 'taken') ? '' : ` style="border-left-color:${color};color:${color};"`;
-  return `<div class="lw-chip mw-${state}"${chipStyle} ${desc}>
+  return `<div class="lw-chip mw-${state}"${chipStyle} ${desc}
+    data-mw="${s.id}" role="button" tabindex="0" onclick="mwSelect(${s.id})"
+    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSelect(${s.id});}">
     <div class="lw-chip-time" style="color:${neutral ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
     <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
+}
+
+// ── Auswahl in "Meine Woche" ──────────────────────────────────────────────────
+// Eine Kachel antippen, unten steht in einer Zeile, was mit dem Termin geht. Bewusst
+// nur EIN Knopf: die Kacheln sind winzig, und alles, wofuer es ein Formular braucht
+// (Thema eintippen, Einladung beantworten), fuehrt weiterhin in den Kalender.
+let _mwSlots = [];
+let _mwPicked = null;
+
+function mwApplyPick() {
+  document.querySelectorAll('#home-myweek [data-mw]').forEach(el => {
+    el.classList.toggle('mw-picked', Number(el.dataset.mw) === _mwPicked);
+  });
+  mwRenderBar();
+}
+function mwSelect(id) {
+  _mwPicked = (_mwPicked === id) ? null : id;   // nochmal antippen hebt die Auswahl auf
+  mwApplyPick();
+}
+
+// Was kann man mit dem ausgewaehlten Termin tun? Entweder ein Knopf (text + ruf) oder
+// eine Erklaerung, warum gerade nichts geht.
+function mwAktion(s) {
+  const st = mwState(s);
+  if (st === 'mine')      return { hinweis: '✓ Den Termin hast du schon.' };
+  if (st === 'requested') return { hinweis: '⏳ Deine Anfrage läuft – die Lernbegleitung entscheidet.' };
+  if (st === 'conflict')  return { hinweis: '✕ Überschneidet sich mit einem deiner Termine.' };
+  if (st === 'invited')   return { text: 'Einladung beantworten', ruf: `mwZumKalender(${s.id})` };
+  if (subjectById(s.subjectId).nurZugewiesen) return { hinweis: 'Diesen Termin vergibt die Lernbegleitung.' };
+  const istFabue = s.typ === 'input';
+  if (st === 'free') {
+    // Ausgeschriebenes Thema = der Termin gehoert der Lernbegleitung, da fragt man an.
+    // Ganz frei = man bringt sein eigenes Thema mit, das geht nur im Buchungsdialog.
+    return (istFabue && s.slotThema)
+      ? { text: 'Mitmachen anfragen', ruf: `calRequestJoin(${s.id})` }
+      : { text: istFabue ? 'Fachbüro buchen' : 'Talk anmelden', ruf: `mwBuchen(${s.id})` };
+  }
+  if (istFabue && s.presentedStatus === 'ausstehend')
+    return { text: 'Mitmachen anfragen', ruf: `calRequestJoin(${s.id})` };
+  return { hinweis: 'Schon vergeben – sprich die Lernbegleitung an.' };
+}
+
+function mwRenderBar() {
+  const bar = document.getElementById('mw-actionbar');
+  if (!bar) return;
+  const s = _mwSlots.find(x => x.id === _mwPicked);
+  if (!s) { bar.innerHTML = ''; bar.style.display = 'none'; return; }
+  const subj = subjectById(s.subjectId);
+  const themaText = (s.booked ? s.thema : s.slotThema) || '';
+  const kopf = [lwFmtDay(s.datum), lwTimeRange(s.uhrzeit, s.dauer),
+    subj.name + (s.typ === 'input' ? '-FaBü' : '-Talk'), s.ort].filter(Boolean).join(' · ');
+  const a = mwAktion(s);
+  bar.style.display = 'flex';
+  bar.innerHTML = `<div>
+      <div class="mw-bar-kopf">${escHtml(kopf)}</div>
+      ${themaText ? `<div class="mw-bar-thema">„${escHtml(themaText)}“</div>` : ''}
+    </div>
+    ${a.ruf ? `<button class="mw-bar-btn" onclick="${a.ruf}">${escHtml(a.text)}</button>`
+            : `<span class="mw-bar-hint">${escHtml(a.hinweis)}</span>`}`;
+}
+
+// Buchen braucht ein Thema (und beim Talk die Eingeladenen) - den Dialog dafuer gibt es
+// im Kalender schon. Statt ihn hier nachzubauen, springen wir hin und oeffnen ihn direkt.
+async function mwBuchen(slotId) {
+  showView('calendar');
+  await loadCalendar();
+  openCalBookModal(slotId);
+}
+async function mwZumKalender() {
+  showView('calendar');
+  await loadCalendar();
+}
+
+// Nach einer Aktion die Ansicht auffrischen, aus der sie kam: Kalender und "Meine Woche"
+// zeigen dieselben Termine, aber nur eine der beiden ist gerade sichtbar.
+function calReload() {
+  const cal = document.getElementById('view-calendar');
+  if (cal && cal.style.display !== 'none') loadCalendar(); else loadMyWeek();
 }
 
 async function loadMyWeek() {
@@ -2294,6 +2395,8 @@ async function loadMyWeek() {
     s._conflict = busy.some(b => b.datum === s.datum && von < b.bis && b.von < bis);
   });
   const visible = weekSlots;
+  // Fuer die Aktionsleiste: sie arbeitet mit der Termin-ID aus der angetippten Kachel.
+  _mwSlots = visible;
 
   const cells = LW_BLOCKS.map(() => LW_DAY_NAMES.map(() => []));
   const extras = [];
@@ -2344,12 +2447,17 @@ async function loadMyWeek() {
       <span>${lwIcon('input')} FaBü</span>
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
-      <span>belegt = von anderen gebucht – mitmachen? Sprich die Lernbegleitung an, sie kann dich dazunehmen</span>
+      <span>gebucht = schon vergeben – bei einem Fachbüro kannst du mitmachen anfragen</span>
       ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
-      <span>Buchen und Einladungen beantworten geht im Kalender.</span>
+      <span>Termin antippen, dann erscheint unten, was damit geht.</span>
     </div>
+    <div class="mw-bar" id="mw-actionbar"></div>
     ${extrasHtml}
   </div>`;
+  // Auswahl ueberlebt das Neuzeichnen - aber nur, wenn es den Termin noch gibt
+  // (storniert, abgelaufen oder in einer anderen Woche).
+  if (!_mwSlots.some(s => s.id === _mwPicked)) _mwPicked = null;
+  mwApplyPick();
 }
 
 async function showLerntheken() {
@@ -3424,6 +3532,32 @@ function talkingGroupByHalbjahrFull(presenting, invitations) {
 // Die Pflicht-Schwellen kommen seit 2026-09-04 aus den Fach-Einstellungen (subj), vorher fest 1/2.
 // Kein sichtbares Badge/Banner mehr (fand der Nutzer hässlich) - nur noch farbiger Kartenrand
 // (.tt-tier-N) + Tooltip (title-Attribut) als dezenter Hinweis.
+// ── Fachbüro-Teilnahmen in den Halbjahr-Übersichten der Schüler:innen ─────────
+// Kommen als eigenes Feld `fabue` aus /api/talking-sessions/mine (NICHT in presenting/
+// invitations, die filtern hart typ='talk', weil Fachbüros keine Kleeblätter und keine
+// Pflicht-Vorgaben haben). Der Server liefert nur zurückliegende Termine.
+// Ein Fachbüro-Slot trägt nicht immer ein Halbjahr - dann gilt wie serverseitig das Datum.
+function fabueHalbjahr(f) {
+  return (f.halbjahr && String(f.halbjahr).trim()) || halbjahrForDateClient(f.datum) || '';
+}
+function fabueStatusPill(status) {
+  const [klasse, text] = status === 'erledigt' ? ['pill-green', '✓ da gewesen']
+    : status === 'nicht_erledigt' ? ['pill-red', '✗ gefehlt']
+    : ['pill-yellow', '⏳ noch offen'];
+  return { klasse, text };
+}
+// Die Termine eines Halbjahres als Reihe kleiner Marken - keine Pflicht-/Zusatz-Felder
+// wie bei den Talks, weil es fuer Fachbueros keine Vorgabe gibt, wie oft man hin muss.
+function fabueBlockHtml(fabue, halbjahr, subject) {
+  const dran = (fabue || []).filter(f => fabueHalbjahr(f) === halbjahr);
+  if (!dran.length) return '';
+  return `<div class="tsum-block-title">📘 Meine ${escHtml(subject.name)}-Fachbüros:</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${dran.map(f => {
+      const p = fabueStatusPill(f.status);
+      return `<span class="pill ${p.klasse}" style="font-size:11px;">${escHtml(fmtTalkingDatum(f.datum))}${f.thema ? ' · ' + escHtml(f.thema) : ''} · ${p.text}</span>`;
+    }).join('')}</div>`;
+}
+
 function talkTier(presentDone, listenDone, subj, hj) {
   const pflichtP = subjPflichtP(subj, hj), pflichtZ = subjPflichtZ(subj, hj);
   if (!(presentDone >= pflichtP && listenDone >= pflichtZ)) return 1;
@@ -3496,7 +3630,8 @@ function buildTalkingPickerSummaryHtml(data, subject) {
       <div class="tsum-table">
         <div class="tsum-label"><ol><li>Eingeladen werden</li><li>Aufmerksam zuhören</li><li>Fragen stellen</li></ol></div>
         ${listenRow}
-      </div>`;
+      </div>
+      ${fabueBlockHtml(data.fabue, g.halbjahr, subject)}`;
   }).join('');
 
   return `
@@ -4159,7 +4294,7 @@ async function calRequestJoin(slotId) {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Anfrage nicht möglich.'); return; }
   alert('Anfrage gestellt - die Lernbegleitung entscheidet darüber.');
-  loadCalendar();
+  calReload();
 }
 
 // Lernbegleitung sagt einer Anfrage zu oder lehnt sie ab.
@@ -4522,12 +4657,16 @@ function renderTalkingStudent() {
     const a = g.listening.filter(i => i.attendedStatus === 'erledigt').length;
     const tier = talkTier(p, a, subj, g.halbjahr);
     const hjTrophies = talkingMine.trophies?.byHalbjahr?.[g.halbjahr];
+    // Nur bestaetigte Teilnahmen - "gefehlt"/"offen" sind keine Leistung, die hier zaehlt.
+    const fabueDa = (talkingMine.fabue || [])
+      .filter(f => fabueHalbjahr(f) === g.halbjahr && f.status === 'erledigt').length;
     const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🍀 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
     return `
       <div class="stat-card tt-tier-${tier}" title="${TALK_TIER_TEXT[tier]}">
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
         <div style="margin-top:6px;font-size:14px;">🎤 ${Math.min(p, pflichtP)}/${pflichtP} gehalten${p > pflichtP ? ` (+${p - pflichtP} freiwillig)` : ''}</div>
         <div style="margin-top:2px;font-size:14px;">👂 ${Math.min(a, pflichtZ)}/${pflichtZ} angehört${a > pflichtZ ? ` (+${a - pflichtZ} freiwillig)` : ''}</div>
+        ${fabueDa ? `<div style="margin-top:2px;font-size:14px;">📘 ${fabueDa}x im Fachbüro</div>` : ''}
         ${trophyLine}
       </div>`;
   }).join('') : `<div class="stat-card"><div class="stat-lbl">Noch kein ${escHtml(subj.name)}-Talk</div></div>`;

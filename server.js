@@ -1773,7 +1773,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     const subject = subjRes.rows[0];
     const myCreatedAt = meRow.rows[0] ? meRow.rows[0].created_at : null;
     const myPassivSeit = meRow.rows[0] ? meRow.rows[0].passiv_seit : null;
-    const [presenting, invitations, slotHalbjahre] = await Promise.all([
+    const [presenting, invitations, slotHalbjahre, fabue] = await Promise.all([
       pool.query(`
         SELECT ts.id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji",
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
@@ -1803,6 +1803,26 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid, subject.id]),
       pool.query(`SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1 AND typ='talk' AND subject_id=$2`, [req.session.klasse, subject.id]),
+      // Fachbüro-Termine BEWUSST getrennt von presenting/invitations: die beiden filtern hart
+      // typ='talk', weil Fachbüros weder Kleeblätter noch Pflicht-Vorgaben haben und die
+      // Halbjahr-Rechnung sonst verfälschen würden. Für die Übersicht der Schüler:innen
+      // sollen die Teilnahmen aber trotzdem sichtbar sein - deshalb dieses eigene Feld.
+      // Nur zurückliegende Termine: ein noch bevorstehendes Fachbüro ist keine Teilnahme
+      // (dieselbe Regel wie in halbjahrOverview()).
+      pool.query(`
+        SELECT to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.halbjahr, sl.uhrzeit, sl.ort,
+               ts.thema, ts.presented_status AS status, 'selbst gebucht' AS rolle
+        FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+        WHERE ts.presenter_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
+        UNION ALL
+        SELECT to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.halbjahr, sl.uhrzeit, sl.ort,
+               ts.thema, ti.attended_status AS status, 'teilgenommen' AS rolle
+        FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        JOIN talking_slots sl ON sl.id = ts.slot_id
+        WHERE ti.listener_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
+        ORDER BY datum DESC
+      `, [uid, subject.id]),
     ]);
 
     const accepted = invitations.rows.filter(i => i.status === 'angenommen');
@@ -1817,6 +1837,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     res.json({
       presenting: presenting.rows,
       invitations: invitations.rows,
+      fabue: fabue.rows,
       trophies
     });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
