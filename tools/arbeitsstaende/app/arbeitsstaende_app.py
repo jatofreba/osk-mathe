@@ -27,6 +27,11 @@ import osk_sync
 
 APP_TITEL = "Arbeitsstände"
 AUTOSAVE_INTERVALL_MS = 5 * 60 * 1000  # alle 5 Minuten
+# Die Modifikator-Taste heisst je nach System anders. Stand ueberall fest als "Cmd",
+# obwohl die App unter Windows laeuft -- dort fuehrt das in die Irre.
+MEHRFACH_TASTE = "Cmd" if sys.platform == "darwin" else "Strg"
+MEHRFACH_HINWEIS = ("Bitte eine oder mehrere Personen in der Liste auswählen\n"
+                    f"(mehrere geht mit {MEHRFACH_TASTE}-Klick bzw. Shift-Klick).")
 
 
 def fmt_datum(d):
@@ -67,6 +72,45 @@ def parse_datum(text):
         except ValueError:
             continue
     raise ValueError(f"Datum '{text}' nicht erkannt (erwartet TT.MM.JJJJ)")
+
+
+class BerichtFenster(tk.Toplevel):
+    """Ergebnis eines Abrufs oder Abgleichs als scrollbarer Text.
+
+    Die Berichte sind lang -- "3 neu, 12 aktualisiert" plus Listen von Personen
+    ohne Konto, uebersprungenen Konten und Konten ohne Person. In einer Messagebox
+    standen sie als Textwand, waren nach dem Wegklicken weg und liessen sich nicht
+    markieren. Dieses Fenster ist bewusst NICHT modal: man kann es offen liegen
+    lassen, waehrend man die Liste danebendurchgeht.
+    """
+
+    def __init__(self, parent, titel: str, text: str):
+        super().__init__(parent)
+        self.title(titel)
+        self.geometry("620x460")
+        self.transient(parent)
+
+        rahmen = ttk.Frame(self, padding=10)
+        rahmen.pack(fill="both", expand=True)
+        self.feld = tk.Text(rahmen, wrap="word", height=20, width=70)
+        self.feld.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.feld.yview)
+        sb.pack(side="right", fill="y")
+        self.feld.config(yscrollcommand=sb.set)
+        self.feld.insert("1.0", text)
+        # Lesen und markieren ja, versehentlich tippen nein.
+        self.feld.config(state="disabled")
+
+        btns = ttk.Frame(self, padding=(10, 0, 10, 10))
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Text kopieren", command=self._kopieren).pack(side="left")
+        ttk.Button(btns, text="Schließen", command=self.destroy).pack(side="right")
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.feld.focus_set()
+
+    def _kopieren(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.feld.get("1.0", "end").strip())
 
 
 class BausteinDialog(tk.Toplevel):
@@ -589,10 +633,14 @@ class App(tk.Tk):
     def _menu_aufbauen(self):
         menu = tk.Menu(self)
         dateimenu = tk.Menu(menu, tearoff=0)
-        dateimenu.add_command(label="Neu", command=self.neu, accelerator="Cmd+N")
-        dateimenu.add_command(label="Öffnen…", command=self.oeffnen, accelerator="Cmd+O")
+        # Beschriftung wie auf dieser Plattform ueblich -- "Cmd+S" stand hier auch
+        # unter Windows, wo es die Taste gar nicht gibt. Gebunden sind unten beide
+        # Varianten, damit die App auf einem Mac genauso laeuft.
+        strg = "Cmd" if sys.platform == "darwin" else "Strg"
+        dateimenu.add_command(label="Neu", command=self.neu, accelerator=f"{strg}+N")
+        dateimenu.add_command(label="Öffnen…", command=self.oeffnen, accelerator=f"{strg}+O")
         dateimenu.add_separator()
-        dateimenu.add_command(label="Speichern", command=self.speichern, accelerator="Cmd+S")
+        dateimenu.add_command(label="Speichern", command=self.speichern, accelerator=f"{strg}+S")
         dateimenu.add_command(label="Speichern unter…", command=self.speichern_unter)
         dateimenu.add_separator()
         dateimenu.add_command(label="Aus Excel importieren…", command=self.excel_importieren)
@@ -639,6 +687,9 @@ class App(tk.Tk):
         self.bind_all("<Control-s>", lambda e: self.speichern())
         self.bind_all("<Command-o>", lambda e: self.oeffnen())
         self.bind_all("<Control-o>", lambda e: self.oeffnen())
+        # Stand im Menue, war aber nie belegt.
+        self.bind_all("<Command-n>", lambda e: self.neu())
+        self.bind_all("<Control-n>", lambda e: self.neu())
 
         self.protocol("WM_DELETE_WINDOW", self._beenden)
 
@@ -692,12 +743,18 @@ class App(tk.Tk):
         listen_btns = ttk.Frame(links)
         listen_btns.pack(fill="x", pady=(6, 0))
         ttk.Button(listen_btns, text="+ Hinzufügen", command=self.schueler_hinzufuegen).pack(side="left")
-        ttk.Button(listen_btns, text="− Entfernen", command=self.schueler_entfernen).pack(side="left", padx=6)
+        # Alles, was eine Auswahl braucht, wird ausgegraut, solange keine da ist --
+        # das ist ehrlicher als ein "Bitte zuerst auswaehlen"-Popup HINTERHER.
+        self.btn_person_entfernen = ttk.Button(listen_btns, text="− Entfernen",
+                                               command=self.schueler_entfernen)
+        self.btn_person_entfernen.pack(side="left", padx=6)
 
         fb_btns = ttk.Frame(links)
         fb_btns.pack(fill="x", pady=(6, 0))
-        ttk.Button(fb_btns, text="War heute im FB", command=self.fb_heute_eintragen).pack(side="left")
-        ttk.Button(fb_btns, text="FB-Besuch nachtragen…", command=self.fb_nachtragen).pack(side="left", padx=6)
+        self.btn_fb_heute = ttk.Button(fb_btns, text="War heute im FB", command=self.fb_heute_eintragen)
+        self.btn_fb_heute.pack(side="left")
+        self.btn_fb_nachtragen = ttk.Button(fb_btns, text="FB-Besuch nachtragen…", command=self.fb_nachtragen)
+        self.btn_fb_nachtragen.pack(side="left", padx=6)
 
         # ---------------- rechte Seite: Detailansicht ----------------
         rechts = ttk.Frame(paned, padding=8)
@@ -779,12 +836,21 @@ class App(tk.Tk):
 
         baustein_btns = ttk.Frame(baustein_rahmen)
         baustein_btns.pack(fill="x", pady=(6, 0))
-        ttk.Button(baustein_btns, text="+ Baustein", command=self.baustein_hinzufuegen).pack(side="left")
-        ttk.Button(baustein_btns, text="Bearbeiten", command=self.baustein_bearbeiten).pack(side="left", padx=6)
-        ttk.Button(baustein_btns, text="− Entfernen", command=self.baustein_entfernen).pack(side="left")
+        self.btn_baustein_neu = ttk.Button(baustein_btns, text="+ Baustein",
+                                           command=self.baustein_hinzufuegen)
+        self.btn_baustein_neu.pack(side="left")
+        self.btn_baustein_bearbeiten = ttk.Button(baustein_btns, text="Bearbeiten",
+                                                  command=self.baustein_bearbeiten)
+        self.btn_baustein_bearbeiten.pack(side="left", padx=6)
+        self.btn_baustein_entfernen = ttk.Button(baustein_btns, text="− Entfernen",
+                                                 command=self.baustein_entfernen)
+        self.btn_baustein_entfernen.pack(side="left")
+        self.tabelle.bind("<<TreeviewSelect>>", self._knoepfe_aktualisieren)
 
         self.status_leiste = ttk.Label(self, text="Keine Datei geladen.", anchor="w", padding=4)
         self.status_leiste.pack(fill="x", side="bottom")
+
+        self._knoepfe_aktualisieren()
 
         self._letzte_quelle = None
         # Anmeldung gilt fuer die ganze Sitzung: der Client haelt das
@@ -1036,6 +1102,22 @@ class App(tk.Tk):
                 self.after_cancel(self._autosave_job)
             self.destroy()
 
+    def _melde(self, text: str):
+        """Kurze Rueckmeldung in die Statusleiste statt in ein Popup.
+
+        Modal bleibt, was eine Entscheidung braucht oder schiefgegangen ist. Eine
+        gelungene Routine-Aktion soll den Arbeitsfluss nicht unterbrechen.
+        """
+        self.status_leiste.config(text=text)
+
+    def _bericht(self, titel: str, text: str):
+        """Laengeres Ergebnis in einem eigenen, scrollbaren Fenster zeigen."""
+        BerichtFenster(self, titel, text)
+        # Die erste Zeile ist meist die Zusammenfassung -- die passt auch unten hin.
+        erste = next((z for z in text.splitlines() if z.strip()), "")
+        if erste:
+            self._melde(f"{titel}: {erste.strip()}")
+
     def _aktualisiere_titel(self):
         pfad = self.az.dateipfad or "Unbenannt"
         stern = "•" if self.ungespeichert else ""
@@ -1152,8 +1234,24 @@ class App(tk.Tk):
         if neue_markierung:
             # Dass das kein Personenwechsel ist, erkennt _auswahl_geaendert() selbst.
             self.liste.selection_set(neue_markierung)
+        # Faellt die Markierung beim Filtern weg, kommt kein Auswahl-Ereignis mehr.
+        self._knoepfe_aktualisieren()
+
+    def _knoepfe_aktualisieren(self, _event=None):
+        """Knoepfe freigeben oder ausgrauen, je nachdem was ausgewaehlt ist."""
+        person = "normal" if self.liste.selection() else "disabled"
+        for b in (self.btn_person_entfernen, self.btn_fb_heute,
+                  self.btn_fb_nachtragen, self.btn_baustein_neu):
+            b.config(state=person)
+        # Bearbeiten/Entfernen beziehen sich auf die markierte Zeile der Baustein-Tabelle.
+        baustein = "normal" if self.tabelle.selection() else "disabled"
+        for b in (self.btn_baustein_bearbeiten, self.btn_baustein_entfernen):
+            b.config(state=baustein)
 
     def _auswahl_geaendert(self, event=None):
+        # Immer zuerst: die Knopf-Zustaende haengen an der Markierung, nicht daran,
+        # ob sich die angezeigte Person geaendert hat (Mehrfachauswahl!).
+        self._knoepfe_aktualisieren()
         auswahl = self.liste.selection()
         if not auswahl:
             return
@@ -1204,9 +1302,7 @@ class App(tk.Tk):
     def fb_heute_eintragen(self):
         ausgewaehlt = self._ausgewaehlte_schueler()
         if not ausgewaehlt:
-            messagebox.showinfo("Keine Auswahl",
-                                 "Bitte eine oder mehrere Personen in der Liste auswählen\n"
-                                 "(mehrere geht mit Cmd-Klick bzw. Shift-Klick).")
+            messagebox.showinfo("Keine Auswahl", MEHRFACH_HINWEIS)
             return
         heute = date.today()
         for s in ausgewaehlt:
@@ -1221,9 +1317,7 @@ class App(tk.Tk):
     def fb_nachtragen(self):
         ausgewaehlt = self._ausgewaehlte_schueler()
         if not ausgewaehlt:
-            messagebox.showinfo("Keine Auswahl",
-                                 "Bitte eine oder mehrere Personen in der Liste auswählen\n"
-                                 "(mehrere geht mit Cmd-Klick bzw. Shift-Klick).")
+            messagebox.showinfo("Keine Auswahl", MEHRFACH_HINWEIS)
             return
         text = simpledialog.askstring(
             "FB-Besuch nachtragen",
@@ -1261,6 +1355,7 @@ class App(tk.Tk):
         self.f_deadline_bem.set("")
         self.deadline_hinweis.config(text="")
         self.tabelle.delete(*self.tabelle.get_children())
+        self._knoepfe_aktualisieren()
 
     def _detail_anzeigen(self):
         s = self.aktueller_schueler
@@ -1303,6 +1398,9 @@ class App(tk.Tk):
                                          b.lzk_note_2,
                                          b.halbjahr, _einzeilig(b.bemerkung)),
                                  tags=tuple(tags))
+        # Die Tabelle wurde gerade neu gefuellt, also ist keine Zeile mehr markiert:
+        # Bearbeiten/Entfernen muessen wieder ausgrauen.
+        self._knoepfe_aktualisieren()
 
     def _baustein_key(self, b: Baustein, spalte):
         """Sortierschluessel je Spalte. Leere Werte ans Ende."""
@@ -1419,7 +1517,7 @@ class App(tk.Tk):
                 text += f"\n... und {len(ergaenzt) - 15} weitere"
         if konflikte:
             text += "\n\nBitte von Hand eintragen:\n" + "\n".join(konflikte)
-        messagebox.showinfo("Aliasse ergaenzen", text)
+        self._bericht("Aliasse ergänzen", text)
 
     def _alias_dubletten(self):
         """{alias: [Namen]} fuer Aliasse, die mehr als einmal vergeben sind.
@@ -1497,7 +1595,7 @@ class App(tk.Tk):
                         + "\n".join(s.voller_name for s in ohne[:10]))
             if len(ohne) > 10:
                 hinweis += f"\n... und {len(ohne) - 10} weitere"
-        messagebox.showinfo("Aliasse exportieren", hinweis)
+        self._bericht("Aliasse exportieren", hinweis)
 
     def alias_umbenennen(self):
         """Benennt ein bestehendes Konto auf dem Server um.
@@ -1580,8 +1678,12 @@ class App(tk.Tk):
             text += "\n\nLokale Aliasse mitgezogen: " + ", ".join(mitgezogen)
         if fehler:
             text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
-        (messagebox.showwarning if fehler else messagebox.showinfo)(
-            "Aliasse umbenennen", text)
+        # Fehler bleiben modal: da muss man hinschauen. Der geglueckte Fall wandert
+        # ins Berichtsfenster, damit die Liste der Umbenennungen nachlesbar bleibt.
+        if fehler:
+            messagebox.showwarning("Aliasse umbenennen", text)
+        else:
+            self._bericht("Aliasse umbenennen", text)
     # ------------------------------------------------------------------
     # Lerntheken-App: Einstellungen, Ergebnisse abrufen, LZK-Termine zurueckschreiben
     # ------------------------------------------------------------------
@@ -1616,7 +1718,7 @@ class App(tk.Tk):
         self.wait_window(dlg)
         if dlg.result is not None:
             self._lt_einstellungen_speichern(dlg.result)
-            messagebox.showinfo("Einstellungen", "Gespeichert.")
+            self._melde("Einstellungen der Lerntheken-App gespeichert.")
 
     def _offline_umschalten(self):
         offline = bool(self.offline_var.get())
@@ -1829,7 +1931,7 @@ class App(tk.Tk):
         text += _liste("Konto passiv gesetzt -- uebersprungen", ohne_daten)
         text += _liste("App-Konten ohne Person in der Liste -- nicht ausgewertet",
                        [v for v in verwaist if v not in inaktiv])
-        messagebox.showinfo("Ergebnisse abrufen", text)
+        self._bericht("Ergebnisse abrufen", text)
 
     def _lt_serverstand(self, client, neu_laden: bool = False):
         """Kontenliste und Lerntheken-Titel der Sitzung, bei Bedarf geholt."""
@@ -1987,7 +2089,7 @@ class App(tk.Tk):
             if uebersprungen:
                 text += (f"\n\n{len(uebersprungen)} Termin(e) stehen nur auf dem "
                          f"Server und wurden hier nicht angefasst.")
-            messagebox.showinfo("LZK-Termine senden", text)
+            self._bericht("LZK-Termine senden", text)
             return
 
         dlg = LzkSendenDialog(self, aenderungen, uebersprungen, klasse)
