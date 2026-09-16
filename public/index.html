@@ -4961,6 +4961,21 @@ function hjLtTitle(key) { const lt = ltMeta.find(l => l.key === key || (l.key &&
 // den eigenen Account reduziert - also ohne Tabelle über die Lerngruppe.
 function hjNurEigene() { return !!me && me.role !== 'admin'; }
 
+// Sortierung der Halbjahr-Tabellen. Gilt für ALLE Fach-Abschnitte gleichzeitig; jeder
+// sortiert dabei nach seinen eigenen Zahlen (die Talk-Spalten sind ja fachbezogen).
+let hjSort = null;          // null = Standardreihenfolge (alphabetisch vom Server)
+let hjSortAb = false;       // absteigend?
+
+function hjSortieren(spalte) {
+  // Erster Klick aufsteigend - bei Zahlen stehen damit die Nullen oben, und genau das
+  // ist die Frage, die man an so eine Liste stellt: wer hat noch nichts? Zweiter Klick
+  // dreht um, dritter stellt die Standardreihenfolge wieder her.
+  if (hjSort !== spalte) { hjSort = spalte; hjSortAb = false; }
+  else if (!hjSortAb) { hjSortAb = true; }
+  else { hjSort = null; hjSortAb = false; }
+  renderHalbjahr();
+}
+
 function renderHalbjahr() {
   const el = document.getElementById('hj-content');
   if (!el) return;
@@ -4995,10 +5010,31 @@ function renderHalbjahr() {
   // umgekehrt falsch, die Person weiter als "nichts los" zu führen. Vergangene Halbjahre, in
   // denen sie aktiv dabei war, bleiben dagegen vollständig erhalten.
   const studentsInHj = hjData.students.filter(s => hjCountsForUser(hjSelected, s.firstHalbjahr, s.lastHalbjahr));
+  // Wert einer Spalte für eine Person - zum Sortieren. LZK und Stationen sind fach-
+  // unabhängig (gibt es nur für Mathe), stehen aber in derselben Zeile.
+  const sortWert = (s, subj, spalte) => {
+    const b = bucketOf(s);
+    const sd = b.bySubject[subj.key] || emptySubj;
+    if (spalte === 'name') return (s.username || '').toLowerCase();
+    if (spalte === 'gehalten') return sd.talksPresented || 0;
+    if (spalte === 'zugehoert') return sd.talksListened || 0;
+    if (spalte === 'fabue') return sd.inputParticipated || 0;
+    if (spalte === 'lzk') return (b.lzk || []).filter(l => l.status === 'bestanden').length;
+    if (spalte === 'stationen') return b.stationsCompleted || 0;
+    return 0;
+  };
+
   const sections = orderedSubjects().map(subj => {
     const isMathe = subj.key === 'mathe';
     let nothingCount = 0;
-    const rows = studentsInHj.map(s => {
+    const sortiert = !hjSort ? studentsInHj : [...studentsInHj].sort((a, b) => {
+      const va = sortWert(a, subj, hjSort), vb = sortWert(b, subj, hjSort);
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+      // Bei Gleichstand alphabetisch - sonst springen die Zeilen bei jedem Neuzeichnen.
+      return (hjSortAb ? -cmp : cmp)
+        || (a.username || '').toLowerCase().localeCompare((b.username || '').toLowerCase());
+    });
+    const rows = sortiert.map(s => {
       const b = bucketOf(s);
       const sd = b.bySubject[subj.key] || emptySubj;
       const nothing = isSubjNothing(sd, isMathe, b);
@@ -5021,7 +5057,11 @@ function renderHalbjahr() {
       </tr>`;
     }).join('');
 
-    const headCols = isMathe ? '<th>🍀 LZK</th><th>📚 Stationen</th>' : '';
+    // Spaltenkopf zum Anklicken: erster Klick sortiert, zweiter dreht um, dritter
+    // stellt die Standardreihenfolge wieder her. Der Pfeil zeigt, was gerade gilt.
+    const th = (spalte, text) => `<th onclick="hjSortieren('${spalte}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`
+      + ` title="Nach ${escHtml(text)} sortieren">${text}${hjSort === spalte ? (hjSortAb ? ' ▾' : ' ▴') : ''}</th>`;
+    const headCols = isMathe ? th('lzk', '🍀 LZK') + th('stationen', '📚 Stationen') : '';
     return `
       <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px;">
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
@@ -5029,14 +5069,14 @@ function renderHalbjahr() {
         ${nothingCount ? `<span style="color:var(--md-error);font-weight:600;font-size:12px;">– ${nothingCount} ohne Aktivität</span>` : ''}
       </div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Name</th><th>🎤 Gehalten</th><th>👂 Zugehört</th><th>📘 FaBü</th>${headCols}</tr></thead>
+        <thead><tr>${th('name', 'Name')}${th('gehalten', '🎤 Gehalten')}${th('zugehoert', '👂 Zugehört')}${th('fabue', '📘 FaBü')}${headCols}</tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
   }).join('');
 
   el.innerHTML = `
     <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">
-      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Nach Fach sortiert, Zeile anklicken für Details.
+      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Spaltenkopf anklicken sortiert (nochmal klicken dreht um, ein drittes Mal zurück auf alphabetisch), Zeile anklicken zeigt Details.
     </div>
     ${sections}`;
 }
