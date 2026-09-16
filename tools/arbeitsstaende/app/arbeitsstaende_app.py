@@ -666,13 +666,10 @@ class App(tk.Tk):
         # kehrt die Richtung um. Standard bleibt Jahrgangsstufe + Nachname.
         self._liste_sortierung = None       # None = Standardsortierung
         # Beim Tippen im Kopfbereich aendert sich potenziell die Frist-Spalte der Liste.
-        # Sie bei JEDEM Zeichen neu zu bauen liess sie flackern -- und das Wiederherstellen
-        # der Markierung loeste <<TreeviewSelect>> aus, wodurch die Eingabefelder mitten im
-        # Tippen aus dem Modell zurueckgeschrieben wurden. Ein unfertig getipptes Datum war
-        # damit sofort wieder weg. Deshalb: Neuaufbau entprellt (_liste_timer) und die
-        # wiederhergestellte Markierung als "keine neue Auswahl" markiert (_markierung_sperre).
+        # Sie bei JEDEM Zeichen neu zu bauen liess sie flackern, deshalb entprellt
+        # (_liste_timer). Dass der Neuaufbau nicht die gerade getippten Felder
+        # ueberschreibt, sichert _auswahl_geaendert() ab -- siehe dort.
         self._liste_timer = None
-        self._markierung_sperre = False
         self._liste_umgekehrt = False
         for spalte, titel in (("#0", "Name"), ("jahrgang", "Jgst."),
                               ("deadline", "Deadline"), ("anlass", "Anlass"),
@@ -1153,22 +1150,24 @@ class App(tk.Tk):
         vorhanden = set(self.liste.get_children())
         neue_markierung = [m for m in markierung if m in vorhanden]
         if neue_markierung:
-            # Dieselbe Person wieder markieren ist keine neue Auswahl -- ohne die Sperre
-            # wuerde _detail_anzeigen() die gerade getippten Felder ueberschreiben.
-            self._markierung_sperre = True
-            try:
-                self.liste.selection_set(neue_markierung)
-            finally:
-                self._markierung_sperre = False
+            # Dass das kein Personenwechsel ist, erkennt _auswahl_geaendert() selbst.
+            self.liste.selection_set(neue_markierung)
 
     def _auswahl_geaendert(self, event=None):
-        if self._markierung_sperre:
-            return
         auswahl = self.liste.selection()
         if not auswahl:
             return
         name = auswahl[0]
-        self.aktueller_schueler = next((s for s in self.az.students if s.voller_name == name), None)
+        neuer = next((s for s in self.az.students if s.voller_name == name), None)
+        # Nur bei einem echten Personenwechsel neu laden. Beim Neuaufbau der Liste wird
+        # dieselbe Markierung wiederhergestellt -- wuerde das die Detailfelder neu fuellen,
+        # verschwaende ein gerade getipptes, noch unvollstaendiges Datum sofort wieder.
+        # Eine Sperr-Variable um selection_set() herum reicht dafuer NICHT: Tk stellt
+        # <<TreeviewSelect>> verzoegert ueber die Ereignisschleife zu, die Sperre ist dann
+        # laengst wieder aufgehoben. Deshalb der Vergleich mit der aktuellen Person.
+        if neuer is not None and neuer is self.aktueller_schueler:
+            return
+        self.aktueller_schueler = neuer
         self._detail_anzeigen()
 
     def schueler_hinzufuegen(self):
