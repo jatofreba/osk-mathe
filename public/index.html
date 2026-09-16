@@ -206,6 +206,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    zu sprengen. Farbe sagt, was passiert - Text braucht es dafuer nicht. */
 .aw-btn{cursor:pointer;font-weight:800;color:#15803d;padding:0 2px;}
 .aw-btn.aw-btn-rot{color:var(--md-error);}
+/* Entfernen ist keine Bewertung, sondern raeumt auf - deshalb neutral und nicht rot,
+   damit es sich nicht mit "hat gefehlt" verwechseln laesst. */
+.aw-btn.aw-btn-weg{color:var(--md-on-surface-variant);font-size:13px;}
+.mw-bar-btn.mw-bar-btn-rot{background:var(--md-error);}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -4465,8 +4469,14 @@ function awRenderBar() {
   // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Kleeblaetter und
   // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
   const schnell = darf && gelaufen && s.typ === 'input';
-  const ja = (ruf) => ` <span class="aw-btn" onclick="${ruf}" title="War da">✓</span>`;
-  const nein = (ruf) => ` <span class="aw-btn aw-btn-rot" onclick="${ruf}" title="Hat gefehlt">✗</span>`;
+  const ja = (ruf, titel) => ` <span class="aw-btn" onclick="${ruf}" title="${titel}">✓</span>`;
+  const nein = (ruf, titel) => ` <span class="aw-btn aw-btn-rot" onclick="${ruf}" title="${titel}">✗</span>`;
+  // Entfernen ist etwas anderes als "hat gefehlt": der Eintrag verschwindet ganz, es bleibt
+  // keine Fehlzeit stehen - wer faelschlich auf dem Termin stand, soll keine bekommen.
+  // Geht nur, solange nichts bewertet ist; genau so prueft es auch der Server.
+  const weg = (id) => ` <span class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen">×</span>`;
+  const entfernbar = iv => darf && iv.id && iv.attendedStatus !== 'erledigt'
+    && iv.attendedStatus !== 'nicht_erledigt' && s.presentedStatus === 'ausstehend';
 
   const leute = [];
   if (s.presenterUsername) {
@@ -4474,33 +4484,43 @@ function awRenderBar() {
     const zustand = st === 'erledigt' ? '✓ da gewesen' : st === 'nicht_erledigt' ? '✗ gefehlt'
       : (s.typ === 'input' ? 'hat gebucht' : 'hält den Talk');
     const klasse = st === 'erledigt' ? 'pill-green' : st === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
-    const knoepfe = schnell ? ja(`awVortrag(${s.session_id}, 'erledigt')`) + nein(`awVortrag(${s.session_id}, 'nicht_erledigt')`) : '';
+    const knoepfe = schnell
+      ? ja(`awVortrag(${s.session_id}, 'erledigt')`, 'War da')
+        + nein(`awVortrag(${s.session_id}, 'nicht_erledigt')`, 'Hat gefehlt')
+      : '';
     leute.push(`<span class="pill ${klasse}" style="font-size:11px;"><strong>${escHtml(s.presenterUsername)}</strong> · ${zustand}${knoepfe}</span>`);
   }
   (s.invitees || []).forEach(iv => {
     const name = escHtml(iv.username);
     if (iv.status === 'angefragt') {
+      // Ablehnen loescht die Anfrage ohnehin - ein zusaetzliches "entfernen" waere dasselbe.
       const knoepfe = darf
-        ? ja(`awEntscheiden(${iv.id}, true)`).replace('War da', 'Zusagen')
-          + nein(`awEntscheiden(${iv.id}, false)`).replace('Hat gefehlt', 'Ablehnen')
+        ? ja(`awEntscheiden(${iv.id}, true)`, 'Zusagen')
+          + nein(`awEntscheiden(${iv.id}, false)`, 'Ablehnen')
         : '';
       leute.push(`<span class="pill pill-yellow" style="font-size:11px;">${name} · ⏳ fragt an${knoepfe}</span>`);
       return;
     }
-    if (iv.status === 'abgelehnt') { leute.push(`<span class="pill" style="font-size:11px;">${name} · ✗ abgesagt</span>`); return; }
+    if (iv.status === 'abgelehnt') {
+      leute.push(`<span class="pill" style="font-size:11px;">${name} · ✗ abgesagt${entfernbar(iv) ? weg(iv.id) : ''}</span>`);
+      return;
+    }
     const att = iv.attendedStatus;
     const zustand = att === 'erledigt' ? '✓ da gewesen' : att === 'nicht_erledigt' ? '✗ gefehlt'
       : (iv.status === 'angenommen' ? 'zugesagt' : '⏳ eingeladen');
     const klasse = att === 'erledigt' ? 'pill-green' : att === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
-    const knoepfe = schnell ? ja(`awAnwesenheit(${iv.id}, 'erledigt')`) + nein(`awAnwesenheit(${iv.id}, 'nicht_erledigt')`) : '';
+    const knoepfe = (schnell
+      ? ja(`awAnwesenheit(${iv.id}, 'erledigt')`, 'War da')
+        + nein(`awAnwesenheit(${iv.id}, 'nicht_erledigt')`, 'Hat gefehlt')
+      : '') + (entfernbar(iv) ? weg(iv.id) : '');
     leute.push(`<span class="pill ${klasse}" style="font-size:11px;">${name} · ${zustand}${knoepfe}</span>`);
   });
 
   const hinweis = !darf ? 'Termin einer anderen Lernbegleitung.'
     : !leute.length ? 'Noch niemand auf diesem Termin.'
     : (s.typ === 'talk' && gelaufen) ? 'Talks werden im Talks-Tab bewertet (Kleeblätter).'
-    : !gelaufen ? 'Teilnahme eintragen geht ab dem Termintag.'
-    : '';
+    : !gelaufen ? 'Teilnahme eintragen geht ab dem Termintag; × nimmt jemanden schon vorher wieder raus.'
+    : '✓ war da · ✗ hat gefehlt · × ganz vom Termin nehmen (ohne Fehlzeit).';
 
   bar.style.display = 'flex';
   bar.innerHTML = `<div style="min-width:0;">
@@ -4509,7 +4529,10 @@ function awRenderBar() {
       ${leute.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${leute.join('')}</div>` : ''}
       ${hinweis ? `<div class="mw-bar-hint" style="margin-top:4px;">${escHtml(hinweis)}</div>` : ''}
     </div>
-    <button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>`;
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>
+      ${(darf && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-rot" onclick="calCancelSession(${s.session_id})">Stornieren</button>` : ''}
+    </div>`;
 }
 
 // Die drei Schreib-Aktionen der Leiste. Danach frischt der Kalender auf, damit die
