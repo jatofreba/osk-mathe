@@ -1816,7 +1816,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         WHERE ts.presenter_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
         UNION ALL
         SELECT to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.halbjahr, sl.uhrzeit, sl.ort,
-               ts.thema, ti.attended_status AS status, 'teilgenommen' AS rolle
+               ts.thema, ti.attended_status AS status, 'angemeldet' AS rolle
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -2532,8 +2532,9 @@ async function halbjahrOverview(klasse, onlyUid) {
       subjectName: subj ? subj.name : 'Unbekannt', subjectColor: subj ? subj.color : '#94a3b8',
       talksPresented: 0, talksListened: 0, inputParticipated: 0, pokalePresented: 0, pokaleListened: 0,
       // Anwesenheit im Fachbuero: teilgenommen (inputParticipated = bestaetigt),
-      // gefehlt, und offen = Termin vorbei, aber noch nicht eingetragen.
-      inputMissed: 0, inputOpen: 0,
+      // gefehlt, offen = Termin vorbei aber noch nicht eingetragen, und
+      // upcoming = Termin steht noch bevor (angemeldet, aber noch keine Teilnahme).
+      inputMissed: 0, inputOpen: 0, inputUpcoming: 0,
       talkDetails: [], inputDetails: [], lastTalk: null, lastInput: null,
     };
     return hjRow.bySubject[key];
@@ -2555,7 +2556,10 @@ async function halbjahrOverview(klasse, onlyUid) {
       if (r.status === 'nicht_erledigt') { s.inputMissed++; return true; }
     }
     if (r.datum < heuteIso) { s.inputOpen++; return true; }
-    return false;
+    // Termin steht noch bevor: zaehlt NICHT als Teilnahme, gehoert aber trotzdem in
+    // die Liste - sonst sieht die Lernbegleitung nicht, wer schon angemeldet ist.
+    s.inputUpcoming++;
+    return true;
   };
   const fabueEintragen = (r, rolle, extra) => {
     const hj = slotHj(r); if (!hj) return;
@@ -2577,7 +2581,10 @@ async function halbjahrOverview(klasse, onlyUid) {
     s.lastTalk = maxD(s.lastTalk, r.datum);
   });
   attended.rows.forEach(r => {
-    if (r.typ === 'input') return fabueEintragen(r, 'teilgenommen', { presenter: r.presenter });
+    // "angemeldet" statt "teilgenommen": die Rolle sagt nur, dass die Person auf der
+    // Liste steht. Ob sie da war, steht daneben im Status - "teilgenommen · noch offen"
+    // las sich wie ein Widerspruch.
+    if (r.typ === 'input') return fabueEintragen(r, 'angemeldet', { presenter: r.presenter });
     if (r.status !== 'erledigt') return;
     const hj = slotHj(r); if (!hj) return;
     halbjahre.add(hj);

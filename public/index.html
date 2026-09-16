@@ -202,6 +202,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   font-size:12.5px;font-weight:700;font-family:inherit;
 }
 .mw-bar-btn:hover{filter:brightness(1.08);}
+/* ✓/✗ direkt in der Teilnehmenden-Marke: gross genug zum Tippen, ohne die Marke
+   zu sprengen. Farbe sagt, was passiert - Text braucht es dafuer nicht. */
+.aw-btn{cursor:pointer;font-weight:800;color:#15803d;padding:0 2px;}
+.aw-btn.aw-btn-rot{color:var(--md-error);}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -1051,9 +1055,7 @@ textarea.form-input{
       <div class="cal-grid" id="cal-dow-row"></div>
       <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
       <div class="cal-legend">
-        <span><i style="background:#94a3b8;"></i> Meine Termine (gefüllt)</span>
-        <span><i style="background:#fff;border:1px solid #94a3b8;"></i> Offen (buchbar)</span>
-        <span><i style="background:#e2e8f0;border:1px solid #94a3b8;"></i> Gebucht</span>
+        <span id="cal-legend-states"></span>
         <span><i style="background:#fff;border:1px dashed #1d4ed8;"></i> Deadline</span>
         <span>🎤 Talk · 📘 FaBü</span>
         <span id="cal-legend-subjects"></span>
@@ -3759,6 +3761,27 @@ function calItemsByDay() {
   return map;
 }
 
+// Wie steht ein Termin im Monatsraster fuer die eingeloggte Person?
+//   'mine'   - eigener Termin
+//   'free'   - noch niemand drauf und ohne ausgeschriebenes Thema: direkt buchbar
+//   'join'   - Fachbüro, bei dem man mitmachen anfragen kann
+//   'closed' - da ist wirklich nichts mehr zu holen
+// Wichtig: ein Fachbüro ist NICHT ausgebucht, nur weil schon jemand drauf ist -
+// solange es noch nicht gelaufen ist, kann man mitmachen anfragen. Dieselbe
+// Unterscheidung trifft mwAktion() in "Meine Woche".
+function calSlotState(it) {
+  if (it.mineAsPresenter || it.mineAsListener) return 'mine';
+  if (me && me.role === 'admin') return it.booked ? 'closed' : 'free';
+  // Lernberatung & Co. vergibt die Lernbegleitung; solche Termine sieht man ohnehin
+  // nur, wenn man zugeordnet ist - dann greift schon 'mine' oben.
+  if (subjectById(it.subjectId).nurZugewiesen) return 'closed';
+  if (it.typ === 'input') {
+    if (!it.booked) return it.slotThema ? 'join' : 'free';
+    return it.presentedStatus === 'ausstehend' ? 'join' : 'closed';
+  }
+  return it.booked ? 'closed' : 'free';
+}
+
 function renderCalendar() {
   calInit();
   const dowRow = document.getElementById('cal-dow-row');
@@ -3774,6 +3797,20 @@ function renderCalendar() {
   const legendListe = subjectsMeta.filter(s => !s.nurZugewiesen
     || (calData.slots || []).some(it => it.subjectId === s.id));
   if (legendSubj) legendSubj.innerHTML = legendListe.map(s => `<span><i style="background:${s.color};"></i> ${escHtml(s.name)}</span>`).join('');
+
+  // Die Zustands-Legende unterscheidet sich je Rolle: Schüler:innen interessiert, wo sie
+  // noch mitkommen, Lernbegleitungen, was belegt ist.
+  const isAdminView = me && me.role === 'admin';
+  const legendStates = document.getElementById('cal-legend-states');
+  const swatch = stil => `<i style="${stil}"></i>`;
+  if (legendStates) legendStates.innerHTML = isAdminView
+    ? `<span>${swatch('background:#94a3b8;')} Eigene Termine (gefüllt)</span>
+       <span>${swatch('background:#fff;border:1px solid #94a3b8;')} Offen</span>
+       <span>${swatch('background:#e2e8f0;border:1px solid #94a3b8;')} Gebucht</span>`
+    : `<span>${swatch('background:#94a3b8;')} Deine Termine (gefüllt)</span>
+       <span>${swatch('background:#fff;border:1px solid #94a3b8;')} Frei – direkt buchbar</span>
+       <span>${swatch('background:#e2e8f0;border:1px solid #94a3b8;')} Fachbüro – mitmachen anfragen</span>
+       <span>${swatch('background:#eef1f5;border:1px solid #cbd5e1;')} Ausgebucht</span>`;
 
   const byDay = calItemsByDay();
   const todayStr = calDateStr(new Date());
@@ -3793,15 +3830,20 @@ function renderCalendar() {
     const items = (byDay[ds] || []).slice().sort((a,b) => (a.uhrzeit||'z').localeCompare(b.uhrzeit||'z'));
     const evs = items.slice(0, 3).map(it => {
       if (it.kind === 'deadline') return `<div class="cal-ev cal-ev-deadline" title="${escHtml(it.titel)}">⏰ ${escHtml(it.titel)}</div>`;
-      const mine = it.mineAsPresenter || it.mineAsListener;
       const subj = subjectById(it.subjectId);
       const icon = it.typ === 'input' ? '📘' : '🎤';
-      const st = mine ? 'meine Buchung' : (it.booked ? 'gebucht' : 'offen – buchbar');
-      const style = mine
-        ? `background:${subj.color};color:#fff;border-color:${subj.color};`
-        : it.booked
-          ? `background:${subj.colorBg};color:${subj.color};border-color:${subj.color}66;`
-          : `background:#fff;color:${subj.color};border-color:${subj.color}88;`;
+      const zustand = calSlotState(it);
+      const st = { mine: 'dein Termin', join: 'mitmachen anfragen möglich',
+                   free: 'offen – buchbar',
+                   closed: isAdminView ? 'gebucht' : 'ausgebucht' }[zustand];
+      // Gefüllt = eigener Termin, weiß = direkt buchbar, Fachfarbe getönt = da geht noch
+      // was (mitmachen anfragen), grau = wirklich nichts mehr zu holen.
+      const style = {
+        mine:   `background:${subj.color};color:#fff;border-color:${subj.color};`,
+        join:   `background:${subj.colorBg};color:${subj.color};border-color:${subj.color}66;`,
+        free:   `background:#fff;color:${subj.color};border-color:${subj.color}88;`,
+        closed: 'background:#eef1f5;color:#64748b;border-color:#cbd5e1;',
+      }[zustand];
       return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Fachbüro':'Talk') + ' · ' + st)}">${icon} ${escHtml(it.uhrzeit || (it.typ==='input'?'FaBü':'Talk'))}</div>`;
     }).join('');
     const more = items.length > 3 ? `<div class="cal-more">+${items.length - 3} mehr</div>` : '';
@@ -4367,12 +4409,129 @@ function awChip(s) {
   const themaHtml = s.booked && s.thema ? `„${escHtml(s.thema)}“` : '';
   const line2 = [statusHtml, themaHtml].filter(Boolean).join(' · ');
 
-  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}" aria-label="${tip}">
+  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}" aria-label="${tip}"
+    data-aw="${s.id}" role="button" tabindex="0" onclick="awSelect(${s.id})"
+    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();awSelect(${s.id});}">
     <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
     ${line2 ? `<div class="lw-chip-meta">${line2}</div>` : ''}
     ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
     ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
   </div>`;
+}
+
+// ── Auswahl in der Wochenansicht der Lernbegleitung ───────────────────────────
+// Termin antippen -> unten stehen die Teilnehmenden mit genau den Knoepfen, die
+// gerade dran sind: offene Anfragen zusagen/ablehnen und, wenn der Termin vorbei
+// ist, die Teilnahme bestaetigen oder als Fehlzeit eintragen.
+let _awPicked = null;
+
+function awApplyPick() {
+  document.querySelectorAll('#cal-adminweek [data-aw]').forEach(el => {
+    el.classList.toggle('mw-picked', Number(el.dataset.aw) === _awPicked);
+  });
+  awRenderBar();
+}
+function awSelect(id) {
+  _awPicked = (_awPicked === id) ? null : id;
+  awApplyPick();
+}
+
+// Eigene Termine verwaltet jede Lernbegleitung selbst, fremde nur Super-Admins -
+// dieselbe Regel wie beim Bearbeiten/Loeschen eines Termins (mayManageSlot serverseitig).
+function awDarfVerwalten(s) {
+  if (!me || me.role !== 'admin') return false;
+  if (me.superAdmin) return true;
+  return s.teacherId == null || s.teacherId === me.userId;
+}
+
+function awRenderBar() {
+  const bar = document.getElementById('aw-actionbar');
+  if (!bar) return;
+  const s = (calData.slots || []).find(x => x.id === _awPicked);
+  if (!s) { bar.innerHTML = ''; bar.style.display = 'none'; return; }
+  const subj = subjectById(s.subjectId);
+  const kopf = [lwFmtDay(s.datum), lwTimeRange(s.uhrzeit, s.dauer),
+    subj.name + (s.typ === 'input' ? '-FaBü' : '-Talk'), s.ort].filter(Boolean).join(' · ');
+  const thema = s.thema || s.slotThema || '';
+  const darf = awDarfVerwalten(s);
+  // Teilnahme eintragen ergibt erst ab dem Termintag Sinn.
+  const gelaufen = !!s.datum && s.datum <= new Date().toISOString().slice(0, 10);
+  // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Kleeblaetter und
+  // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
+  const schnell = darf && gelaufen && s.typ === 'input';
+  const ja = (ruf) => ` <span class="aw-btn" onclick="${ruf}" title="War da">✓</span>`;
+  const nein = (ruf) => ` <span class="aw-btn aw-btn-rot" onclick="${ruf}" title="Hat gefehlt">✗</span>`;
+
+  const leute = [];
+  if (s.presenterUsername) {
+    const st = s.presentedStatus;
+    const zustand = st === 'erledigt' ? '✓ da gewesen' : st === 'nicht_erledigt' ? '✗ gefehlt'
+      : (s.typ === 'input' ? 'hat gebucht' : 'hält den Talk');
+    const klasse = st === 'erledigt' ? 'pill-green' : st === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
+    const knoepfe = schnell ? ja(`awVortrag(${s.session_id}, 'erledigt')`) + nein(`awVortrag(${s.session_id}, 'nicht_erledigt')`) : '';
+    leute.push(`<span class="pill ${klasse}" style="font-size:11px;"><strong>${escHtml(s.presenterUsername)}</strong> · ${zustand}${knoepfe}</span>`);
+  }
+  (s.invitees || []).forEach(iv => {
+    const name = escHtml(iv.username);
+    if (iv.status === 'angefragt') {
+      const knoepfe = darf
+        ? ja(`awEntscheiden(${iv.id}, true)`).replace('War da', 'Zusagen')
+          + nein(`awEntscheiden(${iv.id}, false)`).replace('Hat gefehlt', 'Ablehnen')
+        : '';
+      leute.push(`<span class="pill pill-yellow" style="font-size:11px;">${name} · ⏳ fragt an${knoepfe}</span>`);
+      return;
+    }
+    if (iv.status === 'abgelehnt') { leute.push(`<span class="pill" style="font-size:11px;">${name} · ✗ abgesagt</span>`); return; }
+    const att = iv.attendedStatus;
+    const zustand = att === 'erledigt' ? '✓ da gewesen' : att === 'nicht_erledigt' ? '✗ gefehlt'
+      : (iv.status === 'angenommen' ? 'zugesagt' : '⏳ eingeladen');
+    const klasse = att === 'erledigt' ? 'pill-green' : att === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
+    const knoepfe = schnell ? ja(`awAnwesenheit(${iv.id}, 'erledigt')`) + nein(`awAnwesenheit(${iv.id}, 'nicht_erledigt')`) : '';
+    leute.push(`<span class="pill ${klasse}" style="font-size:11px;">${name} · ${zustand}${knoepfe}</span>`);
+  });
+
+  const hinweis = !darf ? 'Termin einer anderen Lernbegleitung.'
+    : !leute.length ? 'Noch niemand auf diesem Termin.'
+    : (s.typ === 'talk' && gelaufen) ? 'Talks werden im Talks-Tab bewertet (Kleeblätter).'
+    : !gelaufen ? 'Teilnahme eintragen geht ab dem Termintag.'
+    : '';
+
+  bar.style.display = 'flex';
+  bar.innerHTML = `<div style="min-width:0;">
+      <div class="mw-bar-kopf">${escHtml(kopf)}</div>
+      ${thema ? `<div class="mw-bar-thema">„${escHtml(thema)}“</div>` : ''}
+      ${leute.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${leute.join('')}</div>` : ''}
+      ${hinweis ? `<div class="mw-bar-hint" style="margin-top:4px;">${escHtml(hinweis)}</div>` : ''}
+    </div>
+    <button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>`;
+}
+
+// Die drei Schreib-Aktionen der Leiste. Danach frischt der Kalender auf, damit die
+// Kacheln (und die Zaehler darueber) sofort den neuen Stand zeigen.
+async function awEntscheiden(invitationId, zusagen) {
+  const r = await fetch(`/api/admin/talking-invitations/${invitationId}/decide`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ accept: zusagen })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler.'); return; }
+  loadCalendar();
+}
+async function awAnwesenheit(invitationId, status) {
+  // Fachbüro kennt keine Kleeblaetter - pokale bleibt bewusst 0.
+  const r = await fetch(`/api/admin/talking-invitations/${invitationId}/confirm-attended`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ status, pokale: 0 })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler.'); return; }
+  loadCalendar();
+}
+async function awVortrag(sessionId, status) {
+  const r = await fetch(`/api/admin/talking-sessions/${sessionId}/confirm-presented`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ status, pokale: 0 })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler.'); return; }
+  loadCalendar();
 }
 
 function renderAdminWeek() {
@@ -4439,10 +4598,15 @@ function renderAdminWeek() {
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>✓ zugesagt</span>
            <span>⏳ eingeladen, noch offen</span>
+           <span>Termin antippen, um Anfragen und Teilnahmen einzutragen.</span>
          </div>`
       : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
+    <div class="mw-bar" id="aw-actionbar"></div>
     ${extrasHtml}
   </div>`;
+  // Auswahl ueberlebt das Neuzeichnen, solange es den Termin noch gibt.
+  if (!(calData.slots || []).some(s => s.id === _awPicked)) _awPicked = null;
+  awApplyPick();
 }
 
 function renderMyHalbjahr() {
@@ -4534,10 +4698,11 @@ function renderHalbjahr() {
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
         <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
         <td>${sd.talksListened ? '👂 ' + sd.talksListened + sub(lastRole(sd.talkDetails,'zugehört')) : dash}</td>
-        <td>${(sd.inputParticipated || sd.inputMissed || sd.inputOpen)
+        <td>${(sd.inputParticipated || sd.inputMissed || sd.inputOpen || sd.inputUpcoming)
           ? '📘 ' + (sd.inputParticipated || 0)
             + (sd.inputMissed ? ' <span style="color:var(--md-error);">✗' + sd.inputMissed + '</span>' : '')
             + (sd.inputOpen ? ' <span style="color:#a16207;">⏳' + sd.inputOpen + '</span>' : '')
+            + (sd.inputUpcoming ? ' <span style="color:var(--md-on-surface-variant);">📅' + sd.inputUpcoming + '</span>' : '')
             + sub(sd.lastInput)
           : dash}</td>${extraCols}
       </tr>`;
@@ -4572,10 +4737,15 @@ function openHjDetail(userId, subjectKey) {
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
   const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🍀'.repeat(t.pokale):''}</span></div>`;
-  const fabuePill = st => st === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ da gewesen</span>'
-    : st === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ gefehlt</span>'
+  // "noch offen" heisst: Termin war, die Lernbegleitung hat aber nichts eingetragen.
+  // Ein Termin, der erst noch kommt, ist etwas anderes - sonst sieht es aus, als waere
+  // da etwas liegengeblieben.
+  const heuteHj = new Date().toISOString().slice(0, 10);
+  const fabuePill = t => t.status === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ da gewesen</span>'
+    : t.status === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ gefehlt</span>'
+    : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
-  const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> ${fabuePill(t.status)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
+  const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> ${fabuePill(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🍀 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🍀'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
