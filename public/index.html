@@ -216,6 +216,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    damit es sich nicht mit "hat gefehlt" verwechseln laesst. */
 .aw-btn.aw-btn-weg{color:var(--md-on-surface-variant);font-size:13px;}
 .mw-bar-btn.mw-bar-btn-rot{background:var(--md-error);}
+.mw-bar-btn.mw-bar-btn-blau{background:#2563eb;}
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
@@ -1456,7 +1457,7 @@ textarea.form-input{
       <label class="form-label" for="islot-thema">Thema <span style="font-weight:400;color:var(--md-on-surface-variant);">(optional)</span></label>
       <input class="form-input" id="islot-thema" placeholder="z.B. Bruchrechnen üben">
       <div id="islot-thema-hinweis" style="font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;">
-        Steht dann schon am ausgeschriebenen Termin – Zuweisen ist nicht nötig.
+        Steht dann schon am ausgeschriebenen Termin – einladen musst du dann niemanden.
       </div>
     </div>
     <div id="islot-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
@@ -1481,23 +1482,23 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Fachbüro-Termin - Schüler:innen zuweisen (Admin, bei Erstellung + nachträglich) ══ -->
+<!-- ══ MODAL: Fachbüro-Termin - Schüler:innen einladen (Admin, bei Erstellung + nachträglich) ══ -->
 <div class="overlay" id="modal-input-assign">
   <div class="modal" style="max-width:440px;">
-    <div class="modal-title" id="iassign-title">Schüler:innen zuweisen</div>
+    <div class="modal-title" id="iassign-title">Schüler:innen einladen</div>
     <div id="iassign-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:10px;"></div>
     <div class="form-group" id="iassign-thema-group">
       <label class="form-label" for="iassign-thema">Thema</label>
       <input class="form-input" id="iassign-thema" placeholder="z.B. Übungsaufgaben besprechen">
     </div>
     <div class="form-group">
-      <label class="form-label" id="iassign-cm-lbl">Wen zuweisen?</label>
+      <label class="form-label" id="iassign-cm-lbl">Wen einladen?</label>
       <div role="group" aria-labelledby="iassign-cm-lbl" id="iassign-classmates" style="max-height:220px;overflow-y:auto;"></div>
     </div>
     <div id="iassign-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-input-assign')">Schließen</button>
-      <button class="btn-act btn-blue" onclick="submitInputAssign()">Zuweisen</button>
+      <button class="btn-act btn-blue" onclick="submitInputAssign()">Einladen</button>
     </div>
   </div>
 </div>
@@ -4002,10 +4003,10 @@ function renderCalDetail() {
       } else {
         actions = `<span class="pill" style="font-size:10px;">Termin einer anderen Lernbegleitung</span>`;
       }
-      // Admin darf bei Fachbüro-Terminen direkt Schüler:innen zuweisen - bei Erstellung (noch offen)
+      // Admin darf bei Fachbüro-Terminen direkt Schüler:innen einladen - bei Erstellung (noch offen)
       // UND nachträglich (schon gebucht, weitere Personen dazu).
       if (it.typ === 'input') {
-        actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere zuweisen' : '+ zuweisen'}</button> ` + actions;
+        actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere einladen' : '+ einladen'}</button> ` + actions;
       }
     }
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
@@ -4164,9 +4165,9 @@ async function submitInputSlot() {
   loadCalendar();
 }
 
-// Admin: bei einem Fachbüro-Termin direkt Schüler:innen zuweisen (bei Erstellung, wenn noch offen -
+// Admin: bei einem Fachbüro-Termin direkt Schüler:innen einladen (bei Erstellung, wenn noch offen -
 // ODER nachträglich, wenn schon gebucht). Terminkonflikte werden serverseitig geprüft; wer wegen
-// Konflikt nicht zugewiesen wurde, kommt mit Grund zurück (assignStudentsToSlot(), siehe server.js).
+// Konflikt nicht dazukam, kommt mit Grund zurück (assignStudentsToSlot(), siehe server.js).
 let _iassignSlot = null;
 function openInputAssignModal(slotId) {
   const slot = (calData.slots || []).find(s => s.id === slotId);
@@ -4174,7 +4175,7 @@ function openInputAssignModal(slotId) {
   _iassignSlot = slot;
   const subj = subjectById(slot.subjectId);
   document.getElementById('iassign-title').textContent =
-    `📘 ${subj.nurZugewiesen ? subj.name : subj.name + '-FaBü'}: Schüler:innen zuweisen`;
+    `📘 ${subj.nurZugewiesen ? subj.name : subj.name + '-FaBü'}: Schüler:innen einladen`;
   document.getElementById('iassign-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}`;
   const themaGroup = document.getElementById('iassign-thema-group');
@@ -4190,7 +4191,7 @@ function openInputAssignModal(slotId) {
   document.getElementById('iassign-classmates').innerHTML = available.map(c =>
     `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
       <input type="checkbox" value="${c.id}" class="iassign-cm-cb"> ${escHtml(c.username)}
-    </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Alle Schüler:innen bereits zugewiesen.</span>';
+    </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Alle Schüler:innen sind schon dabei.</span>';
   document.getElementById('iassign-error').style.display = 'none';
   openModal('modal-input-assign');
 }
@@ -4214,10 +4215,10 @@ async function submitInputAssign() {
     });
   }
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Zuweisen.'; errEl.style.display = 'block'; return; }
+  if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Einladen.'; errEl.style.display = 'block'; return; }
 
   if (d.conflicts && d.conflicts.length) {
-    alert('⚠️ Nicht zugewiesen wegen Terminkonflikt:\n' + d.conflicts.map(c => `· ${c.username}: ${c.reason}`).join('\n'));
+    alert('⚠️ Wegen Terminkonflikt nicht dabei:\n' + d.conflicts.map(c => `· ${c.username}: ${c.reason}`).join('\n'));
   }
   closeModal('modal-input-assign');
   loadCalendar();
@@ -4663,6 +4664,10 @@ function awRenderBar() {
   const darf = awDarfVerwalten(s);
   // Teilnahme eintragen ergibt erst ab dem Termintag Sinn.
   const gelaufen = !!s.datum && s.datum <= new Date().toISOString().slice(0, 10);
+  // Einladen geht nur beim Fachbüro (bei Talks lädt die vortragende Person ein) und nur
+  // solange der Termin noch bevorsteht - danach trägt man Teilnahmen ein, lädt aber nicht
+  // mehr ein. Ohne den Knopf musste man dafür in den Kalender wechseln.
+  const einladbar = darf && s.typ === 'input' && !slotVorbei(s) && s.presentedStatus !== 'erledigt';
   // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Kleeblaetter und
   // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
   const schnell = darf && gelaufen && s.typ === 'input';
@@ -4732,6 +4737,7 @@ function awRenderBar() {
       ${hinweis ? `<div class="mw-bar-hint" style="margin-top:4px;">${escHtml(hinweis)}</div>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${einladbar ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openInputAssignModal(${s.id})">${s.booked ? '+ weitere einladen' : '+ einladen'}</button>` : ''}
       ${darf ? `<button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>` : ''}
       ${(darf && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-rot" onclick="calCancelSession(${s.session_id})">Stornieren</button>` : ''}
     </div>`;
