@@ -233,14 +233,13 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .mw-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--md-on-surface-variant);}
 .mw-legend b{font-weight:700;}
 /* Teilnehmende in der Admin-Wochenansicht: wer ist bei welchem Termin dabei. */
-.aw-people{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;}
-.aw-person{
-  font-size:10px;line-height:1.3;padding:1px 6px;border-radius:99px;
-  background:var(--md-surface-container-low);color:var(--md-on-surface);
-  border:1px solid var(--md-outline-variant);
-}
-.aw-person-main{font-weight:700;}
-.aw-person-pending{opacity:.75;font-style:italic;}
+/* Namen als Fliesstext, nicht als Kapseln: eine Kachel mit 18 gerahmten Kaestchen
+   uebereinander war nicht mehr zu ueberblicken. Hervorgehoben wird nur noch, was
+   heraussticht - die buchende Person und alles, was noch aussteht. */
+.aw-people{margin-top:4px;font-size:10px;line-height:1.5;color:var(--md-on-surface-variant);}
+.aw-person{white-space:nowrap;}
+.aw-person-main{font-weight:700;color:var(--md-on-surface);}
+.aw-person-pending{font-style:italic;color:var(--md-on-surface);}
 /* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
    (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
 .login-taskcards{
@@ -4563,6 +4562,34 @@ let myHjData = { halbjahre: [], byHalbjahr: {} };
 // entscheidenden Info: WER nimmt an welchem Termin teil. Quelle ist calData
 // (/api/calendar, bereits in loadCalendar geladen) - kein zusätzlicher Request.
 // Eigene Angebote (zugewiesene Lernbegleitung = ich) sind hervorgehoben.
+// Ab so vielen Teilnehmenden lohnt die Namensliste in der kleinen Kachel nicht mehr -
+// dann sagt die Zahl mehr als ein Block aus Namen. Kleine Fachbüros bleiben lesbar.
+const AW_NAMEN_MAX = 6;
+
+// Teilnehmende einer Wochenkachel: entweder als Namensreihe (klein) oder als Zahl plus
+// dem, was noch aussteht (gross). Bewusst schlichter Text statt Kapseln - 18 gerahmte
+// Kaestchen untereinander waren der Hauptgrund, warum die Zellen unlesbar wurden.
+function awPersonenHtml(leute) {
+  if (!leute.length) return '';
+  const marke = p => `<span class="aw-person${p.haupt ? ' aw-person-main' : ''}`
+    + `${p.offen ? ' aw-person-pending' : ''}" title="${escHtml(p.titel)}">`
+    + `${escHtml(p.name)}${p.icon ? ' ' + p.icon : ''}</span>`;
+  if (leute.length <= AW_NAMEN_MAX) return leute.map(marke).join(', ');
+
+  // Zu viele Namen: die Zahl reicht. Was offen ist, wird nach Art zusammengefasst -
+  // "📋 10" heisst "zehn wissen noch nichts davon" und ist die Zeile, die zaehlt.
+  const offen = leute.filter(p => p.offen);
+  const nachArt = [];
+  ['❓', '⏳', '📋'].forEach(icon => {
+    const n = offen.filter(p => p.icon === icon).length;
+    if (n) nachArt.push(`${icon} ${n}`);
+  });
+  const zahl = `<span class="aw-person aw-person-main">👥 ${leute.length}</span>`;
+  return nachArt.length
+    ? `${zahl} · <span class="aw-person aw-person-pending">${nachArt.join(' · ')}</span>`
+    : zahl;
+}
+
 function awChip(s) {
   const subj = subjectById(s.subjectId);
   const color = subj.color || '#94a3b8';
@@ -4571,27 +4598,37 @@ function awChip(s) {
   const state = !s.booked ? 'free' : (isMine ? 'mine' : 'taken');
 
   // Teilnehmende: buchende Person zuerst (bei Fachbüro die anfragende, bei Talk die
-  // vortragende), danach die Eingeladenen mit ihrem Zusage-Status.
-  const teilnehmende = [];
+  // vortragende), danach die Eingeladenen.
+  //
+  // Das Raster beantwortet "wann, was, wie voll - und wo hakt es". WER genau dabei ist,
+  // steht einen Tipper entfernt in der Aktionsleiste. Deshalb: ein Symbol NUR dort, wo
+  // etwas aussteht. Ein Zeichen, das an jedem Namen gleich klebt, unterscheidet nichts -
+  // bei 18 Personen war die Kachel dadurch eine Wand aus 18-mal demselben Symbol.
+  const leute = [];
   if (s.presenterUsername) {
-    teilnehmende.push(`<span class="aw-person aw-person-main">${escHtml(s.presenterUsername)}</span>`);
+    leute.push({ name: s.presenterUsername, haupt: true, offen: false, icon: '',
+                 titel: s.typ === 'input' ? 'hat gebucht' : 'hält den Talk' });
   }
   (s.invitees || []).forEach(iv => {
     if (iv.status === 'abgelehnt') return; // abgesagt - nimmt nicht teil
-    // Eine ANFRAGE ist keine offene Einladung: dort wartet die Schueler:in auf DICH.
-    // Vorher stand an beiden dasselbe "eingeladen, noch keine Antwort".
     const angefragt = iv.status === 'angefragt';
-    const icon = angefragt ? '❓' : invStatusIcon(iv);
-    // Eine Zuweisung, die noch niemand gesehen hat, ist genauso "offen" wie eine
-    // unbeantwortete Einladung: da steht noch etwas aus.
+    // Offen = da wartet noch etwas: eine Anfrage auf DICH, eine Einladung auf eine
+    // Antwort, oder die eingeladene Person hat den Termin noch nicht zur Kenntnis genommen.
     const offen = iv.status !== 'angenommen' || (invEingeteilt(iv) && !iv.gesehen);
-    const cls = offen ? 'aw-person aw-person-pending' : 'aw-person';
-    const titel = angefragt ? 'möchte mitmachen - wartet auf deine Zusage'
-      : invEingeteilt(iv)
-        ? (iv.gesehen ? 'von dir eingeladen, hat es gesehen' : 'von dir eingeladen - weiß es vermutlich noch nicht')
-        : (iv.status === 'angenommen' ? 'zugesagt' : 'von einer Mitschüler:in eingeladen, noch keine Antwort');
-    teilnehmende.push(`<span class="${cls}" title="${titel}">${escHtml(iv.username)} ${icon}</span>`);
+    leute.push({
+      name: iv.username, haupt: false, offen,
+      // Reihenfolge: erst der Status, dann die Herkunft. 📋 meint genau einen Fall -
+      // eingeladen, aber noch nicht zur Kenntnis genommen. Wer noch gar nicht geantwortet
+      // hat, wartet unabhaengig davon, wer ihn eingeladen hat.
+      icon: !offen ? '' : angefragt ? '❓' : iv.status !== 'angenommen' ? '⏳' : '📋',
+      titel: angefragt ? 'möchte mitmachen - wartet auf deine Zusage'
+        : iv.status !== 'angenommen' ? 'eingeladen, noch keine Antwort'
+        : invEingeteilt(iv)
+          ? (iv.gesehen ? 'von dir eingeladen, hat es gesehen' : 'von dir eingeladen - weiß es vermutlich noch nicht')
+          : 'zugesagt',
+    });
   });
+  const personenHtml = awPersonenHtml(leute);
 
   const chipStyle = state === 'taken' ? '' : ` style="border-left-color:${color};color:${color};"`;
   const meta = [
@@ -4622,7 +4659,7 @@ function awChip(s) {
     <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
     ${line2 ? `<div class="lw-chip-meta">${line2}</div>` : ''}
     ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
-    ${teilnehmende.length ? `<div class="aw-people">${teilnehmende.join('')}</div>` : ''}
+    ${personenHtml ? `<div class="aw-people">${personenHtml}</div>` : ''}
   </div>`;
 }
 
