@@ -217,6 +217,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .aw-btn.aw-btn-weg{color:var(--md-on-surface-variant);font-size:13px;}
 .mw-bar-btn.mw-bar-btn-rot{background:var(--md-error);}
 .mw-bar-btn.mw-bar-btn-blau{background:#2563eb;}
+/* Kursung je Fach in der Kopfzeile: Fach-Badge (farbiger Buchstabe) + E/G. */
+#bar-kurs{display:inline-flex;align-items:center;gap:8px;}
+.bar-kurs-fach{display:inline-flex;align-items:center;gap:3px;font-weight:700;}
 /* Aufklappbare Rubriken in der Halbjahr-Auswertung. Das Standard-Dreieck des Browsers
    sitzt je nach System woanders, deshalb ein eigenes vor der Überschrift. */
 .hj-rubrik{margin:8px 0 2px;}
@@ -2640,12 +2643,24 @@ async function showApp() {
   await loadSubjectsMeta();
   activeSubject = defaultSubjectKey(); // persoenliches Standard-Fach als Startpunkt
 
-  if (me.role === 'student' && me.kurs) {
+  if (me.role === 'student') {
     const barKurs = document.getElementById('bar-kurs');
     if (barKurs) {
-      barKurs.textContent = me.kurs + '-Kurs';
-      barKurs.className = `pill ${me.kurs === 'G' ? 'pill-yellow' : 'pill-green'}`;
-      barKurs.style.display = '';
+      // Die Kursung gilt seit dem Fächer-System PRO FACH. Ein einzelnes "E-Kurs" in der
+      // Kopfzeile war deshalb bestenfalls die Mathe-Kursung und im schlechteren Fall
+      // schlicht falsch. Jetzt je Angebotsfach ein Fach-Badge mit seinem Buchstaben;
+      // "nur zugewiesen"-Fächer (Lernberatung) sind nicht gekurst und bleiben draußen.
+      const kurse = me.subjectKurs || {};
+      const teile = angebotsFaecher()
+        .map(subj => ({ subj, kurs: kurse[subj.key] || (subj.key === 'mathe' ? me.kurs : null) }))
+        .filter(x => x.kurs)
+        .map(({ subj, kurs }) =>
+          `<span class="bar-kurs-fach" title="${escHtml(subj.name)}: ${escHtml(kurs)}-Kurs">`
+          + `<span class="lw-chip-subj" style="background:${subj.color};">${escHtml((subj.name || '?').charAt(0).toUpperCase())}</span>`
+          + `${escHtml(kurs)}</span>`);
+      barKurs.innerHTML = teile.join('');
+      barKurs.className = 'pill';
+      barKurs.style.display = teile.length ? '' : 'none';
     }
   }
 

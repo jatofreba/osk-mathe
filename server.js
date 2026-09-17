@@ -732,10 +732,20 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', async (req, res) => {
   if (!req.session.userId) return res.json({ loggedIn: false });
   const kr = await pool.query('SELECT kurs, default_subject_id AS "defaultSubjectId", super_admin AS "superAdmin" FROM users WHERE id=$1', [req.session.userId]).catch(() => ({ rows: [] }));
+  // Kursung je Fach - seit dem Fächer-System hat jede Person pro Fach einen eigenen
+  // E/G-Wert. users.kurs bleibt der gespiegelte MATHE-Wert (davon lebt die
+  // Lerntheken-Logik) und wird weiterhin als `kurs` mitgeliefert.
+  const skr = await pool.query(`
+    SELECT s.key, usk.kurs FROM user_subject_kurs usk JOIN subjects s ON s.id = usk.subject_id
+    WHERE usk.user_id = $1
+  `, [req.session.userId]).catch(() => ({ rows: [] }));
+  const subjectKurs = {};
+  skr.rows.forEach(r => { subjectKurs[r.key] = r.kurs; });
   res.json({
     loggedIn: true, userId: req.session.userId,
     username: req.session.username, klasse: req.session.klasse, role: req.session.role,
     kurs: kr.rows[0]?.kurs || 'E',
+    subjectKurs,
     defaultSubjectId: kr.rows[0]?.defaultSubjectId ?? null,
     superAdmin: !!kr.rows[0]?.superAdmin
   });
