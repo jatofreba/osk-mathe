@@ -2410,6 +2410,30 @@ app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
 
 // Weitere Schüler:innen nachträglich zu einer bestehenden Session zuweisen (Talk oder Input),
 // mit derselben Terminkonflikt-Prüfung + Feedback wie bei der Erstellung.
+// Thema einer Buchung nachschaerfen (Lernbegleitung). Gesetzt hat es urspruenglich die
+// buchende Person; die Lernbegleitung darf es praezisieren, ohne den Termin neu anzulegen.
+// Die Berechtigung haengt am Termin, nicht an der Buchung - deshalb dieselbe Pruefung wie
+// beim Verschieben (eigener Termin, oder Super-Admin).
+app.post('/api/admin/talking-sessions/:id/thema', requireAdmin, async (req, res) => {
+  try {
+    const thema = (req.body.thema || '').trim();
+    if (!thema) return res.status(400).json({ error: 'Bitte ein Thema angeben.' });
+    const sess = await pool.query(`
+      SELECT ts.id, ts.slot_id AS "slotId"
+      FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+      WHERE ts.id=$1 AND sl.klasse=$2
+    `, [req.params.id, req.session.klasse]);
+    if (!sess.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const may = await mayManageSlot(req, sess.rows[0].slotId);
+    if (!may.ok) return res.status(may.status).json({ error: may.error });
+    await pool.query(
+      'UPDATE talking_sessions SET thema=$1, admin_id=$2, updated_at=NOW() WHERE id=$3',
+      [thema, req.session.userId, sess.rows[0].id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/admin/talking-sessions/:id/assign', requireAdmin, async (req, res) => {
   try {
     const { studentIds } = req.body;

@@ -1397,8 +1397,9 @@ textarea.form-input{
       <input class="form-input" id="tsedit-ort" placeholder="z.B. Mathe-Fachbüro M3/M4">
     </div>
     <div class="form-group" id="tsedit-thema-group">
-      <label class="form-label" for="tsedit-thema">Thema <span style="font-weight:400;color:var(--md-on-surface-variant);">(optional)</span></label>
+      <label class="form-label" for="tsedit-thema">Thema</label>
       <input class="form-input" id="tsedit-thema" placeholder="z.B. Bruchrechnen üben">
+      <div id="tsedit-thema-hinweis" style="font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;"></div>
     </div>
     <div id="tsedit-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:-8px;margin-bottom:8px;" role="status" aria-live="polite"></div>
     <div class="modal-actions">
@@ -4161,9 +4162,15 @@ async function openInputSlotModal(presetDate) {
   document.getElementById('islot-recurring').checked = false;
   document.getElementById('islot-recurring-fields').style.display = 'none';
   document.getElementById('islot-single-fields').style.display = 'block';
-  document.getElementById('islot-von').value = '';
+  // Serie: Start und Wochentag richten sich nach dem Tag, um den es gerade geht
+  // (angeklickter Kalendertag, sonst heute) - so muss man im Normalfall nur noch
+  // das Enddatum setzen, statt jedes Mal Montag und ein Datum zu korrigieren.
+  const startTag = document.getElementById('islot-datum').value
+    || calDateStr(new Date());
+  document.getElementById('islot-von').value = startTag;
   document.getElementById('islot-bis').value = '';
-  document.getElementById('islot-weekday').value = '1';
+  document.getElementById('islot-weekday').value =
+    String(new Date(startTag + 'T00:00:00').getDay());
   document.getElementById('islot-thema').value = '';
   document.getElementById('islot-error').style.display = 'none';
   applyInputSlotSubjectDefaults();
@@ -5783,6 +5790,9 @@ async function submitTalkingSlot() {
 }
 
 let _talkingEditSlotId = null;
+// Buchung des gerade bearbeiteten Termins (null = noch offen) - entscheidet, ob das
+// Themafeld die Buchung oder das ausgeschriebene Thema aendert.
+let _talkingEditSessionId = null;
 // 'admin' = Aufruf aus dem Talks-Admin-Tab, 'calendar' = Aufruf aus dem Kalender-Tagesdetail -
 // steuert, welche Ansicht nach dem Speichern neu geladen wird (siehe submitTalkingSlotEdit()).
 let _talkingEditSlotSource = 'admin';
@@ -5798,15 +5808,17 @@ function openTalkingSlotEditModal(id, source) {
   document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
   document.getElementById('tsedit-dauer').value = s.dauer || 45;
   document.getElementById('tsedit-ort').value = s.ort || '';
-  // Das ausgeschriebene Thema gehoert zum Fachbuero-Angebot und darf auch nachtraeglich
-  // geaendert werden - ein neuer Termin ist dafuer nicht noetig. Tabu ist es nur, wenn eine
-  // Schueler:in selbst gebucht hat (dann gehoert das Thema ihr) und bei Talks, wo es von der
-  // vortragenden Person kommt. presenterId liefert der Kalender, presenter_username der
-  // Talks-Admin-Tab - beide Quellen speisen diesen Dialog.
-  const fremdeBuchung = !!(s.presenterId || s.presenter_username);
-  const themaEditierbar = s.typ === 'input' && !fremdeBuchung;
-  document.getElementById('tsedit-thema-group').style.display = themaEditierbar ? '' : 'none';
-  document.getElementById('tsedit-thema').value = themaEditierbar ? (s.slotThema || '') : '';
+  // Das Thema darf die Lernbegleitung immer nachschaerfen -- auch wenn es eine Schueler:in
+  // beim Buchen gesetzt hat. Bei einem gebuchten Termin wird das Thema der BUCHUNG
+  // geaendert (das steht ueberall in der Anzeige), bei einem offenen das ausgeschriebene
+  // Thema des Termins selbst.
+  _talkingEditSessionId = s.session_id || null;
+  document.getElementById('tsedit-thema').value =
+    (_talkingEditSessionId ? (s.thema || '') : (s.slotThema || ''));
+  const themaHinweis = document.getElementById('tsedit-thema-hinweis');
+  if (themaHinweis) themaHinweis.textContent = _talkingEditSessionId
+    ? 'Thema der Buchung – du kannst es nachschärfen.'
+    : 'Wird schon am ausgeschriebenen Termin angezeigt.';
   document.getElementById('tsedit-error').style.display = 'none';
   openModal('modal-talking-slot-edit');
 }
@@ -5819,17 +5831,33 @@ async function submitTalkingSlotEdit() {
   const uhrzeit = document.getElementById('tsedit-uhrzeit').value.trim();
   const dauer = parseInt(document.getElementById('tsedit-dauer').value) || 45;
   const ort = document.getElementById('tsedit-ort').value.trim();
-  // Nur mitschicken, wenn das Feld ueberhaupt angeboten wird (offenes Fachbuero).
-  const themaSichtbar = document.getElementById('tsedit-thema-group').style.display !== 'none';
-  const thema = themaSichtbar ? document.getElementById('tsedit-thema').value.trim() : undefined;
+  const thema = document.getElementById('tsedit-thema').value.trim();
   if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
   if (!datum) { alert('Bitte Datum angeben.'); return; }
+  // Bei einem gebuchten Termin bleibt das ausgeschriebene Thema unberuehrt (deshalb ohne
+  // thema-Feld) - dort zaehlt das der Buchung, das gleich darunter gesetzt wird.
+  const slotBody = { datum, uhrzeit, dauer, ort, halbjahr };
+  if (!_talkingEditSessionId) slotBody.thema = thema;
   const r = await fetch(`/api/admin/talking-slots/${_talkingEditSlotId}/reschedule`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ datum, uhrzeit, dauer, ort, halbjahr, thema })
+    body: JSON.stringify(slotBody)
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Verschieben.'; errEl.style.display = 'block'; return; }
+  // Leeres Feld laesst das Thema der Buchung stehen, statt es zu loeschen - eine Buchung
+  // ohne Thema gibt es nicht.
+  if (_talkingEditSessionId && thema) {
+    const tr = await fetch(`/api/admin/talking-sessions/${_talkingEditSessionId}/thema`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ thema })
+    });
+    if (!tr.ok) {
+      const td = await tr.json().catch(() => ({}));
+      errEl.textContent = td.error || 'Das Thema konnte nicht geändert werden.';
+      errEl.style.display = 'block';
+      return;
+    }
+  }
   closeModal('modal-talking-slot-edit');
   if (_talkingEditSlotSource === 'calendar') loadCalendar(); else loadTalkingAdmin();
 }
