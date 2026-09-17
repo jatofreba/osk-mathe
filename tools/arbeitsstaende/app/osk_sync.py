@@ -164,6 +164,24 @@ class AppClient:
             "pokale": int(pokale or 0),
         })
 
+    def kurs_setzen(self, user_id, kurs: str) -> None:
+        """Setzt die MATHE-Kursung (E/G) eines Kontos auf dem Server.
+
+        Ohne subjectId nimmt der Endpunkt Mathe -- und nur darum geht es hier: das
+        Tool pflegt Mathe (NUR_FACH), und Student.kursung ist entsprechend EIN Wert.
+        Englisch und Deutsch haben online ihre eigene Kursung, die bleibt unberuehrt.
+        """
+        if kurs not in ("E", "G"):
+            raise ValueError(f"Kursung '{kurs}' ist weder E noch G.")
+        try:
+            self._post("/api/admin/set-kurs", {"userId": user_id, "kurs": kurs})
+        except error.HTTPError as e:
+            try:
+                grund = json.loads(e.read().decode("utf-8")).get("error", "")
+            except Exception:
+                grund = ""
+            raise ValueError(grund or f"Kursung setzen fehlgeschlagen (HTTP {e.code}).")
+
     def umbenennen(self, user_id, neuer_name: str) -> str:
         """Aendert NUR den Kontonamen auf dem Server. Fortschritt, LZK-Eintraege,
         Talks/Fachbuero-Termine und Kleeblaetter bleiben vollstaendig erhalten --

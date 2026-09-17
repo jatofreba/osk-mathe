@@ -409,6 +409,76 @@ class VorlageDialog(tk.Toplevel):
         self.destroy()
 
 
+class KursungAbgleichDialog(tk.Toplevel):
+    """Kursungen zwischen dieser Liste und der Lerntheken-App abgleichen.
+
+    Zuerst steht schwarz auf weiss da, WO sich die beiden Staende unterscheiden --
+    erst danach waehlt man die Richtung. Beide Richtungen ueberschreiben, deshalb
+    ist der Unterschied vorher zu sehen und nicht erst hinterher zu erraten.
+
+    `unterschiede` sind Tupel (student, konto, hier, dort). `result` ist nach dem
+    Schliessen None (Abbruch) oder "server_zu_liste" bzw. "liste_zu_server".
+    """
+
+    def __init__(self, parent, unterschiede: list, ohne_alias: list, klasse: str):
+        super().__init__(parent)
+        self.title("Kursungen abgleichen")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self,
+                  text=f"Lerngruppe {klasse} · nur die Mathe-Kursung.\n"
+                       "Englisch und Deutsch haben online ihre eigene und bleiben unberührt.",
+                  justify="left", wraplength=520).pack(padx=12, pady=(12, 8), anchor="w")
+
+        if unterschiede:
+            ttk.Label(self, text=f"Unterschiede ({len(unterschiede)})").pack(padx=12, anchor="w")
+        else:
+            ttk.Label(self, text="Keine Unterschiede – hier und online steht dasselbe.",
+                      foreground="#0a0").pack(padx=12, anchor="w")
+
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=12, pady=(2, 6))
+        self.liste = tk.Listbox(rahmen, height=12, activestyle="none")
+        self.liste.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.liste.yview)
+        sb.pack(side="right", fill="y")
+        self.liste.config(yscrollcommand=sb.set)
+        for student, _konto, hier, dort in unterschiede:
+            self.liste.insert("end", f"{student.voller_name} ({student.alias}):"
+                                     f"   hier {hier or '–'}   ·   online {dort or '–'}")
+        if ohne_alias:
+            self.liste.insert("end", "")
+            self.liste.insert("end", f"Ohne passendes Konto – bleiben aussen vor ({len(ohne_alias)}):")
+            for name in ohne_alias:
+                self.liste.insert("end", f"   {name}")
+
+        ttk.Label(self,
+                  text="Die gewählte Richtung überschreibt die andere Seite – auch dort,\n"
+                       "wo bisher nichts eingetragen war.",
+                  foreground="#b3261e", justify="left", wraplength=520).pack(padx=12, anchor="w")
+
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=12, pady=(8, 12))
+        self.btn_holen = ttk.Button(btns, text="← Vom Server in diese Liste",
+                                    command=lambda: self._waehlen("server_zu_liste"))
+        self.btn_holen.pack(side="left")
+        self.btn_senden = ttk.Button(btns, text="Aus dieser Liste zum Server →",
+                                     command=lambda: self._waehlen("liste_zu_server"))
+        self.btn_senden.pack(side="left", padx=6)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="right")
+        if not unterschiede:
+            self.btn_holen.config(state="disabled")
+            self.btn_senden.config(state="disabled")
+
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _waehlen(self, richtung):
+        self.result = richtung
+        self.destroy()
+
+
 class AliasUmbenennenDialog(tk.Toplevel):
     """Mehrere Kontonamen in einem Durchgang umbenennen.
 
@@ -662,6 +732,8 @@ class App(tk.Tk):
                                    command=self.app_lzk_senden)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
+        lerntheke_menu.add_command(label="Kursungen abgleichen…",
+                                   command=self.kursungen_abgleichen)
         lerntheke_menu.add_command(label="Aliasse auf dem Server umbenennen…",
                                    command=self.alias_umbenennen)
         lerntheke_menu.add_separator()
@@ -1596,6 +1668,85 @@ class App(tk.Tk):
             if len(ohne) > 10:
                 hinweis += f"\n... und {len(ohne) - 10} weitere"
         self._bericht("Aliasse exportieren", hinweis)
+
+    def kursungen_abgleichen(self):
+        """Mathe-Kursungen zwischen dieser Liste und der Lerntheken-App abgleichen.
+
+        Beide Seiten duerfen gepflegt werden, deshalb gibt es keine automatische
+        Zusammenfuehrung: erst werden die Unterschiede gezeigt, dann waehlt man die
+        Richtung. Nur Mathe -- Student.kursung ist EIN Wert, waehrend online jedes
+        Fach seine eigene Kursung hat; Englisch und Deutsch bleiben unberuehrt.
+        """
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            konten = client.studierende()
+        except Exception as e:
+            messagebox.showerror("Kursungen abgleichen",
+                                 f"Konten konnten nicht geladen werden:\n{e}")
+            return
+
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+        unterschiede, ohne_alias = [], []
+        for s in self.az.students:
+            alias = s.alias.strip().lower()
+            konto = je_konto.get(alias) if alias else None
+            if not konto:
+                ohne_alias.append(f"{s.voller_name} ({alias or 'kein Alias'})")
+                continue
+            hier = (s.kursung or "").strip().upper()
+            dort = (konto.get("kurs") or "").strip().upper()
+            if hier != dort:
+                unterschiede.append((s, konto, hier, dort))
+
+        dlg = KursungAbgleichDialog(self, unterschiede, ohne_alias, klasse)
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+
+        if dlg.result == "server_zu_liste":
+            for s, _konto, _hier, dort in unterschiede:
+                s.kursung = dort
+            self._markiere_ungespeichert()
+            self._liste_aktualisieren()
+            if self.aktueller_schueler:
+                self.f_kursung.set(self.aktueller_schueler.kursung or "")
+            self._bericht("Kursungen abgleichen",
+                          f"{len(unterschiede)} Kursung(en) aus der Lerntheken-App übernommen.\n\n"
+                          + "\n".join(f"{s.voller_name}: {hier or '–'} → {dort or '–'}"
+                                      for s, _k, hier, dort in unterschiede)
+                          + "\n\nNoch speichern nicht vergessen.")
+            return
+
+        # Richtung Server: nur E/G sind dort gueltig. Ein leeres Feld hier wuerde
+        # online etwas loeschen, was es gar nicht gibt -- das wird uebersprungen und
+        # im Bericht benannt, statt stillschweigend ein 'E' zu erfinden.
+        erledigt, fehler, leer = [], [], []
+        for s, konto, hier, dort in unterschiede:
+            if hier not in ("E", "G"):
+                leer.append(f"{s.voller_name}: hier nichts eingetragen (online bleibt {dort or '–'})")
+                continue
+            try:
+                client.kurs_setzen(konto["id"], hier)
+            except Exception as e:
+                fehler.append(f"{s.voller_name}: {e}")
+                continue
+            erledigt.append(f"{s.voller_name}: {dort or '–'} → {hier}")
+
+        text = f"{len(erledigt)} von {len(unterschiede)} Kursung(en) zum Server geschickt."
+        if erledigt:
+            text += "\n\n" + "\n".join(erledigt)
+        if leer:
+            text += "\n\nÜbersprungen:\n" + "\n".join(leer)
+        if fehler:
+            text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
+        if fehler:
+            messagebox.showwarning("Kursungen abgleichen", text)
+        else:
+            self._bericht("Kursungen abgleichen", text)
 
     def alias_umbenennen(self):
         """Benennt ein bestehendes Konto auf dem Server um.
