@@ -53,7 +53,7 @@ nicht gespeichert, sondern bei jeder Aktion abgefragt.
 als Blatt **„App-Daten"** in die geöffnete Mappe: eine Zeile je Person und
 Halbjahr, je Fach eigene Spalten.
 
-| Vorname | Nachname | Account | Lerngruppe | Halbjahr | Mathe: Talks gehalten / zugehört / FaBü / Kleeblätter | Englisch: … | Deutsch: … | Stationen abgeschlossen | LZK bestanden | LZK-Kleeblätter | Stand |
+| Vorname | Nachname | Account | Tandem | Halbjahr | Mathe: Talks gehalten / zugehört / FaBü / Kleeblätter | Englisch: … | Deutsch: … | Stationen abgeschlossen | LZK bestanden | LZK-Kleeblätter | Stand |
 
 Danach noch speichern. Personen, deren Alias zu keinem Konto passt, werden
 gemeldet. Beim Fachbüro steht dabei die **Anwesenheit** in vergangenen
@@ -64,10 +64,10 @@ eingetragen sind.
 Einfügen im Bulk-Dialog der Lerntheken-App. Alternative, falls du lieber in der
 Weboberfläche anlegst.
 
-## Wichtig: Lerngruppe
+## Wichtig: Tandem
 
-Ein Admin-Konto sieht immer **genau seine Lerngruppe**, und neue Konten
-entstehen genau dort. Für mehrere Lerngruppen also mit dem jeweils passenden
+Ein Admin-Konto sieht immer **genau sein Tandem**, und neue Konten
+entstehen genau dort. Für mehrere Tandems also mit dem jeweils passenden
 Admin-Konto anmelden (Einstellungen umstellen).
 
 ## Start-Passwort

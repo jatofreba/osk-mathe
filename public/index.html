@@ -467,7 +467,7 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 #view-halbjahr{display:none;padding:24px;}
 #view-klasse{display:none;padding:24px;}
 /* Tabellen/Kopfzeilen nicht auf voller Breite ausufern lassen (iPad-Querformat/Desktop) - sonst
-   wirken schmale Tabellen (z.B. Lerngruppen-Übersicht) unnötig gestreckt und leer. */
+   wirken schmale Tabellen (z.B. Tandem-Übersicht) unnötig gestreckt und leer. */
 .admin-top,.tbl-wrap{max-width:1200px;margin-left:auto;margin-right:auto;}
 /* ── Mein Kalender (alles Mathe = blau) ────────────────────────────────────── */
 .cal-wrap{max-width:940px;margin:0 auto;}
@@ -949,7 +949,7 @@ textarea.form-input{
     <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(defaultSubjectKey())">🗣️ Talks</button>
     <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
     <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
-    <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Lerngruppen-Übersicht</button>
+    <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Tandem-Übersicht</button>
   </nav>
 
   <div id="view-lerntheke" style="width:100%;">
@@ -984,7 +984,7 @@ textarea.form-input{
 
   <div id="view-admin">
     <div class="admin-top">
-      <div class="admin-title" id="admin-title">Lerngruppe</div>
+      <div class="admin-title" id="admin-title">Tandem</div>
     </div>
     <div class="stats-row" id="stats-row"></div>
     <div class="toolbar">
@@ -1014,14 +1014,14 @@ textarea.form-input{
 
   <div id="view-klasse">
     <div class="admin-top">
-      <div class="admin-title">👥 Lerngruppen-Übersicht</div>
+      <div class="admin-title">👥 Tandem-Übersicht</div>
       <button class="btn-act btn-green" onclick="openBulk()">+ Bulk anlegen</button>
       <button class="btn-act btn-outline" onclick="openSingle()">+ Einzeln anlegen</button>
       <button class="btn-act btn-outline" id="btn-create-admin" style="display:none;" onclick="openSingleAdmin()">+ Mit-Admin anlegen</button>
       <button class="btn-act btn-outline" onclick="loadKlasse()">↺ Laden</button>
     </div>
     <div id="admin-peers-panel" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;">
-      <div style="font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:8px;">🔑 Mit-Administratoren dieser Lerngruppe</div>
+      <div style="font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:8px;">🔑 Mit-Administratoren dieses Tandems</div>
       <div id="admin-peers-list" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
     <div class="tbl-wrap">
@@ -1767,7 +1767,7 @@ function safeJSON(s) {
 
 // ══ Wochenübersicht auf der Login-Seite ══════════════════════════════════════
 // Quelle: /api/public/week (ohne Auth). Zeigt bewusst KEINE Namen - nur wann welcher
-// Termin stattfindet und ob er noch frei ist. Lerngruppe ist serverseitig vorerst
+// Termin stattfindet und ob er noch frei ist. Das Tandem ist serverseitig vorerst
 // fest gesetzt; ein Selector kann hier später den Fetch parametrisieren.
 //
 // Taskcards: sobald die Einbettungs-URL des Boards hier eingetragen ist, erscheint
@@ -1878,7 +1878,7 @@ async function loadLoginWeek() {
   const rangeEl = document.getElementById('login-week-range');
   if (rangeEl) {
     const fmt = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
-    rangeEl.textContent = `${data.klasse ? 'Lerngruppe ' + data.klasse + ' · ' : ''}${fmt(dayDates[0])}–${fmt(dayDates[4])}`;
+    rangeEl.textContent = `${data.klasse ? 'Tandem ' + data.klasse + ' · ' : ''}${fmt(dayDates[0])}–${fmt(dayDates[4])}`;
   }
 
   const slots = data.slots || [];
@@ -2635,7 +2635,7 @@ async function showApp() {
   app.style.display = 'flex';
 
   document.getElementById('bar-user').textContent = me.username;
-  document.getElementById('bar-klasse').textContent = 'Lerngruppe ' + me.klasse;
+  document.getElementById('bar-klasse').textContent = 'Tandem ' + me.klasse;
   await loadSubjectsMeta();
   activeSubject = defaultSubjectKey(); // persoenliches Standard-Fach als Startpunkt
 
@@ -2671,7 +2671,7 @@ async function showApp() {
     }
     if (tabAdmin) tabAdmin.style.display = '';
     // Standard-Fach wählt nur ein Super-Admin selbst - bei normalen Admins legt es ein
-    // Super-Admin in der Lerngruppen-Übersicht fest, deshalb bleibt das Feld dort verborgen.
+    // Super-Admin in der Tandem-Übersicht fest, deshalb bleibt das Feld dort verborgen.
     const barSubj = document.getElementById('bar-default-subject');
     if (barSubj && me.superAdmin) {
       barSubj.innerHTML = '<option value="">Fach: keine Präferenz</option>' + angebotsFaecher().map(s => `<option value="${s.id}">Fach: ${escHtml(s.name)}</option>`).join('');
@@ -2690,8 +2690,8 @@ async function showApp() {
     if (tabHome) tabHome.style.display = 'none';
   }
 
-  // Die Halbjahr-Übersicht gibt es fuer beide Rollen: Lernbegleitungen sehen die ganze
-  // Lerngruppe, Schueler:innen dieselbe Auswertung nur fuer sich selbst.
+  // Die Halbjahr-Übersicht gibt es fuer beide Rollen: Lernbegleitungen sehen das ganze
+  // Tandem, Schueler:innen dieselbe Auswertung nur fuer sich selbst.
   const tabHalbjahr = document.getElementById('tab-halbjahr');
   if (tabHalbjahr) {
     tabHalbjahr.style.display = '';
@@ -2924,7 +2924,7 @@ async function loadStudents() {
     const sr = await fetch('/api/admin/stats');
     if (sr.ok) {
       const stats = await sr.json();
-      document.getElementById('admin-title').textContent = `Lerngruppe ${stats.klasse} – Fortschritt`;
+      document.getElementById('admin-title').textContent = `Tandem ${stats.klasse} – Fortschritt`;
       const lt = ltMeta[0];
       const statCards = lt ? Object.entries(lt.groups).map(([g, grp]) => {
         const n = allStudents.filter(s => {
@@ -3322,7 +3322,7 @@ async function deleteAdminPeer(id, name) {
 }
 
 
-// ── Lerngruppen-Übersicht (Account-/Nutzerverwaltung, getrennt von der Lerntheken-Übersicht) ──
+// ── Tandem-Übersicht (Account-/Nutzerverwaltung, getrennt von der Lerntheken-Übersicht) ──
 async function loadKlasse() {
   loadAdminPeers();
   try {
@@ -3781,8 +3781,8 @@ async function loadTalkingSessions() {
 }
 
 // ── Mein Kalender ─────────────────────────────────────────────────────────────
-// Zeigt alle Mathe-Termine der Lerngruppe (Talks + Fachbüro + Deadlines, alles blau).
-// Lerngruppenweit sichtbar; Buchung/Antwort direkt aus der Tagesansicht. Quelle: /api/calendar.
+// Zeigt alle Mathe-Termine des Tandems (Talks + Fachbüro + Deadlines, alles blau).
+// Tandemweit sichtbar; Buchung/Antwort direkt aus der Tagesansicht. Quelle: /api/calendar.
 let calYear = null, calMonth = null; // aktuell angezeigter Monat (0-basiert)
 let calData = { slots: [], deadlines: [] };
 let calSelected = null; // 'YYYY-MM-DD'
@@ -3830,7 +3830,7 @@ async function loadCalendar() {
   // Hinweis war nicht erkennbar, wofür man welche Ansicht nimmt.
   const calSub = document.getElementById('cal-subtitle');
   if (calSub) calSub.textContent = (me && me.role === 'admin')
-    ? 'Alle Termine der Lerngruppe – hier legst du Fachbüro-Termine und Deadlines an.'
+    ? 'Alle Termine des Tandems – hier legst du Fachbüro-Termine und Deadlines an.'
     : 'Hier buchst du freie Termine und beantwortest Einladungen. Deinen Wochenüberblick findest du unter „Start".';
   renderAdminWeek(); renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
 }
@@ -4989,7 +4989,7 @@ function hjFmtDate(d) { return d ? new Date(d + 'T00:00:00').toLocaleDateString(
 function hjLtTitle(key) { const lt = ltMeta.find(l => l.key === key || (l.key && key && l.key.split('_v')[0] === String(key).split('_v')[0])); return lt ? lt.title : (key || '–'); }
 
 // Schüler:innen sehen dieselbe Halbjahr-Auswertung wie die Lernbegleitung, nur auf
-// den eigenen Account reduziert - also ohne Tabelle über die Lerngruppe.
+// den eigenen Account reduziert - also ohne Tabelle über das Tandem.
 function hjNurEigene() { return !!me && me.role !== 'admin'; }
 
 // Sortierung der Halbjahr-Tabellen. Gilt für ALLE Fach-Abschnitte gleichzeitig; jeder
@@ -5448,7 +5448,7 @@ async function loadTalkingAdmin() {
 }
 
 // Aggregiert Soll-Erfüllung je Halbjahr+Schüler:in aus den Slot-Daten (presenter/invitees per username,
-// da die Slot-API keine User-IDs für Presenter liefert - Usernamen sind je Lerngruppe eindeutig).
+// da die Slot-API keine User-IDs für Presenter liefert - Usernamen sind je Tandem eindeutig).
 function computeTalkingOverview(slots) {
   const byHalbjahr = {};
   const halbjahrOrder = [];

@@ -288,7 +288,7 @@ class LzkSendenDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-        ttk.Label(self, text=f"Lerngruppe {klasse} — {len(aenderungen)} Termin(e) "
+        ttk.Label(self, text=f"Tandem {klasse} — {len(aenderungen)} Termin(e) "
                              f"werden auf dem Server eingetragen:",
                   font=("", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 6))
 
@@ -428,7 +428,7 @@ class KursungAbgleichDialog(tk.Toplevel):
         self.grab_set()
 
         ttk.Label(self,
-                  text=f"Lerngruppe {klasse} · nur die Mathe-Kursung.\n"
+                  text=f"Tandem {klasse} · nur die Mathe-Kursung.\n"
                        "Englisch und Deutsch haben online ihre eigene und bleiben unberührt.",
                   justify="left", wraplength=520).pack(padx=12, pady=(12, 8), anchor="w")
 
@@ -658,7 +658,7 @@ class LerntheckenEinstellungenDialog(tk.Toplevel):
                   text=("Das Passwort wird nicht gespeichert, sondern bei jeder\n"
                         "Aktion abgefragt.\n\n"
                         "Das Konto muss Admin-Rechte haben. Es sieht immer genau\n"
-                        "seine eigene Lerngruppe -- neue Konten entstehen dort.")
+                        "sein eigenes Tandem -- neue Konten entstehen dort.")
                   ).grid(row=2, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 6))
 
         btns = ttk.Frame(self)
@@ -2026,7 +2026,7 @@ class App(tk.Tk):
         if not treffer:
             messagebox.showwarning(
                 "Ergebnisse abrufen",
-                f"Kein Alias passt zu einem Konto in Lerngruppe {klasse}.\n\n"
+                f"Kein Alias passt zu einem Konto in Tandem {klasse}.\n\n"
                 "Stimmen die Aliasse mit den Benutzernamen in der App überein?")
             return
 
@@ -2091,7 +2091,7 @@ class App(tk.Tk):
         zugeordnet = {t[3] for t in treffer}
         verwaist = sorted(set(daten.nach_account) - zugeordnet)
 
-        text = (f"Lerngruppe {klasse}, nur Mathe.\n"
+        text = (f"Tandem {klasse}, nur Mathe.\n"
                 f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n")
         if besuche:
             text += f"Fachbüro-Besuche übernommen: {besuche}.\n"
@@ -2229,7 +2229,7 @@ class App(tk.Tk):
             zeit = datetime.now().strftime("%H:%M")
             self.status_leiste.config(
                 text=f"{gesendet} LZK-Termin(e) um {zeit} Uhr an die "
-                     f"Lerntheken-App gesendet (Lerngruppe {klasse}).")
+                     f"Lerntheken-App gesendet (Tandem {klasse}).")
 
     def app_lzk_senden(self):
         """Traegt hier geaenderte LZK-Termine in der Lerntheken-App ein.
@@ -2281,7 +2281,7 @@ class App(tk.Tk):
 
         gesendet, fehler = self._lzk_uebertragen(client, aenderungen)
 
-        text = f"{gesendet} von {len(aenderungen)} Termin(en) eingetragen (Lerngruppe {klasse})."
+        text = f"{gesendet} von {len(aenderungen)} Termin(en) eingetragen (Tandem {klasse})."
         if fehler:
             text += ("\n\nNicht übernommen (" + str(len(fehler)) + "):\n"
                      + "\n".join(fehler[:8]))

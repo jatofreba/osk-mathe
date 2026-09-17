@@ -524,7 +524,7 @@ const requireSuperAdmin = async (req, res, next) => {
 };
 
 // Termine gehören der eingetragenen Lernbegleitung (talking_slots.admin_id). Normale Admins
-// dürfen nur ihre eigenen ändern/stornieren, Super-Admins alle der Lerngruppe.
+// dürfen nur ihre eigenen ändern/stornieren, Super-Admins alle des Tandems.
 async function mayManageSlot(req, slotId) {
   const r = await pool.query('SELECT admin_id FROM talking_slots WHERE id=$1 AND klasse=$2',
     [slotId, req.session.klasse]);
@@ -1144,7 +1144,7 @@ app.post('/api/admin/create-student', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin legt Mit-Admin für die eigene Lerngruppe an - muss beim ersten Login das (vom anlegenden
+// Admin legt Mit-Admin für das eigene Tandem an - muss beim ersten Login das (vom anlegenden
 // Admin vergebene, temporäre) Passwort selbst ändern, analog zu den initial geseedeten Accounts.
 app.post('/api/admin/create-admin', requireSuperAdmin, async (req, res) => {
   try {
@@ -1255,8 +1255,8 @@ app.post('/api/admin/reset-admin-password', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Admin löscht einen Mit-Admin der eigenen Lerngruppe - weder sich selbst noch den letzten
-// verbleibenden Admin-Account (sonst wäre die Lerngruppe ausgesperrt).
+// Admin löscht einen Mit-Admin des eigenen Tandems - weder sich selbst noch den letzten
+// verbleibenden Admin-Account (sonst wäre das Tandem ausgesperrt).
 app.delete('/api/admin/peer/:id', requireSuperAdmin, async (req, res) => {
   try {
     if (Number(req.params.id) === req.session.userId)
@@ -1266,7 +1266,7 @@ app.delete('/api/admin/peer/:id', requireSuperAdmin, async (req, res) => {
       [req.session.klasse, 'admin']
     );
     if (parseInt(countRes.rows[0].n) <= 1)
-      return res.status(400).json({ error: 'Letzter Admin-Account der Lerngruppe kann nicht gelöscht werden' });
+      return res.status(400).json({ error: 'Letzter Admin-Account des Tandems kann nicht gelöscht werden' });
     const r = await pool.query(
       'DELETE FROM users WHERE id=$1 AND klasse=$2 AND role=$3',
       [req.params.id, req.session.klasse, 'admin']
@@ -2598,7 +2598,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
 async function halbjahrOverview(klasse, onlyUid) {
   const uidFilter = onlyUid ? ' AND u.id = $2' : '';
   const params = onlyUid ? [klasse, onlyUid] : [klasse];
-  // In der Lerngruppen-Übersicht auf passiv gesetzte Schüler:innen tauchen in dieser Übersicht
+  // In der Tandem-Übersicht auf passiv gesetzte Schüler:innen tauchen in dieser Übersicht
   // gar nicht auf - genau wie in der Lerntheken-Übersicht (Nutzer-Vorgabe, mehrfach bestätigt).
   // NICHT entfernen: ohne diesen Filter stehen passive Personen wieder in allen Halbjahren.
   // Der Selbst-Aufruf (/api/my-halbjahr, onlyUid gesetzt) bleibt bewusst ausgenommen, sonst
@@ -2794,7 +2794,7 @@ app.get('/api/my-halbjahr', requireLogin, async (req, res) => {
 // ob noch frei oder schon gebucht. BEWUSST OHNE NAMEN - die Seite ist ohne Login
 // erreichbar, deshalb werden weder Presenter noch Eingeladene ausgegeben (nur der
 // Boolean `booked`). Beim Erweitern dieser Route unbedingt namensfrei halten.
-// Lerngruppe vorerst fest; ein Selector auf der Login-Seite kann diese Konstante
+// Tandem vorerst fest; ein Selector auf der Login-Seite kann diese Konstante
 // später durch einen validierten Query-Parameter ersetzen.
 const PUBLIC_WEEK_KLASSE = 'M3M4';
 // Montag der angezeigten Woche als 'YYYY-MM-DD'. Ab Samstag schon die KOMMENDE Woche -
@@ -2862,7 +2862,7 @@ app.get(['/montag','/dienstag','/mittwoch','/donnerstag','/freitag'], (req, res)
     if (!tagHtmlCache) tagHtmlCache = fs.readFileSync(path.join(__dirname, 'public', 'tag.html'), 'utf8');
     const key = req.path.replace(/^\//, '').toLowerCase();
     const label = TAG_LABELS[key] || 'Tagesübersicht';
-    const titel = `${label} · Lerngruppe ${PUBLIC_WEEK_KLASSE}`;
+    const titel = `${label} · Tandem ${PUBLIC_WEEK_KLASSE}`;
     const beschreibung = `Talks und Fachbüro-Termine am ${label} der laufenden Woche – mit freien und schon gebuchten Terminen.`;
     // Host stammt aus dem Request-Header, deshalb wie alle Werte escaped.
     const url = `${req.protocol}://${req.get('host') || ''}${req.path}`;

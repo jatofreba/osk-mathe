@@ -154,7 +154,7 @@ function render(data) {
 
   document.getElementById('day-name').innerHTML =
     DAY_LABELS[idx] + '<span>' + pad(d.getDate()) + '.' + pad(d.getMonth()+1) + '.</span>';
-  document.getElementById('day-meta').textContent = data.klasse ? 'Lerngruppe ' + data.klasse : '';
+  document.getElementById('day-meta').textContent = data.klasse ? 'Tandem ' + data.klasse : '';
   document.title = DAY_LABELS[idx] + ' ' + fmtDate(d);
 
   var slots = (data.slots || []).filter(function(s) { return s.datum === ds; });

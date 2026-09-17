@@ -120,8 +120,8 @@ Namen ändern sich.
 - **Lerntheken-App → Aliasse exportieren…**: Textdatei `alias,passwort` zum
   Einfügen im Bulk-Dialog der Weboberfläche.
 
-Ein Admin-Konto sieht immer **genau seine Lerngruppe**, und neue Konten
-entstehen dort. Für eine andere Lerngruppe in den Einstellungen das passende
+Ein Admin-Konto sieht immer **genau sein Tandem**, und neue Konten
+entstehen dort. Für ein anderes Tandem in den Einstellungen das passende
 Admin-Konto eintragen.
 
 Alle neu angelegten Konten bekommen dasselbe Start-Passwort. Wähle eins, das

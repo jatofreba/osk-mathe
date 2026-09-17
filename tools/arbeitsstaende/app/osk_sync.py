@@ -11,8 +11,8 @@ Ausgelesen wird je Schüler:in, Halbjahr und Fach:
   - bestandene LZK samt Kleeblättern
 
 Der Zugriff läuft über einen ganz normalen Admin-Login der App (HTTPS), nicht
-über die Datenbank. Ein Admin-Konto sieht immer genau SEINE Lerngruppe -- für
-mehrere Lerngruppen entsprechend mehrere Konten in der Konfiguration angeben.
+über die Datenbank. Ein Admin-Konto sieht immer genau SEIN Tandem -- für
+mehrere Tandems entsprechend mehrere Konten in der Konfiguration angeben.
 
 Umgekehrt laesst sich aus der Excel-Liste die Kontenliste fuer den Bulk-Import
 erzeugen (--bulk-liste). Angelegt werden die Konten in der Weboberflaeche.
@@ -228,7 +228,7 @@ class AppClient:
 # ══ Daten aus der App aufbereiten ═════════════════════════════════════════════
 
 class AppDaten:
-    """Ergebnisse aller abgefragten Lerngruppen, nach Accountname sortiert."""
+    """Ergebnisse aller abgefragten Tandems, nach Accountname sortiert."""
 
     def __init__(self):
         # account -> {"klasse": str, "byHalbjahr": {hj: bucket}}
@@ -250,11 +250,11 @@ class AppDaten:
             if not account:
                 continue
             if account in self.nach_account:
-                # Gleicher Accountname in zwei Lerngruppen -- das darf nicht
+                # Gleicher Accountname in zwei Tandems -- das darf nicht
                 # passieren (Benutzernamen sind appweit eindeutig), wäre aber
                 # eine stille Fehlerquelle. Deshalb laut melden.
                 raise SystemExit(
-                    f"Account '{account}' kommt in mehreren Lerngruppen vor "
+                    f"Account '{account}' kommt in mehreren Tandems vor "
                     f"({self.nach_account[account]['klasse']} und {klasse}). "
                     f"Bitte in der App prüfen.")
             self.nach_account[account] = {
@@ -270,7 +270,7 @@ class AppDaten:
 
 
 def hole_daten(config: dict) -> Tuple[AppDaten, Dict[str, AppClient]]:
-    """Liefert die Auswertung und die angemeldeten Sitzungen je Lerngruppe.
+    """Liefert die Auswertung und die angemeldeten Sitzungen je Tandem.
 
     Die Sitzungen werden für das Anlegen von Konten weiterverwendet -- so muss
     man sich nicht zweimal anmelden.
@@ -289,7 +289,7 @@ def hole_daten(config: dict) -> Tuple[AppDaten, Dict[str, AppClient]]:
         klasse = me.get("klasse", "?")
         payload = client.halbjahr_uebersicht()
         anzahl = len(payload.get("students", []))
-        print(f"  {benutzer}: Lerngruppe {klasse}, {anzahl} Schüler:innen")
+        print(f"  {benutzer}: Tandem {klasse}, {anzahl} Schüler:innen")
         daten.uebernehmen(klasse, payload)
         sitzungen[klasse] = client
     daten.sortiere()
@@ -412,7 +412,7 @@ def schreibe_app_daten(wb, treffer, daten: AppDaten):
         del wb[BLATT_DATEN]
     ws = wb.create_sheet(BLATT_DATEN)
 
-    kopf = ["Vorname", "Nachname", "Account", "Lerngruppe", "Halbjahr"]
+    kopf = ["Vorname", "Nachname", "Account", "Tandem", "Halbjahr"]
     for fach in daten.faecher:
         kurz = fach["name"]
         kopf += [f"{kurz}: Talks gehalten", f"{kurz}: Talks zugehört",
@@ -569,7 +569,7 @@ def main(argv=None):
         print()
         print("App-Konten ohne Personenblatt:")
         for acc in unbenutzt:
-            print(f"  {acc} (Lerngruppe {daten.nach_account[acc]['klasse']})")
+            print(f"  {acc} (Tandem {daten.nach_account[acc]['klasse']})")
 
     # ── Kontenliste erzeugen (Excel -> Datei) ────────────────────────────────
     # Dieses Werkzeug schreibt BEWUSST nicht auf dem Server. Es erzeugt nur die
