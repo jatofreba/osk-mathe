@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Organisieren Selbst Können</title>
+<title>OSKlar – Deine Termine im Überblick</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ── MD3 Reset ───────────────────────────────────────────────────────────── */
@@ -359,6 +359,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+/* Der Untertitel tritt zurueck und faellt auf schmalen Schirmen ganz weg - der Name
+   allein traegt die Kopfzeile, der Zusatz ist Beiwerk. */
+.topbar-claim{color:var(--md-on-surface-variant);font-weight:400;}
+@media(max-width:700px){.topbar-claim{display:none;}}
 .topbar-user{
   font-size:11px;
   font-weight:500;
@@ -905,8 +909,8 @@ textarea.form-input{
       <div class="login-brand">
         <span class="login-logo">📐</span>
         <div class="login-brand-text">
-          <div class="login-title"><strong>O</strong>rganisieren <strong>S</strong>elbst <strong>K</strong>önnen</div>
-          <div class="login-sub">Mittelstufe</div>
+          <div class="login-title"><strong>OSK</strong>lar</div>
+          <div class="login-sub">Deine Termine im Überblick</div>
         </div>
       </div>
       <div class="login-form-compact">
@@ -937,7 +941,7 @@ textarea.form-input{
 <div id="app">
 
   <div class="topbar">
-    <div class="topbar-title">📐 <strong>O</strong>rganisieren <strong>S</strong>elbst <strong>K</strong>önnen</div>
+    <div class="topbar-title">📐 <strong>OSK</strong>lar <span class="topbar-claim">· Deine Termine im Überblick</span></div>
     <span class="topbar-user" id="bar-user"></span>
     <span class="pill pill-blue" id="bar-klasse"></span>
     <span class="pill" id="bar-kurs" style="display:none"></span>
