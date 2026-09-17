@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>OSKlar – Deine Termine im Überblick</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/img/osklar-marke-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="/img/osklar-marke-64.png">
+<link rel="apple-touch-icon" href="/img/osklar-marke-180.png">
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ── MD3 Reset ───────────────────────────────────────────────────────────── */
@@ -96,9 +99,11 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   box-shadow:var(--md-elevation-3);
 }
 .login-brand{display:flex;align-items:center;gap:12px;}
-.login-brand .login-logo{font-size:28px;margin-bottom:0;}
-.login-brand-text .login-title{font-size:17px;margin-bottom:1px;}
-.login-brand-text .login-sub{font-size:12px;margin-bottom:0;}
+/* Das Logo traegt Wortmarke und Claim schon in sich - daneben stand vorher beides
+   nochmal als Text. Hoehe statt Breite gesetzt, damit es in der Kopfzeile nicht
+   umspringt; auf schmalen Schirmen etwas kleiner. */
+.login-logo-img{height:64px;width:auto;display:block;}
+@media(max-width:700px){.login-logo-img{height:46px;}}
 .login-form-compact{
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   flex:1 1 320px;justify-content:flex-end;
@@ -273,20 +278,6 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   .login-form-compact{justify-content:stretch;}
   .login-form-compact .form-input,.login-form-compact .btn-primary{flex:1 1 100%;}
 }
-.login-logo{font-size:36px;margin-bottom:12px;}
-.login-title{
-  font-size:24px;       /* Headline Small */
-  font-weight:400;
-  letter-spacing:0;
-  color:var(--md-on-surface);
-  margin-bottom:4px;
-}
-.login-sub{
-  font-size:14px;       /* Body Medium */
-  color:var(--md-on-surface-variant);
-  margin-bottom:32px;
-  letter-spacing:.25px;
-}
 .form-group{margin-bottom:20px;}
 .form-label{
   display:block;
@@ -362,6 +353,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 /* Der Untertitel tritt zurueck und faellt auf schmalen Schirmen ganz weg - der Name
    allein traegt die Kopfzeile, der Zusatz ist Beiwerk. */
 .topbar-claim{color:var(--md-on-surface-variant);font-weight:400;}
+/* In der Topbar nur die Bildmarke: der Schriftzug steht daneben als echter Text,
+   damit er in jeder Groesse scharf bleibt und vorgelesen werden kann. */
+.topbar-mark{height:26px;width:26px;vertical-align:-6px;border-radius:5px;}
 @media(max-width:700px){.topbar-claim{display:none;}}
 .topbar-user{
   font-size:11px;
@@ -907,11 +901,8 @@ textarea.form-input{
   <div class="login-outer">
     <div class="login-topbar">
       <div class="login-brand">
-        <span class="login-logo">📐</span>
-        <div class="login-brand-text">
-          <div class="login-title"><strong>OSK</strong>lar</div>
-          <div class="login-sub">Deine Termine im Überblick</div>
-        </div>
+        <img class="login-logo-img" src="/img/osklar-logo.png"
+             alt="OSKlar – Deine Termine im Überblick" width="440" height="194">
       </div>
       <div class="login-form-compact">
         <input class="form-input" id="inp-user" autocomplete="username" placeholder="Benutzername" aria-label="Benutzername">
@@ -941,7 +932,7 @@ textarea.form-input{
 <div id="app">
 
   <div class="topbar">
-    <div class="topbar-title">📐 <strong>OSK</strong>lar <span class="topbar-claim">· Deine Termine im Überblick</span></div>
+    <div class="topbar-title"><img class="topbar-mark" src="/img/osklar-marke-64.png" alt=""> <strong>OSK</strong>lar <span class="topbar-claim">· Deine Termine im Überblick</span></div>
     <span class="topbar-user" id="bar-user"></span>
     <span class="pill pill-blue" id="bar-klasse"></span>
     <span class="pill" id="bar-kurs" style="display:none"></span>
