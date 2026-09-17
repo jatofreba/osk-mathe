@@ -5146,14 +5146,14 @@ function hjDetailHtml(s, subjectKey) {
 
   const subjList = subjectKey ? orderedSubjects().filter(x => x.key === subjectKey) : orderedSubjects();
   // Aufklappbare Rubrik. Bewusst natives <details>: kein eigenes JavaScript, von Haus
-  // aus mit Tastatur bedienbar. Was Einträge hat, ist gleich offen; leere Rubriken
-  // starten zugeklappt - dreimal "Keine ... in diesem Halbjahr" untereinander war nur
-  // Rauschen und schob das Wesentliche nach unten.
+  // aus mit Tastatur bedienbar. ALLE Rubriken starten zugeklappt (Nutzer-Vorgabe) - die
+  // Zahl in der Kopfzeile sagt schon, ob sich das Aufklappen lohnt, und bei vier Fächern
+  // mit je bis zu vier Rubriken ist offen die deutlich unübersichtlichere Voreinstellung.
   // anzahl weicht nur bei den Stationen von der Listenlänge ab (gezählt wird dort der
   // Gesamtstand, aufgelistet nur, was mit Datum erfasst ist).
   const rubrik = (titel, items, render, leer, anzahl) => {
     const n = anzahl != null ? anzahl : (items || []).length;
-    return `<details class="hj-rubrik"${n ? ' open' : ''}>
+    return `<details class="hj-rubrik">
       <summary class="admin-title" style="font-size:12.5px;color:var(--md-on-surface-variant);">${titel} (${n})</summary>
       ${list(items, render, leer)}
     </details>`;
