@@ -32,7 +32,8 @@ if [ ! -d "$ZIEL" ]; then
 fi
 
 # osk_sync.py MUSS mit: arbeitsstaende_app.py importiert es beim Start.
-DATEIEN="arbeitsstaende_app.py arbeitsstaende_data.py osk_sync.py test_arbeitsstaende_data.py LIES_MICH.md"
+# Die beiden PNG sind das Fenstersymbol - fehlen sie, startet die App trotzdem.
+DATEIEN="arbeitsstaende_app.py arbeitsstaende_data.py osk_sync.py test_arbeitsstaende_data.py LIES_MICH.md osklar-marke-32.png osklar-marke-180.png"
 
 GEAENDERT=0
 for f in $DATEIEN; do

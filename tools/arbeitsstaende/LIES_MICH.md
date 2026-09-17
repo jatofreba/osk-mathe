@@ -20,6 +20,7 @@ app/
   arbeitsstaende_data.py      Datenschicht (Arbeitsdatei .json, Excel-Import/-Export)
   osk_sync.py                 Zugriff auf die Lerntheken-App -- auch als CLI nutzbar
   test_arbeitsstaende_data.py Tests der Datenschicht
+  osklar-marke-*.png          Fenstersymbol (OSKlar-Bildmarke, 32 und 180 px)
 ```
 
 Voraussetzung wie bisher: `pip3 install openpyxl`.

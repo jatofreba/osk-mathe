@@ -687,6 +687,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITEL)
+        self._fenstersymbol_setzen()
         self.geometry("1450x700")
         self.minsize(950, 480)
 
@@ -698,6 +699,34 @@ class App(tk.Tk):
         self._layout_aufbauen()
         self._aktualisiere_titel()
         self._autosave_job = self.after(AUTOSAVE_INTERVALL_MS, self._autosave_tick)
+
+    # ------------------------------------------------------------------
+    def _fenstersymbol_setzen(self):
+        """OSKlar-Bildmarke als Fenster- und Taskleistensymbol.
+
+        Fehlt die Bilddatei -- etwa weil nur die .py-Dateien irgendwohin kopiert
+        wurden --, startet die Anwendung trotzdem: das Symbol ist Beiwerk, kein
+        Betriebsmittel. Deshalb hier ueberall stillschweigend nachgeben.
+        """
+        ordner = os.path.dirname(os.path.abspath(__file__))
+        bilder = []
+        for name in ("osklar-marke-32.png", "osklar-marke-180.png"):
+            pfad = os.path.join(ordner, name)
+            if not os.path.exists(pfad):
+                continue
+            try:
+                bilder.append(tk.PhotoImage(file=pfad))
+            except tk.TclError:
+                pass                      # zu alte Tk-Version ohne PNG-Unterstuetzung
+        if not bilder:
+            return
+        # Referenz festhalten: tkinter gibt Bilder sonst frei und das Symbol
+        # verschwindet wieder, sobald der Muell eingesammelt wird.
+        self._symbol_bilder = bilder
+        try:
+            self.iconphoto(True, *bilder)
+        except tk.TclError:
+            pass
 
     # ------------------------------------------------------------------
     def _menu_aufbauen(self):
