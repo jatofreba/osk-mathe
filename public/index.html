@@ -4973,7 +4973,9 @@ async function loadHalbjahr() {
       const r = await fetch('/api/my-halbjahr');
       const d = r.ok ? await r.json() : { halbjahre: [], byHalbjahr: {} };
       hjData = { halbjahre: d.halbjahre || [],
-                 students: [{ id: me.userId, username: me.username, byHalbjahr: d.byHalbjahr || {} }] };
+                 students: [{ id: me.userId, username: me.username,
+                              subjectKurs: d.subjectKurs || me.subjectKurs || {},
+                              byHalbjahr: d.byHalbjahr || {} }] };
     } else {
       const r = await fetch('/api/admin/halbjahr-uebersicht');
       hjData = r.ok ? await r.json() : { halbjahre: [], students: [] };
@@ -5153,6 +5155,16 @@ function hjDetailHtml(s, subjectKey) {
     </details>`;
   };
 
+  // Kursung neben dem Fachnamen: "G-Kurs und noch nichts gemacht" liest sich anders
+  // als dieselbe Auswertung im E-Kurs. "Nur zugewiesen"-Fächer (Lernberatung) sind
+  // nicht gekurst; fehlt ein Wert, steht auch nichts da statt eines geratenen 'E'.
+  const kursMarke = (subj) => {
+    if (subj.nurZugewiesen) return '';
+    const k = (s.subjectKurs || {})[subj.key];
+    if (!k) return '';
+    return `<span class="pill ${k === 'G' ? 'pill-yellow' : 'pill-green'}" style="font-size:10px;">${escHtml(k)}-Kurs</span>`;
+  };
+
   const subjSections = subjList.map(subj => {
     const sd = (b.bySubject || {})[subj.key] || { talkDetails: [], inputDetails: [] };
     const isMathe = subj.key === 'mathe';
@@ -5160,6 +5172,7 @@ function hjDetailHtml(s, subjectKey) {
       <div style="display:flex;align-items:center;gap:6px;margin:16px 0 4px;">
         <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
         <span class="admin-title" style="font-size:14px;">${escHtml(subj.name)}</span>
+        ${kursMarke(subj)}
       </div>
       ${rubrik('🎤👂 Talks', sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
       ${rubrik('📘 FaBü-Teilnahmen', sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}

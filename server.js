@@ -2603,9 +2603,15 @@ async function halbjahrOverview(klasse, onlyUid) {
   // NICHT entfernen: ohne diesen Filter stehen passive Personen wieder in allen Halbjahren.
   // Der Selbst-Aufruf (/api/my-halbjahr, onlyUid gesetzt) bleibt bewusst ausgenommen, sonst
   // wäre die eigene Karte nach dem Passiv-Setzen leer.
-  const aktivFilter = onlyUid ? '' : ' AND aktiv=true';
+  const aktivFilter = onlyUid ? '' : ' AND u.aktiv=true';
   const [students, presented, attended, lzkRows, stationRows, subjectsRows] = await Promise.all([
-    pool.query(`SELECT id, username, created_at, passiv_seit FROM users WHERE role='student' AND klasse=$1${aktivFilter}${onlyUid ? ' AND id=$2' : ''} ORDER BY username`, params),
+    // Kursung je Fach gleich mitnehmen: sie gehört zur Einordnung einer Auswertung
+    // ("G-Kurs und noch nichts gemacht" liest sich anders als "E-Kurs").
+    pool.query(`SELECT u.id, u.username, u.created_at, u.passiv_seit,
+                       (SELECT json_object_agg(s.key, usk.kurs)
+                        FROM user_subject_kurs usk JOIN subjects s ON s.id = usk.subject_id
+                        WHERE usk.user_id = u.id) AS subject_kurs
+                FROM users u WHERE u.role='student' AND u.klasse=$1${aktivFilter}${onlyUid ? ' AND u.id=$2' : ''} ORDER BY u.username`, params),
     pool.query(`
       SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -2763,6 +2769,7 @@ async function halbjahrOverview(klasse, onlyUid) {
       id: s.id, username: s.username,
       firstHalbjahr: halbjahrForDate(s.created_at),
       lastHalbjahr: s.passiv_seit ? halbjahrForDate(s.passiv_seit) : null,
+      subjectKurs: s.subject_kurs || {},
       byHalbjahr: byUser[s.id] || {},
     })),
   };
@@ -2776,8 +2783,9 @@ app.get('/api/admin/halbjahr-uebersicht', requireAdmin, async (req, res) => {
 app.get('/api/my-halbjahr', requireLogin, async (req, res) => {
   try {
     const data = await halbjahrOverview(req.session.klasse, req.session.userId);
-    const meRow = data.students[0] || { byHalbjahr: {} };
-    res.json({ halbjahre: data.halbjahre, byHalbjahr: meRow.byHalbjahr });
+    const meRow = data.students[0] || { byHalbjahr: {}, subjectKurs: {} };
+    res.json({ halbjahre: data.halbjahre, byHalbjahr: meRow.byHalbjahr,
+               subjectKurs: meRow.subjectKurs || {} });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
