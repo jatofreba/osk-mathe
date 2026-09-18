@@ -716,8 +716,8 @@ class App(tk.Tk):
                 continue
             try:
                 bilder.append(tk.PhotoImage(file=pfad))
-            except tk.TclError:
-                pass                      # zu alte Tk-Version ohne PNG-Unterstuetzung
+            except Exception:
+                pass                      # z.B. zu alte Tk-Version ohne PNG-Unterstuetzung
         if not bilder:
             return
         # Referenz festhalten: tkinter gibt Bilder sonst frei und das Symbol
@@ -725,7 +725,10 @@ class App(tk.Tk):
         self._symbol_bilder = bilder
         try:
             self.iconphoto(True, *bilder)
-        except tk.TclError:
+        except Exception:
+            # Bewusst JEDER Fehler, nicht nur TclError: iconphoto verhaelt sich je
+            # nach Plattform und Tk-Version unterschiedlich, und ein Fenstersymbol
+            # darf den Start der Anwendung unter keinen Umstaenden verhindern.
             pass
 
     # ------------------------------------------------------------------
