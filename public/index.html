@@ -141,11 +141,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-dayhead span{font-weight:500;font-size:10px;letter-spacing:0;}
 .lw-blockhead{
   display:flex;flex-direction:column;justify-content:center;gap:1px;
-  padding:4px 10px 4px 8px;white-space:nowrap;
-  border-left:3px solid var(--md-outline-variant);border-radius:3px;
+  padding:4px 10px 4px 2px;white-space:nowrap;
   font-size:11.5px;font-weight:700;color:var(--md-on-surface);
 }
-.lw-blockhead.lw-zeile-b{border-left-color:var(--md-on-surface-variant);}
 .lw-blockhead span{font-weight:500;font-size:10px;color:var(--md-on-surface-variant);}
 .lw-cell{
   min-height:46px;padding:4px;
@@ -2394,6 +2392,13 @@ function mwChip(s) {
 //
 // Nie gebuendelt werden eigene, eingeladene, angefragte und kollidierende Termine:
 // nach denen sucht man, die muessen ohne Klick sichtbar bleiben.
+// Zwischen zwei Terminen derselben Reihe liegt oft eine kurze Pause (08:45-09:05,
+// dann 09:10-09:30). Bis zu dieser Luecke gehoeren sie noch zusammen; die Kopfkachel
+// nennt Zeitraum UND Anzahl, verspricht also keinen durchgehenden Betrieb.
+// Groesser darf die Toleranz nicht werden: die Pause zwischen den Bloecken betraegt
+// 30 Minuten, die soll keine Serie ueberspannen.
+const LW_SERIE_LUECKE = 20;
+
 function lwSerien(liste, buendelbar) {
   const schluessel = (s) => [
     s.subjectId ?? s.subjectName ?? '', s.typ, s.teacherUsername || '', s.ort || '',
@@ -2415,9 +2420,11 @@ function lwSerien(liste, buendelbar) {
       return;
     }
     const offen = ketten.get(k);
-    // Nur luecklos aneinandergrenzende Termine: sonst stuende ueber der Kachel ein
-    // Zeitraum, in dem gar nicht durchgehend etwas angeboten wird.
-    if (offen && offen.ende === start) {
+    // Anschliessend oder mit kurzer Pause. Ein Termin derselben Reihe, der NICHT
+    // gebuendelt werden darf (fremde Buchung in der Admin-Sicht, eigener Termin in
+    // der Schueler:innen-Sicht), hat die Kette vorher schon aufgebrochen - die Luecke
+    // kann also nicht ueber etwas hinweggehen, das daneben einzeln steht.
+    if (offen && start >= offen.ende && start - offen.ende <= LW_SERIE_LUECKE) {
       offen.slots.push(s);
       offen.ende = ende;
       return;
@@ -2450,7 +2457,8 @@ function lwSerieChip(g, opt) {
   const zeit = `${lwFmtMin(g.start)}–${lwFmtMin(g.ende)}`;
   const themaText = lwThemaOhneFrei((s.booked ? s.thema : s.slotThema) || '');
   const thema = themaText ? ` · „${escHtml(themaText)}“` : '';
-  const anzahl = `${g.slots.length} × ${dauer} Min`;
+  const gleichLang = g.slots.every(x => (parseInt(x.dauer, 10) || 45) === dauer);
+  const anzahl = gleichLang ? `${g.slots.length} × ${dauer} Min` : `${g.slots.length} Termine`;
   const stand = frei ? `${frei} frei` : 'alle vergeben';
   const meta = [escHtml(opt.ort ? opt.ort(s) : lwOrtAbweichend(s)),
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : ''].filter(Boolean).join(' · ');
