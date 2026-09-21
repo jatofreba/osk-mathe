@@ -261,6 +261,19 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 /* Zusatzzeile (Ort · Lernbegleitung): kleiner und ruhiger, damit die Kachel nicht
    so dicht wirkt. Details, die nicht in die Kachel passen, stehen im Tooltip. */
 .lw-chip-sub{font-size:9.5px;color:var(--md-on-surface-variant);margin-top:1px;}
+/* Zusammengefasste Terminserie: Kopfkachel plus eingerueckte Einzeltermine. Das
+   [hidden] braucht die eigene Regel, weil display:flex sonst gewinnt. */
+.mw-serie{display:flex;flex-direction:column;gap:3px;}
+.mw-serie-kinder{display:flex;flex-direction:column;gap:3px;
+  margin-left:3px;padding-left:6px;border-left:2px solid var(--md-outline-variant);}
+.mw-serie-kinder[hidden]{display:none;}
+.mw-serie-pfeil{margin-left:4px;color:var(--md-on-surface-variant);}
+.mw-serie-knopf{
+  border:1px solid var(--md-outline-variant);background:var(--md-surface);
+  color:var(--md-on-surface-variant);border-radius:999px;
+  padding:4px 12px;font-size:11.5px;font-weight:600;cursor:pointer;
+}
+.mw-serie-knopf:hover{background:var(--md-surface-container-low);}
 .lw-chip.mw-mine{border-left-width:4px;box-shadow:inset 0 0 0 1.5px currentColor;}
 .lw-chip.mw-invited,.lw-chip.mw-requested{border-left-width:4px;background:#fef9c3;border-left-color:#ca8a04;}
 .lw-chip.mw-invited .mw-chip-status,.lw-chip.mw-requested .mw-chip-status{color:#854d0e;}
@@ -1802,9 +1815,11 @@ const LW_DAY_NAMES = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
 // seine Startzeit fällt; alles andere (Randzeiten, Wochenende, Termine ohne Uhrzeit)
 // wandert in die "Weitere Termine"-Liste unter dem Raster, statt still zu verschwinden.
 const LW_BLOCKS = [
-  { label: '1. Block',    von: '08:45', bis: '10:15' },
-  { label: '2. Block',    von: '10:45', bis: '12:15' },
-  { label: 'Mittagsband', von: '12:30', bis: '13:15' },
+  { label: '1. Block (1/2)', von: '08:45', bis: '09:30' },
+  { label: '1. Block (2/2)', von: '09:30', bis: '10:15' },
+  { label: '2. Block (1/2)', von: '10:45', bis: '11:30' },
+  { label: '2. Block (2/2)', von: '11:30', bis: '12:15' },
+  { label: 'Mittagsband',    von: '12:30', bis: '13:15' },
 ];
 
 function lwMin(hhmm) {
@@ -1856,8 +1871,9 @@ function lwChip(s) {
   const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
   // Gebucht: Thema statt "gebucht" zeigen (kein Personenbezug, nur der Inhalt) - fällt auf
   // "gebucht" zurück, falls (theoretisch) kein Thema gesetzt ist.
+  const freiThema = lwThemaOhneFrei(s.slotThema);
   const metaText = s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht')
-                           : (s.slotThema ? escHtml(s.slotThema) + ' · frei' : 'frei');
+                           : (freiThema ? escHtml(freiThema) + ' · frei' : 'frei');
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
@@ -2253,6 +2269,27 @@ async function showHome() {
 // Eigene Termine + noch freie Angebote der laufenden Woche im selben Blockraster
 // wie die Login-Übersicht. Quelle ist /api/calendar (klassenweit, mit Markierung
 // der eigenen Rolle) - kein eigener Endpunkt nötig.
+// "frei (Vorrang: Bausteinvergabe)" neben dem Status "frei" liest sich wie ein
+// Stotterer. Das fuehrende "frei" faellt deshalb weg, der Rest bleibt stehen -- er
+// ist der eigentliche Hinweis. Bleibt nichts uebrig, sagt der Status allein genug.
+function lwThemaOhneFrei(text) {
+  let t = String(text || '').trim();
+  const ohne = t.replace(/^frei\b[\s:.,·-]*/i, '').trim();
+  if (ohne === t) return t;
+  const geklammert = ohne.match(/^\((.*)\)$/);
+  return (geklammert ? geklammert[1] : ohne).trim();
+}
+
+// Der Ort steht nur da, wenn er vom Standardort des Fachs abweicht: "Deutsch-Fachbuero"
+// an einem Deutsch-Termin sagt nichts, was das farbige D nicht schon sagt -- "Turin (EF)"
+// dagegen schon.
+function lwOrtAbweichend(s) {
+  const ort = String(s.ort || '').trim();
+  if (!ort) return '';
+  const standard = String((subjectById(s.subjectId) || {}).defaultOrt || '').trim();
+  return ort.toLowerCase() === standard.toLowerCase() ? '' : ort;
+}
+
 function mwState(s) {
   if (s.mineAsPresenter || (s.mineAsListener && s.myInvitationStatus === 'angenommen')) return 'mine';
   if (s.mineAsListener && s.myInvitationStatus === 'eingeladen') return 'invited';
@@ -2289,7 +2326,10 @@ function mwChip(s) {
   // Das Thema steht auch an einem noch FREIEN Fachbüro: die Lernbegleitung schreibt es
   // beim Anlegen aus, und ohne Titel kann niemand einschaetzen, ob sich das Angebot fuer
   // ihn lohnt. Ist gebucht, gilt das Thema der Buchung, sonst das ausgeschriebene.
-  const themaText = (s.booked ? s.thema : s.slotThema) || '';
+  // Am freien Termin steht das ausgeschriebene Thema, am gebuchten das der Buchung.
+  // Beim freien faellt ein fuehrendes "frei" weg (der Status sagt es schon).
+  const themaRoh = (s.booked ? s.thema : s.slotThema) || '';
+  const themaText = s.booked ? themaRoh : lwThemaOhneFrei(themaRoh);
   const full = [subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
     themaText ? 'Thema: ' + themaText : '', label]
@@ -2302,7 +2342,7 @@ function mwChip(s) {
   // ist das alles, was man braucht, um sich fuer ein Angebot zu entscheiden.
   const thema = themaText ? ` · „${escHtml(themaText)}“` : '';
   const meta = [
-    s.ort ? escHtml(s.ort) : '',
+    escHtml(lwOrtAbweichend(s)),
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean).join(' · ');
 
@@ -2314,6 +2354,131 @@ function mwChip(s) {
     <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
+}
+
+// ── Terminserien zusammenfassen ───────────────────────────────────────────────
+// Eine Lernbegleitung schreibt ihr Fachbuero oft als Kette von Viertelstunden aus.
+// Untereinander sind das acht fast gleiche Kacheln, die den Blick auf alles andere
+// verstellen. Aufeinanderfolgende Termine mit gleichem Fach, gleicher Art, gleicher
+// Lernbegleitung und gleichem Thema werden deshalb zu EINER Kachel.
+//
+// Nie gebuendelt werden eigene, eingeladene, angefragte und kollidierende Termine:
+// nach denen sucht man, die muessen ohne Klick sichtbar bleiben.
+function mwSerien(liste) {
+  const schluessel = (s) => [
+    s.subjectId, s.typ, s.teacherUsername || '', s.ort || '',
+    ((s.booked ? s.thema : s.slotThema) || '').trim().toLowerCase(),
+  ].join('|');
+  const gruppen = [];
+  // Je Schluessel die zuletzt offene Kette merken - NICHT nur den direkten Vorgaenger
+  // in der Liste: die ist nach Uhrzeit sortiert, ein Termin eines anderen Fachs steht
+  // also oft mitten zwischen zwei Viertelstunden derselben Reihe.
+  const ketten = new Map();
+  (liste || []).forEach(s => {
+    const zustand = mwState(s);
+    const buendelbar = zustand === 'free' || zustand === 'taken';
+    const start = lwMin(s.uhrzeit);
+    const ende = start === null ? null : start + (parseInt(s.dauer, 10) || 45);
+    const k = schluessel(s);
+    if (!buendelbar || start === null) {
+      gruppen.push({ slots: [s], start });
+      ketten.delete(k);          // eigener Termin mittendrin bricht die Reihe auf
+      return;
+    }
+    const offen = ketten.get(k);
+    // Nur luecklos aneinandergrenzende Termine: sonst stuende ueber der Kachel ein
+    // Zeitraum, in dem gar nicht durchgehend etwas angeboten wird.
+    if (offen && offen.ende === start) {
+      offen.slots.push(s);
+      offen.ende = ende;
+      return;
+    }
+    const neu = { key: k, slots: [s], start, ende };
+    gruppen.push(neu);
+    ketten.set(k, neu);
+  });
+  gruppen.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  return gruppen;
+}
+
+function lwFmtMin(min) {
+  if (min === null || min === undefined) return '';
+  return `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+}
+
+function mwSerieChip(g) {
+  const s = g.slots[0];
+  const subj = subjectById(s.subjectId);
+  const color = subj.color || '#94a3b8';
+  const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
+  const typLabel = s.typ === 'input' ? 'Fachbüro' : 'Talk';
+  const frei = g.slots.filter(x => mwState(x) === 'free').length;
+  const dauer = parseInt(s.dauer, 10) || 45;
+  const zeit = `${lwFmtMin(g.start)}–${lwFmtMin(g.ende)}`;
+  const themaText = lwThemaOhneFrei((s.booked ? s.thema : s.slotThema) || '');
+  const thema = themaText ? ` · „${escHtml(themaText)}“` : '';
+  const anzahl = `${g.slots.length} × ${dauer} Min`;
+  const stand = frei ? `${frei} frei` : 'alle vergeben';
+  const meta = [escHtml(lwOrtAbweichend(s)),
+    s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : ''].filter(Boolean).join(' · ');
+  const full = [subj.name, typLabel, zeit, anzahl, stand, s.ort,
+    s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
+    themaText ? 'Thema: ' + themaText : '', 'antippen zeigt die einzelnen Termine']
+    .filter(Boolean).join(' · ');
+  const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
+  return `<div class="mw-serie">
+    <div class="lw-chip mw-serie-kopf" style="border-left-color:${color};color:${color};" ${desc}
+      role="button" tabindex="0" aria-expanded="false" onclick="mwSerieToggle(this)"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSerieToggle(this);}">
+      <div class="lw-chip-time" style="color:var(--md-on-surface);">
+        <span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span>
+        <span style="color:${color};">${lwIcon(s.typ)}</span>${zeit}</div>
+      <div class="lw-chip-meta"><span class="mw-chip-status">${anzahl} · ${stand}</span>${thema}<span class="mw-serie-pfeil">▸</span></div>
+      ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
+    </div>
+    <div class="mw-serie-kinder" hidden>${g.slots.map(mwChip).join('')}</div>
+  </div>`;
+}
+
+function mwZelleHtml(liste) {
+  return mwSerien(liste).map(g => g.slots.length > 1 ? mwSerieChip(g) : mwChip(g.slots[0])).join('');
+}
+
+function mwSerieToggle(kopf) {
+  const kinder = kopf.nextElementSibling;
+  if (!kinder) return;
+  const warOffen = !kinder.hidden;
+  kinder.hidden = warOffen;
+  kopf.setAttribute('aria-expanded', String(!warOffen));
+  const pfeil = kopf.querySelector('.mw-serie-pfeil');
+  if (pfeil) pfeil.textContent = warOffen ? '▸' : '▾';
+  mwSerienKnopf();
+}
+
+// Ein Schalter fuer alles: wer lieber jeden Termin einzeln sieht, klappt einmal auf
+// und hat die Ansicht von frueher.
+function mwSerienAlle(aufklappen) {
+  document.querySelectorAll('#home-myweek .mw-serie').forEach(serie => {
+    const kopf = serie.querySelector('.mw-serie-kopf');
+    const kinder = serie.querySelector('.mw-serie-kinder');
+    if (!kopf || !kinder) return;
+    kinder.hidden = !aufklappen;
+    kopf.setAttribute('aria-expanded', String(!!aufklappen));
+    const pfeil = kopf.querySelector('.mw-serie-pfeil');
+    if (pfeil) pfeil.textContent = aufklappen ? '▾' : '▸';
+  });
+  mwSerienKnopf();
+}
+
+function mwSerienKnopf() {
+  const knopf = document.getElementById('mw-serien-knopf');
+  if (!knopf) return;
+  const kinder = [...document.querySelectorAll('#home-myweek .mw-serie-kinder')];
+  if (!kinder.length) { knopf.style.display = 'none'; return; }
+  knopf.style.display = '';
+  const nochZu = kinder.some(k => k.hidden);
+  knopf.textContent = nochZu ? `▾ Alle ${kinder.length} Serien aufklappen` : '▸ Serien zuklappen';
+  knopf.onclick = () => mwSerienAlle(nochZu);
 }
 
 // ── Auswahl in "Meine Woche" ──────────────────────────────────────────────────
@@ -2504,7 +2669,7 @@ async function loadMyWeek() {
 
   const blockRows = LW_BLOCKS.map((b, bi) =>
     `<div class="lw-blockhead">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-    LW_DAY_NAMES.map((_, di) => `<div class="lw-cell">${cells[bi][di].map(mwChip).join('')}</div>`).join('')
+    LW_DAY_NAMES.map((_, di) => `<div class="lw-cell">${mwZelleHtml(cells[bi][di])}</div>`).join('')
   ).join('');
 
   const extrasHtml = extras.length ? `<div class="lw-extra">
@@ -2521,7 +2686,10 @@ async function loadMyWeek() {
           ${mineCount ? `${mineCount} eigene${mineCount === 1 ? 'r' : ''} Termin${mineCount === 1 ? '' : 'e'}` : 'noch nichts gebucht'}${freeCount ? ` · ${freeCount} frei${freeCount === 1 ? 'er Platz' : 'e Plätze'}` : ''}
         </div>
       </div>
-      <button class="mw-book-btn" onclick="showView('calendar')">+ Weitere Termine buchen</button>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button class="mw-serie-knopf" id="mw-serien-knopf" type="button" style="display:none;"></button>
+        <button class="mw-book-btn" onclick="showView('calendar')">+ Weitere Termine buchen</button>
+      </div>
     </div>
     <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
     <div class="mw-legend">
@@ -2533,6 +2701,7 @@ async function loadMyWeek() {
       <span>gebucht = schon vergeben – bei einem Fachbüro kannst du mitmachen anfragen</span>
       ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
       <span>Termin antippen, dann erscheint unten, was damit geht.</span>
+      <span>Kacheln wie „6 × 15 Min" fassen aufeinanderfolgende Termine zusammen – antippen zeigt sie einzeln.</span>
     </div>
     <div class="mw-bar" id="mw-actionbar"></div>
     ${extrasHtml}
@@ -2541,6 +2710,7 @@ async function loadMyWeek() {
   // (storniert, abgelaufen oder in einer anderen Woche).
   if (!_mwSlots.some(s => s.id === _mwPicked)) _mwPicked = null;
   mwApplyPick();
+  mwSerienKnopf();
 }
 
 async function showLerntheken() {
