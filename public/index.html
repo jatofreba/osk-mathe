@@ -163,15 +163,21 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    ausgeschriebenen Fachnamen angewiesen zu sein (der volle Name steckt weiterhin im title-Tooltip). */
 .lw-chip-subj{
   display:inline-flex;align-items:center;justify-content:center;
-  width:14px;height:14px;border-radius:4px;flex-shrink:0;
+  width:14px;height:14px;border-radius:3px;flex-shrink:0;
   font-size:9px;font-weight:800;color:#fff;line-height:1;
 }
+/* Die FORM sagt, um welche Art Termin es geht: Talk rund, Fachbüro eckig. Das
+   bleibt lesbar, wo Feinzeichnung und Farbe es nicht mehr sind - bei 14 px, im
+   Schwarz-Weiß-Ausdruck und bei Farbsehschwäche. */
+.lw-chip-subj.is-talk{border-radius:50%;}
 .lw-chip-meta{color:var(--md-on-surface-variant);}
 /* Piktogramme (Mikrofon = Talk, Buch = Fachbüro): erben per currentColor die Fach-Farbe,
    anders als Emoji, die sich nicht einfärben lassen. */
 .lw-ico{
-  width:11px;height:11px;vertical-align:-1px;margin-right:2px;
-  fill:none;stroke:currentColor;stroke-width:1.5;
+  width:12px;height:12px;vertical-align:-1.5px;margin-right:2px;
+  /* Gefüllt statt gestrichelt: eine Silhouette trägt in dieser Größe weiter
+     als eine Strichzeichnung mit 1,5 px. */
+  fill:currentColor;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round;
 }
 .lw-empty{font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
@@ -1884,9 +1890,21 @@ function lwMonday() {
 // die Fach-Farbe annehmen können (Emoji haben feste Eigenfarben).
 function lwIcon(typ) {
   const inner = typ === 'input'
-    ? '<rect x="3" y="2.5" width="10" height="11" rx="1.5"/><line x1="6" y1="2.5" x2="6" y2="13.5"/>'
-    : '<rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4.5 8a3.5 3.5 0 0 0 7 0"/><line x1="8" y1="11.5" x2="8" y2="14"/>';
+    // Buch: volle Fläche, der Rücken wird in der Kachelfarbe ausgespart.
+    ? '<rect x="3" y="2.5" width="10" height="11" rx="1.5"/>'
+      + '<line x1="6" y1="3.5" x2="6" y2="12.5" stroke="var(--md-surface)" stroke-width="1.6"/>'
+    // Mikrofon: gefüllte Kapsel, Bügel und Fuß als kräftige Striche.
+    : '<rect x="6" y="2" width="4" height="7.5" rx="2"/>'
+      + '<path d="M4.5 8.6a3.5 3.5 0 0 0 7 0" fill="none" stroke-width="1.9"/>'
+      + '<line x1="8" y1="11.7" x2="8" y2="14" stroke-width="1.9"/>';
   return `<svg class="lw-ico" viewBox="0 0 16 16" aria-hidden="true">${inner}</svg>`;
+}
+
+// Fach-Buchstabe mit Formkennzeichen. `typ` weglassen, wo es gar nicht um einen
+// Termin geht (z.B. die Kursanzeige in der Topbar) - dann bleibt der Badge eckig.
+function lwBadge(typ, buchstabe, farbe) {
+  return `<span class="lw-chip-subj${typ === 'talk' ? ' is-talk' : ''}" `
+    + `style="background:${farbe};">${escHtml(buchstabe)}</span>`;
 }
 
 function lwChip(s) {
@@ -1901,7 +1919,7 @@ function lwChip(s) {
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}</div>
     <div class="lw-chip-meta">${metaText}</div>
   </div>`;
 }
@@ -1978,7 +1996,7 @@ async function loadLoginWeek() {
       const color = s.subjectColor || '#94a3b8';
       const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
-        <div class="lw-chip-time"><span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span><span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''}</div>
+        <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''}</div>
         <div class="lw-chip-meta">${s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht')
           : (s.slotThema ? escHtml(s.slotThema) + ' · frei' : 'frei')}</div>
       </div>`;
@@ -2363,7 +2381,7 @@ function mwChip(s) {
     themaText ? 'Thema: ' + themaText : '', label]
     .filter(Boolean).join(' · ');
   const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
-  const badge = `<span class="lw-chip-subj" style="background:${neutral ? 'var(--md-outline-variant)' : color};">${escHtml(subjLetter)}</span>`;
+  const badge = lwBadge(s.typ, subjLetter, neutral ? 'var(--md-outline-variant)' : color);
   const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
 
   // Thema steht hinter dem Status in derselben Zeile - zusammen mit der Lernbegleitung
@@ -2472,7 +2490,7 @@ function lwSerieChip(g, opt) {
       role="button" tabindex="0" aria-expanded="false" onclick="mwSerieToggle(this)"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSerieToggle(this);}">
       <div class="lw-chip-time" style="color:var(--md-on-surface);">
-        <span class="lw-chip-subj" style="background:${color};">${escHtml(subjLetter)}</span>
+        ${lwBadge(s.typ, subjLetter, color)}
         <span style="color:${color};">${lwIcon(s.typ)}</span>${zeit}</div>
       <div class="lw-chip-meta"><span class="mw-chip-status">${anzahl} · ${stand}</span>${thema}<span class="mw-serie-pfeil">▸</span></div>
       ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
@@ -2768,8 +2786,8 @@ async function loadMyWeek() {
     <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
     <div class="mw-legend">
       <span>Buchstabe/Farbe = Fach</span>
-      <span>${lwIcon('talk')} Talk</span>
-      <span>${lwIcon('input')} FaBü</span>
+      <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
+      <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
       <span><b>✓ von dir gebucht</b></span>
       <span>frei = noch buchbar</span>
       <span>gebucht = schon vergeben – bei einem Fachbüro kannst du mitmachen anfragen</span>
@@ -4947,7 +4965,7 @@ function awChip(s) {
   // Ansicht vor dem Login. Die volle Information steckt in title + aria-label.
   const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const neutral = state === 'taken';
-  const badge = `<span class="lw-chip-subj" style="background:${neutral ? 'var(--md-outline-variant)' : color};">${escHtml(subjLetter)}</span>`;
+  const badge = lwBadge(s.typ, subjLetter, neutral ? 'var(--md-outline-variant)' : color);
   const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
   const statusHtml = isMine
     ? `<span class="mw-chip-status" style="color:${color};">von dir</span>`
@@ -5175,8 +5193,8 @@ function renderAdminWeek() {
       ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
          <div class="mw-legend">
            <span>Buchstabe/Farbe = Fach</span>
-           <span>${lwIcon('talk')} Talk</span>
-           <span>${lwIcon('input')} FaBü</span>
+           <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
+           <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>Name ohne Zeichen = alles erledigt</span>
            <span>❓ wartet auf DEINE Antwort (möchte mitmachen)</span>
