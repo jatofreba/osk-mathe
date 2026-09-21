@@ -241,6 +241,12 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .tov-zahl{font-size:11px;color:var(--md-on-surface-variant);margin-left:auto;}
 /* Ausgeblendete Zeilen: [hidden] gegen die tr-Standardanzeige durchsetzen. */
 .tov-table tr[hidden]{display:none;}
+/* Eigener Rollbereich statt einer 50 Zeilen langen Wand - sonst liegt alles
+   Folgende (die Termine) unerreichbar weit unten. Die Kopfzeile bleibt stehen,
+   damit beim Rollen klar bleibt, welche Spalte man liest. */
+.tov-table{max-height:46vh;overflow-y:auto;}
+.tov-table thead th{position:sticky;top:0;z-index:1;background:var(--md-surface);}
+.tov-pfeil{color:var(--md-on-surface-variant);}
 .tov-leer{padding:14px;font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
 .hj-rubrik{margin:8px 0 2px;}
 .hj-rubrik>summary{
@@ -5513,6 +5519,40 @@ function talkOvSetzeFilter(hj, wert) {
   talkOvFiltern(hj);
 }
 
+// Sortieren wie in der Halbjahr-Übersicht: erster Klick aufsteigend, zweiter umgekehrt,
+// dritter zurück zur alphabetischen Reihenfolge. Sortiert wird - wie gefiltert - IM DOM:
+// die Zeilen werden umgehängt, damit Suchtext und Statusfilter erhalten bleiben.
+function talkOvSortieren(hj, spalte) {
+  const tools = document.getElementById('tov-tools-' + hj);
+  const body = document.getElementById('tov-body-' + hj);
+  if (!tools || !body) return;
+  if (tools.dataset.sort !== spalte) { tools.dataset.sort = spalte; tools.dataset.sortab = ''; }
+  else if (!tools.dataset.sortab) { tools.dataset.sortab = '1'; }
+  else { tools.dataset.sort = ''; tools.dataset.sortab = ''; }
+
+  const spalten = ['name', 'p', 'z', 'st'];
+  const aktiv = tools.dataset.sort, ab = !!tools.dataset.sortab;
+  spalten.forEach(s => {
+    const pfeil = document.getElementById('tov-pf-' + hj + '-' + s);
+    if (pfeil) pfeil.textContent = (s === aktiv) ? (ab ? ' ▾' : ' ▴') : '';
+  });
+
+  const wert = (tr) => {
+    if (aktiv === 'p') return Number(tr.dataset.p || 0);
+    if (aktiv === 'z') return Number(tr.dataset.z || 0);
+    if (aktiv === 'st') return Number(tr.dataset.rang || 0);
+    return tr.dataset.name || '';          // 'name' und der Standardfall
+  };
+  const zeilen = [...body.querySelectorAll('tr[data-name]')];
+  zeilen.sort((a, b) => {
+    const va = wert(a), vb = wert(b);
+    const cmp = (typeof va === 'string') ? va.localeCompare(vb) : va - vb;
+    // Bei Gleichstand alphabetisch - sonst springen die Zeilen bei jedem Klick.
+    return (ab ? -cmp : cmp) || (a.dataset.name || '').localeCompare(b.dataset.name || '');
+  });
+  zeilen.forEach(tr => body.appendChild(tr));
+}
+
 function talkOvFiltern(hj) {
   const tools = document.getElementById('tov-tools-' + hj);
   const body = document.getElementById('tov-body-' + hj);
@@ -5587,7 +5627,11 @@ function renderTalkingOverview(slots, roster) {
       // ohne die Tabelle neu zu zeichnen.
       const st = complete ? 'ok' : nothing ? 'nichts' : 'arbeit';
       zaehler[st]++;
+      // Zum Sortieren: die erledigten Zahlen und ein Rang fuer den Status. Aufsteigend
+      // steht damit oben, wer am wenigsten hat - das ist die Frage an diese Liste.
+      const rang = st === 'nichts' ? 0 : st === 'arbeit' ? 1 : 2;
       return `<tr data-name="${escHtml(stu.username.toLowerCase())}" data-st="${st}"
+        data-p="${d.presentDone}" data-z="${d.listenDone}" data-rang="${rang}"
         style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openTalkingStudentDetail('${stu.username}', '${hj}')" title="Details anzeigen">
         <td>${escHtml(stu.username)}</td>
         <td>${presentBadge}</td>
@@ -5618,10 +5662,19 @@ function renderTalkingOverview(slots, roster) {
     </div>`;
   };
 
+  // Spaltenkopf zum Anklicken - wie in der Halbjahr-Übersicht: erster Klick aufsteigend
+  // (wer am wenigsten hat, steht oben), zweiter dreht um, dritter zurück auf alphabetisch.
+  const kopf = (hj, spalte, text) =>
+    `<th onclick="talkOvSortieren('${hj}','${spalte}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`
+    + ` title="Nach ${escHtml(text.replace(/[^\wÄÖÜäöüß ]/g, '').trim())} sortieren">${text}`
+    + `<span class="tov-pfeil" id="tov-pf-${hj}-${spalte}"></span></th>`;
+
+  // Feste Höhe mit eigenem Rollbereich: bei ~50 Zeilen schob die Tabelle sonst alles
+  // Folgende (die Termine!) weit nach unten. Die Kopfzeile bleibt dabei stehen.
   const table = (rows, hj, z) => werkzeuge(hj, z) + `
     <div class="tbl-wrap tov-table">
       <table>
-        <thead><tr><th>Name</th><th>🎤 Präsentieren</th><th>👂 Zuhören</th><th>Status</th></tr></thead>
+        <thead><tr>${kopf(hj, 'name', 'Name')}${kopf(hj, 'p', '🎤 Präsentieren')}${kopf(hj, 'z', '👂 Zuhören')}${kopf(hj, 'st', 'Status')}</tr></thead>
         <tbody id="tov-body-${hj}">${rows}</tbody>
       </table>
       <div class="tov-leer" id="tov-leer-${hj}" hidden>Niemand passt zu dieser Suche.</div>
