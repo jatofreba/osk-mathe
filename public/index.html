@@ -227,6 +227,21 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .bar-kurs-fach{display:inline-flex;align-items:center;gap:3px;font-weight:700;}
 /* Aufklappbare Rubriken in der Halbjahr-Auswertung. Das Standard-Dreieck des Browsers
    sitzt je nach System woanders, deshalb ein eigenes vor der Überschrift. */
+/* Werkzeugleiste der Soll-Übersicht: Suche + Statusfilter mit Anzahl. */
+.tov-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 8px;}
+.tov-suche{width:auto;flex:0 1 200px;padding:5px 9px;font-size:12.5px;}
+.tov-chip{
+  cursor:pointer;font-family:inherit;font-size:11.5px;padding:4px 10px;
+  border:1px solid var(--md-outline-variant);border-radius:99px;
+  background:var(--md-surface);color:var(--md-on-surface-variant);
+}
+.tov-chip:hover{background:var(--md-outline-variant);}
+.tov-chip.aktiv{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary);}
+.tov-chip:focus-visible{outline:2px solid var(--md-primary);outline-offset:1px;}
+.tov-zahl{font-size:11px;color:var(--md-on-surface-variant);margin-left:auto;}
+/* Ausgeblendete Zeilen: [hidden] gegen die tr-Standardanzeige durchsetzen. */
+.tov-table tr[hidden]{display:none;}
+.tov-leer{padding:14px;font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
 .hj-rubrik{margin:8px 0 2px;}
 .hj-rubrik>summary{
   cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;
@@ -5484,6 +5499,41 @@ function computeTalkingOverview(slots) {
 // Gibt { current, past } zurück: current = Übersicht für laufende/künftige Halbjahre (immer offen),
 // past = kollabierte <details>-Blöcke für Halbjahre, deren Termine alle schon stattgefunden haben
 // (gehört unter "Vergangene Termine" in renderTalkingAdmin(), nicht mit an die Spitze der Ansicht).
+// Suche und Statusfilter der Soll-Übersicht. Gefiltert wird im DOM (Zeilen aus- und
+// einblenden) statt neu zu zeichnen: so bleibt der Fokus im Suchfeld und die Eingabe
+// geht beim Tippen nicht verloren. Je Halbjahr eine eigene Leiste - die Halbjahre
+// stehen untereinander und haben unterschiedliche Vorgaben.
+function talkOvSetzeFilter(hj, wert) {
+  const tools = document.getElementById('tov-tools-' + hj);
+  if (!tools) return;
+  // Nochmal auf denselben Knopf hebt den Filter wieder auf.
+  tools.dataset.filter = (tools.dataset.filter === wert && wert !== 'alle') ? 'alle' : wert;
+  tools.querySelectorAll('.tov-chip').forEach(b =>
+    b.classList.toggle('aktiv', b.dataset.w === tools.dataset.filter));
+  talkOvFiltern(hj);
+}
+
+function talkOvFiltern(hj) {
+  const tools = document.getElementById('tov-tools-' + hj);
+  const body = document.getElementById('tov-body-' + hj);
+  if (!tools || !body) return;
+  const feld = document.getElementById('tov-such-' + hj);
+  const suche = ((feld && feld.value) || '').trim().toLowerCase();
+  const filter = tools.dataset.filter || 'alle';
+  let sichtbar = 0, gesamt = 0;
+  body.querySelectorAll('tr[data-name]').forEach(tr => {
+    gesamt++;
+    const passt = (!suche || tr.dataset.name.indexOf(suche) !== -1)
+               && (filter === 'alle' || tr.dataset.st === filter);
+    tr.hidden = !passt;
+    if (passt) sichtbar++;
+  });
+  const zahl = document.getElementById('tov-zahl-' + hj);
+  if (zahl) zahl.textContent = (sichtbar === gesamt) ? `${gesamt} Personen` : `${sichtbar} von ${gesamt}`;
+  const leer = document.getElementById('tov-leer-' + hj);
+  if (leer) leer.hidden = sichtbar > 0;
+}
+
 function renderTalkingOverview(slots, roster) {
   if (!slots.length || !roster.length) return { current: '', past: '' };
   const { byHalbjahr, halbjahre } = computeTalkingOverview(slots);
@@ -5498,6 +5548,7 @@ function renderTalkingOverview(slots, roster) {
     const data = byHalbjahr[hj] || {};
     const pflichtP = subjPflichtP(ovSubj, hj), pflichtZ = subjPflichtZ(ovSubj, hj);
     let nothingCount = 0;
+    const zaehler = { ok: 0, arbeit: 0, nichts: 0 };
     // Accounts, die es in diesem Halbjahr noch nicht gab, gehören hier nicht in die Liste -
     // sonst würden sie rückwirkend als "nichts los" gewertet.
     const rows = roster.filter(stu => hjCountsForUser(hj, halbjahrForDateClient(stu.createdAt))).map(stu => {
@@ -5532,22 +5583,48 @@ function renderTalkingOverview(slots, roster) {
           ? badge('gpill-none', nothingStyle, '⚠️ nichts los')
           : badge('gpill-partial', '', '… in Arbeit');
 
-      return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openTalkingStudentDetail('${stu.username}', '${hj}')" title="Details anzeigen">
+      // Name und Status als Merkmal an der Zeile: danach filtert die Werkzeugleiste,
+      // ohne die Tabelle neu zu zeichnen.
+      const st = complete ? 'ok' : nothing ? 'nichts' : 'arbeit';
+      zaehler[st]++;
+      return `<tr data-name="${escHtml(stu.username.toLowerCase())}" data-st="${st}"
+        style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openTalkingStudentDetail('${stu.username}', '${hj}')" title="Details anzeigen">
         <td>${escHtml(stu.username)}</td>
         <td>${presentBadge}</td>
         <td>${listenBadge}</td>
         <td>${statusBadge}</td>
       </tr>`;
     }).join('');
-    return { rows, nothingCount };
+    return { rows, nothingCount, zaehler };
   };
 
-  const table = (rows) => `
-    <div class="tbl-wrap">
+  // Werkzeugleiste je Halbjahr: Suche + Filter nach Status. Bei ~50 Namen ist die
+  // Tabelle sonst eine Wand, in der die wenigen interessanten Zeilen untergehen -
+  // und genau die sucht man hier ("wer hat sein Soll schon?", "wer hat noch nichts?").
+  // Die Zahlen an den Knöpfen sind zugleich die Zusammenfassung, die man sonst zählen müsste.
+  const werkzeuge = (hj, z) => {
+    const gesamt = z.ok + z.arbeit + z.nichts;
+    const knopf = (wert, text, n) =>
+      `<button type="button" class="tov-chip${wert === 'alle' ? ' aktiv' : ''}" data-w="${wert}"`
+      + ` onclick="talkOvSetzeFilter('${hj}','${wert}')">${text} <b>${n}</b></button>`;
+    return `<div class="tov-tools" id="tov-tools-${hj}" data-filter="alle">
+      <input class="form-input tov-suche" id="tov-such-${hj}" type="search" placeholder="Name suchen…"
+             oninput="talkOvFiltern('${hj}')" aria-label="Nach Namen suchen">
+      ${knopf('alle', 'Alle', gesamt)}
+      ${knopf('ok', '✅ Soll komplett', z.ok)}
+      ${knopf('arbeit', '… in Arbeit', z.arbeit)}
+      ${knopf('nichts', '⚠️ nichts los', z.nichts)}
+      <span class="tov-zahl" id="tov-zahl-${hj}">${gesamt} Personen</span>
+    </div>`;
+  };
+
+  const table = (rows, hj, z) => werkzeuge(hj, z) + `
+    <div class="tbl-wrap tov-table">
       <table>
         <thead><tr><th>Name</th><th>🎤 Präsentieren</th><th>👂 Zuhören</th><th>Status</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody id="tov-body-${hj}">${rows}</tbody>
       </table>
+      <div class="tov-leer" id="tov-leer-${hj}" hidden>Niemand passt zu dieser Suche.</div>
     </div>`;
   // Die Vorgabe steht AM HALBJAHR, nicht als eine Zeile über allem: sie ist je Fach UND
   // je Halbjahr einstellbar (subject_halbjahr_targets), und unter dieser Überschrift
@@ -5568,16 +5645,21 @@ function renderTalkingOverview(slots, roster) {
   const currentHj = halbjahre.filter(hj => !isPastHalbjahr(hj));
   const pastHj = halbjahre.filter(hj => isPastHalbjahr(hj));
 
+  // Auch die laufenden Halbjahre sind aufklappbar (offen als Startzustand) - bei
+  // mehreren gleichzeitig war sonst nur noch Scrollen.
   const currentSections = currentHj.map(hj => {
-    const { rows, nothingCount } = buildRows(hj);
-    return `<div style="font-weight:700;font-size:13px;margin:16px 0 6px;">${hjLabel(hj, nothingCount)}</div>${table(rows)}`;
+    const { rows, nothingCount, zaehler } = buildRows(hj);
+    return `<details class="hj-rubrik" open>
+      <summary style="font-weight:700;font-size:13px;">${hjLabel(hj, nothingCount)}</summary>
+      ${table(rows, hj, zaehler)}
+    </details>`;
   }).join('');
 
   const pastSections = pastHj.map(hj => {
-    const { rows, nothingCount } = buildRows(hj);
-    return `<details style="margin-top:10px;">
-      <summary style="cursor:pointer;font-weight:700;font-size:13px;padding:2px 0;">${hjLabel(hj, nothingCount)}</summary>
-      <div style="margin-top:8px;">${table(rows)}</div>
+    const { rows, nothingCount, zaehler } = buildRows(hj);
+    return `<details class="hj-rubrik">
+      <summary style="font-weight:700;font-size:13px;">${hjLabel(hj, nothingCount)}</summary>
+      ${table(rows, hj, zaehler)}
     </details>`;
   }).join('');
 
