@@ -188,15 +188,15 @@ button,input,textarea,select{font-family:inherit;}
   color:var(--on-surface);
 }
 
-/* ── Kleeblatt-System ─────────────────────────────────────────────────────── */
+/* ── Flammen-System ───────────────────────────────────────────────────────── */
 .trophy-legend{font-size:12px;color:var(--ink2);margin-bottom:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
 .trophy-legend .trophy-icon{font-size:13px;}
 .trophy-bar{display:inline-flex;align-items:center;gap:1px;margin-left:8px;}
 .trophy-icon{font-size:14px;line-height:1;transition:filter .25s,opacity .25s;}
 .trophy-icon.locked{filter:grayscale(1);opacity:.2;}
 /* Fruehere Stufen bronze/silber/gold waren CSS-Filter auf dem goldenen Pokal.
-   Beim gruenen Kleeblatt ergaeben sepia()/grayscale() Schlammtoene - die Stufe
-   steckt jetzt in der Anzahl der gefuellten Kleeblaetter. */
+   Bei der Flamme ergaeben sepia()/grayscale() nur Schlammtoene - die Stufe
+   steckt jetzt in der Anzahl der gefuellten Flammen. */
 .trophy-icon.earned{filter:none;opacity:1;}
 
 /* Abgabe row in group */

@@ -1278,7 +1278,7 @@ app.delete('/api/admin/peer/:id', requireSuperAdmin, async (req, res) => {
 
 // Kontonamen (Alias) einer Schüler:in ändern. Ausdrücklich NUR das Namensfeld: sämtliche
 // Daten hängen an users.id (Fortschritt, LZK, Korrektur, Talks/Fachbüro, Stationen,
-// Kleeblätter, Kurs-Zuordnung) - der Name wird nirgends als Referenz gespeichert. Ein
+// Flammen, Kurs-Zuordnung) - der Name wird nirgends als Referenz gespeichert. Ein
 // Umbenennen lässt den kompletten Verlauf also unangetastet.
 // Wichtig für die Praxis: die Person meldet sich danach mit dem NEUEN Namen an.
 app.post('/api/admin/student/:id/rename', requireAdmin, async (req, res) => {
@@ -1846,7 +1846,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
       `, [uid, subject.id]),
       pool.query(`SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1 AND typ='talk' AND subject_id=$2`, [req.session.klasse, subject.id]),
       // Fachbüro-Termine BEWUSST getrennt von presenting/invitations: die beiden filtern hart
-      // typ='talk', weil Fachbüros weder Kleeblätter noch Pflicht-Vorgaben haben und die
+      // typ='talk', weil Fachbüros weder Flammen noch Pflicht-Vorgaben haben und die
       // Halbjahr-Rechnung sonst verfälschen würden. Für die Übersicht der Schüler:innen
       // sollen die Teilnahmen aber trotzdem sichtbar sein - deshalb dieses eigene Feld.
       // Nur zurückliegende Termine: ein noch bevorstehendes Fachbüro ist keine Teilnahme
@@ -2041,8 +2041,8 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
     const row = inv.rows[0];
     if (row.klasse !== req.session.klasse) return res.status(403).json({ error: 'Kein Zugriff' });
     // Der Schutz "schon bewertet" gilt nur fuer TALKS: dort haengen an der Bewertung
-    // Kleeblaetter, die beim Loeschen lautlos verschwaenden. Am Fachbuero gibt es keine
-    // Kleeblaetter - der Haken ist reine Anwesenheit und muss korrigierbar bleiben, auch
+    // Flammen, die beim Loeschen lautlos verschwaenden. Am Fachbuero gibt es keine
+    // Flammen - der Haken ist reine Anwesenheit und muss korrigierbar bleiben, auch
     // wenn schon "da gewesen" oder "gefehlt" eingetragen ist.
     if ((row.typ || 'talk') !== 'input') {
       if (row.presented_status !== 'ausstehend')

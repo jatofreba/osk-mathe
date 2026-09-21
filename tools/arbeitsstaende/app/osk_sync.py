@@ -6,9 +6,9 @@ Arbeitsstände-Excel-Datei.
 Ausgelesen wird je Schüler:in, Halbjahr und Fach:
   - Talks gehalten / zugehört
   - Fachbuero-Teilnahmen (FaBü)
-  - Kleeblätter aus Talks
+  - Flammen aus Talks
   - abgeschlossene Lerntheken-Stationen (fachunabhängig, aktuell nur Mathe)
-  - bestandene LZK samt Kleeblättern
+  - bestandene LZK samt Flammen
 
 Der Zugriff läuft über einen ganz normalen Admin-Login der App (HTTPS), nicht
 über die Datenbank. Ein Admin-Konto sieht immer genau SEIN Tandem -- für
@@ -147,7 +147,7 @@ class AppClient:
 
         `status` und `pokale` MUESSEN mitgegeben werden: die Schnittstelle
         schreibt beide Felder bei jedem Aufruf mit. Wer nur ein Datum schickt,
-        setzt damit eine bestandene LZK samt Kleeblaettern zurueck -- deshalb
+        setzt damit eine bestandene LZK samt Flammen zurueck -- deshalb
         werden hier immer die Werte durchgereicht, die schon auf dem Server
         stehen.
         """
@@ -184,7 +184,7 @@ class AppClient:
 
     def umbenennen(self, user_id, neuer_name: str) -> str:
         """Aendert NUR den Kontonamen auf dem Server. Fortschritt, LZK-Eintraege,
-        Talks/Fachbuero-Termine und Kleeblaetter bleiben vollstaendig erhalten --
+        Talks/Fachbuero-Termine und Flammen bleiben vollstaendig erhalten --
         auf dem Server haengt alles an der Konto-ID, nicht am Namen.
 
         Gibt den neuen Namen zurueck; wirft ValueError mit lesbarem Text, wenn
@@ -399,7 +399,7 @@ def _bucket_werte(bucket: dict, fach_key: str) -> dict:
         "gehalten": sub.get("talksPresented", 0),
         "zugehoert": sub.get("talksListened", 0),
         "input": sub.get("inputParticipated", 0),
-        "kleeblaetter": (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0),
+        "flammen": (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0),
     }
 
 
@@ -416,8 +416,8 @@ def schreibe_app_daten(wb, treffer, daten: AppDaten):
     for fach in daten.faecher:
         kurz = fach["name"]
         kopf += [f"{kurz}: Talks gehalten", f"{kurz}: Talks zugehört",
-                 f"{kurz}: FaBü", f"{kurz}: Kleeblätter"]
-    kopf += ["Stationen abgeschlossen", "LZK bestanden", "LZK-Kleeblätter",
+                 f"{kurz}: FaBü", f"{kurz}: Flammen"]
+    kopf += ["Stationen abgeschlossen", "LZK bestanden", "LZK-Flammen",
              "Stand"]
 
     for i, text in enumerate(kopf, start=1):
@@ -438,7 +438,7 @@ def schreibe_app_daten(wb, treffer, daten: AppDaten):
             werte = [vn, nn, account, eintrag["klasse"], hj]
             for fach in daten.faecher:
                 w = _bucket_werte(bucket, fach["key"])
-                werte += [w["gehalten"], w["zugehoert"], w["input"], w["kleeblaetter"]]
+                werte += [w["gehalten"], w["zugehoert"], w["input"], w["flammen"]]
             lzk_liste = bucket.get("lzk") or []
             lzk_bestanden = [l for l in lzk_liste if l.get("status") == "bestanden"]
             werte += [

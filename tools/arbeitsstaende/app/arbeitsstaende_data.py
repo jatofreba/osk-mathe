@@ -166,7 +166,7 @@ def lt_lerntheke_zeilen(progress: dict, lzk_liste, lerntheken, aktuelles_hj: str
                      "nicht_bestanden": "nicht bestanden"}.get(l.get("status"), "geplant")
             pk = l.get("pokale") or 0
             teile.append(f"{l.get('typ')}-LZK {stand}"
-                         + (f", {pk} Kleeblaetter" if pk else "")
+                         + (f", {pk} Flammen" if pk else "")
                          + (f" ({_fmt_kurz(l.get('datum'))})" if l.get("datum") else ""))
 
         if aufbau and aufbau.get("status") == "bestanden":
@@ -283,8 +283,8 @@ def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
     zug = sub.get("talksListened", 0) or 0
     fehlt = sub.get("inputMissed", 0) or 0
     offen = sub.get("inputOpen", 0) or 0
-    klee = (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0)
-    if not (geh or zug or fehlt or offen or klee):
+    flammen = (sub.get("pokalePresented", 0) or 0) + (sub.get("pokaleListened", 0) or 0)
+    if not (geh or zug or fehlt or offen or flammen):
         return None
     teile = []
     if geh:
@@ -295,8 +295,8 @@ def lt_talk_zeile(bucket: dict, fach_key: str = "mathe") -> Optional[str]:
         teile.append(f"{fehlt}x FaBü gefehlt")
     if offen:
         teile.append(f"{offen}x FaBü offen")
-    if klee:
-        teile.append(f"{klee} Kleeblaetter")
+    if flammen:
+        teile.append(f"{flammen} Flammen")
     return ", ".join(teile)
 
 

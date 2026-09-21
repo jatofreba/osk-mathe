@@ -321,7 +321,7 @@ class LzkSendenDialog(tk.Toplevel):
             ttk.Label(hinweis, text=text, justify="left", foreground="#555").pack(anchor="w")
 
         ttk.Label(self, text="Bestandene LZK behalten ihren Status und ihre "
-                             "Kleeblätter — es wird nur das Datum gesetzt.",
+                             "Flammen — es wird nur das Datum gesetzt.",
                   foreground="#555").pack(anchor="w", padx=10, pady=(8, 0))
 
         btns = ttk.Frame(self)
@@ -503,7 +503,7 @@ class AliasUmbenennenDialog(tk.Toplevel):
 
         ttk.Label(self,
                   text="Nur die Kontonamen ändern sich.\n"
-                       "Fortschritt, LZK-Termine, Talks und Kleeblätter bleiben erhalten.",
+                       "Fortschritt, LZK-Termine, Talks und Flammen bleiben erhalten.",
                   justify="left", wraplength=420).pack(padx=12, pady=(12, 8), anchor="w")
 
         ttk.Label(self, text="Konto").pack(padx=12, anchor="w")
@@ -1784,7 +1784,7 @@ class App(tk.Tk):
         """Benennt ein bestehendes Konto auf dem Server um.
 
         Nur der Kontoname aendert sich. Fortschritt, LZK-Eintraege, Talks bzw.
-        Fachbuero-Termine und Kleeblaetter bleiben vollstaendig erhalten -- auf
+        Fachbuero-Termine und Flammen bleiben vollstaendig erhalten -- auf
         dem Server haengt alles an der Konto-ID, nicht am Namen. Deshalb ist das
         der richtige Weg statt "loeschen und neu anlegen", was den ganzen
         Verlauf vernichten wuerde.
@@ -1823,7 +1823,7 @@ class App(tk.Tk):
         if not messagebox.askyesno(
                 "Aliasse umbenennen",
                 f"{len(auftraege)} Konto(s) umbenennen?\n\n{uebersicht}\n\n"
-                "Fortschritt, LZK-Termine, Talks und Kleeblaetter bleiben "
+                "Fortschritt, LZK-Termine, Talks und Flammen bleiben "
                 "erhalten.\nDie Personen melden sich ab sofort mit dem NEUEN "
                 "Namen an."):
             return

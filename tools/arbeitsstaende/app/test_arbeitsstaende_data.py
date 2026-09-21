@@ -350,7 +350,7 @@ def test_json_fremde_datei_warnt_statt_abzustuerzen():
 def test_lzk_abgleich_mit_dem_server():
     """Welche Termine muessten auf dem Server geaendert werden?
 
-    Wichtig ist dabei, dass Status und Kleeblaetter eines bestehenden Eintrags
+    Wichtig ist dabei, dass Status und Flammen eines bestehenden Eintrags
     unveraendert mitgeschickt werden -- die Schnittstelle schreibt beide Felder
     bei jedem Aufruf mit, ein Termin allein wuerde eine bestandene LZK also
     zuruecksetzen.
@@ -427,7 +427,7 @@ def test_fabue_anwesenheit_im_bericht():
         "1x FaBü gefehlt, 2x FaBü offen"
     assert lt_talk_zeile(bucket(talksPresented=1, talksListened=2,
                                 inputParticipated=4, pokalePresented=3)) == \
-        "1x gehalten, 2x zugehoert, 3 Kleeblaetter"
+        "1x gehalten, 2x zugehoert, 3 Flammen"
     # Ohne jede Aktivitaet gibt es keine Zeile.
     assert lt_talk_zeile(bucket()) is None
     assert lt_talk_zeile({"bySubject": {}}) is None

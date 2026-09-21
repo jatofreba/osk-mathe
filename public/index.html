@@ -1014,7 +1014,7 @@ textarea.form-input{
   <div id="view-home" style="display:none;">
     <div style="max-width:960px;margin:0 auto;padding-bottom:40px;">
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">🏠 Übersicht</h2>
-      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Woche und deine in LZKs, Talks und Lerntheken gesammelten Kleeblätter im Überblick.</p>
+      <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Woche und deine in LZKs, Talks und Lerntheken gesammelten Flammen im Überblick.</p>
       <div id="home-myweek" style="margin-bottom:24px;"></div>
       <div id="home-trophy-summary"></div>
     </div>
@@ -1251,12 +1251,12 @@ textarea.form-input{
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label" id="lzk-pokal-lbl">Kleeblätter</label>
+      <label class="form-label" id="lzk-pokal-lbl">Flammen</label>
       <div role="group" aria-labelledby="lzk-pokal-lbl" style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🍀</button>
-        <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🍀</button>
-        <button class="lzk-pokal-btn" data-v="2" onclick="selectLzkPokal(2)">2 🍀</button>
-        <button class="lzk-pokal-btn" data-v="3" onclick="selectLzkPokal(3)">3 🍀</button>
+        <button class="lzk-pokal-btn" data-v="0" onclick="selectLzkPokal(0)">0 🔥</button>
+        <button class="lzk-pokal-btn" data-v="1" onclick="selectLzkPokal(1)">1 🔥</button>
+        <button class="lzk-pokal-btn" data-v="2" onclick="selectLzkPokal(2)">2 🔥</button>
+        <button class="lzk-pokal-btn" data-v="3" onclick="selectLzkPokal(3)">3 🔥</button>
       </div>
     </div>
     <div class="modal-actions">
@@ -1378,7 +1378,7 @@ textarea.form-input{
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label" id="trate-pokal-lbl">Kleeblätter</label>
+      <label class="form-label" id="trate-pokal-lbl">Flammen</label>
       <div role="group" aria-labelledby="trate-pokal-lbl" id="trate-modal-pokale" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
     </div>
     <div class="form-group">
@@ -1577,7 +1577,7 @@ textarea.form-input{
     <div class="form-group"><label class="form-label" for="ssettings-oz">Freiwillig zusätzlich: zuhören</label><input class="form-input" id="ssettings-oz" type="number" min="0" max="10"></div>
     <div style="font-size:11.5px;color:var(--md-on-surface-variant);margin-bottom:12px;line-height:1.4;">
       Die Übersichtskarten der Schüler:innen zeigen genau so viele Felder: Pflicht grau, freiwillig weiß.
-      Wer mehr macht als vorgesehen, bekommt trotzdem weitere Felder (und Kleeblätter) dazu.
+      Wer mehr macht als vorgesehen, bekommt trotzdem weitere Felder (und Flammen) dazu.
       <span id="ssettings-hj-hint"></span>
     </div>
     <div id="ssettings-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
@@ -1633,7 +1633,7 @@ function hjCountsForUser(hj, firstHalbjahr, lastHalbjahr) {
 // Fächer-Liste mit dem persönlichen Default-Fach der Admin-Person zuerst (me.defaultSubjectId,
 // über setMyDefaultSubject() gewählt) - Rest bleibt in der natürlichen Reihenfolge dahinter.
 // Faecher, die als Angebot ausgespielt werden - also ohne die "nur zugewiesen"-Eintraege
-// (Lernberatung): dort gibt es keine Talks, nichts zu buchen und keine Kleeblatt-Vorgaben.
+// (Lernberatung): dort gibt es keine Talks, nichts zu buchen und keine Flammen-Vorgaben.
 // Solche Termine legt die Lernbegleitung an und ordnet sie einzelnen Personen zu.
 function angebotsFaecher() {
   const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
@@ -2161,7 +2161,7 @@ async function loadPickerData() {
     trophySummary.innerHTML = `<div class="trophy-section">
       <div class="trophy-lb-col tsum-col">
         <div class="trophy-panel">
-          <div class="trophy-panel-title">Meine Kleeblätter</div>
+          <div class="trophy-panel-title">Meine Flammen</div>
           <div style="font-size:22px;font-weight:800;line-height:1;">${totalEarned} <span style="font-size:14px;font-weight:500;color:var(--ink2);">von ${totalMax}</span></div>
           <div class="trophy-track">
             <div class="trophy-fill${pct>=100?' trophy-perfect':''}" style="width:${Math.min(100,pct)}%;background:${fillColor};"></div>
@@ -2169,7 +2169,7 @@ async function loadPickerData() {
           <div class="trophy-milestones">
             <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
           </div>
-          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🍀 Alle Kleeblätter gesammelt!':pct+' % aller möglichen Kleeblätter'}</div>
+          <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pct>=100?'🔥 Alle Flammen gesammelt!':pct+' % aller möglichen Flammen'}</div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${[
               ['📚', 'Mathe-Lerntheken', stationsEarned, stationsMax],
@@ -2191,16 +2191,16 @@ async function loadPickerData() {
       <div class="trophy-lb-col rank-col">
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Quote</div>
-          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller aktuell für dich erreichbaren Kleeblätter</div>
+          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller aktuell für dich erreichbaren Flammen</div>
           ${renderLb([...lbRows].sort((a,b) => (b.ownMax?b.pokale/b.ownMax:0)-(a.ownMax?a.pokale/a.ownMax:0)),
             s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) + ' %' : '–',
             s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : 0
           )}
         </div>
         <div class="trophy-panel">
-          <div class="trophy-panel-title">Rangliste – Kleeblätter gesamt</div>
+          <div class="trophy-panel-title">Rangliste – Flammen gesamt</div>
           ${renderLb(lbRows,
-            s => '🍀 ' + s.pokale,
+            s => '🔥 ' + s.pokale,
             s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
           )}
         </div>
@@ -2235,7 +2235,7 @@ async function loadPickerData() {
       if (!lzk) return '';
       const pk = lzk.pokale || 0;
       earnedTrophies += pk; maxTrophies += 3;
-      const pokalStr = [1,2,3].map(i => `<span style="opacity:${i<=pk?1:.18}">🍀</span>`).join('');
+      const pokalStr = [1,2,3].map(i => `<span style="opacity:${i<=pk?1:.18}">🔥</span>`).join('');
       if (lzk.status === 'bestanden')
         return `<span class="gpill gpill-ok" style="gap:3px;">${typ}-LZK ✓ ${pokalStr}</span>`;
       if (lzk.status === 'nicht_bestanden')
@@ -2256,8 +2256,8 @@ async function loadPickerData() {
     if (aufbauLzkOk && abflugDone) tier = 4;
 
     const trophyStr = earnedTrophies > 0
-      ? `<span style="font-size:12px;font-weight:500;">🍀 ${earnedTrophies} / ${maxTrophies}</span>`
-      : `<span style="font-size:12px;color:#aaa;">🍀 0 / ${maxTrophies}</span>`;
+      ? `<span style="font-size:12px;font-weight:500;">🔥 ${earnedTrophies} / ${maxTrophies}</span>`
+      : `<span style="font-size:12px;color:#aaa;">🔥 0 / ${maxTrophies}</span>`;
 
     const badges = groupEntries.map(([g, st]) => {
       const cls = st.stationsOk ? 'gpill-ok' : st.done > 0 ? 'gpill-partial' : 'gpill-none';
@@ -3769,7 +3769,7 @@ function lzkCellHtml(studentLzk, s, lt) {
     const e = entry || fallback;
     const d = e.datum ? new Date(e.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '–';
     const pk = e.pokale || 0;
-    const pokalStr = e.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🍀</span>`).join('') : '';
+    const pokalStr = e.status==='bestanden' ? [1,2,3].map(i=>`<span style="opacity:${i<=pk?1:.15}">🔥</span>`).join('') : '';
     const stCls = e.status==='bestanden'?'lzk-st-ok':e.status==='nicht_bestanden'?'lzk-st-err':'lzk-st-pending';
     const stTxt = e.status==='bestanden'?'✓':e.status==='nicht_bestanden'?'✗':'⏳';
     const warning = fallback ? `<span title="Unter anderer Mathe-Lerntheke gespeichert – beim Bearbeiten wird korrigiert" style="color:#d97706;font-size:10px;">⚠</span>` : '';
@@ -3841,7 +3841,7 @@ function fmtTalkingDatum(d) {
   return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
 }
 function talkingPokalStr(pokale, max) {
-  return Array.from({ length: max }, (_, i) => `<span style="opacity:${i < pokale ? 1 : .18}">🍀</span>`).join('');
+  return Array.from({ length: max }, (_, i) => `<span style="opacity:${i < pokale ? 1 : .18}">🔥</span>`).join('');
 }
 // Gruppiert präsentierte/angenommene Sessions je Halbjahr, sortiert nach Datum
 // (1. präsentierte Session bzw. erste 2 angenommene Zuhör-Termine gelten als Pflicht).
@@ -3874,7 +3874,7 @@ function talkingGroupByHalbjahrFull(presenting, invitations) {
 // (.tt-tier-N) + Tooltip (title-Attribut) als dezenter Hinweis.
 // ── Fachbüro-Teilnahmen in den Halbjahr-Übersichten der Schüler:innen ─────────
 // Kommen als eigenes Feld `fabue` aus /api/talking-sessions/mine (NICHT in presenting/
-// invitations, die filtern hart typ='talk', weil Fachbüros keine Kleeblätter und keine
+// invitations, die filtern hart typ='talk', weil Fachbüros keine Flammen und keine
 // Pflicht-Vorgaben haben). Der Server liefert nur zurückliegende Termine.
 // Ein Fachbüro-Slot trägt nicht immer ein Halbjahr - dann gilt wie serverseitig das Datum.
 function fabueHalbjahr(f) {
@@ -4673,7 +4673,7 @@ function calInviteeListHtml(it) {
   if (!inv.length) return it.typ === 'input' ? '' : '<div style="font-size:12px;color:var(--md-on-surface-variant);margin-top:3px;">Niemand eingeladen</div>';
   const isAdminView = me && me.role === 'admin';
   // Am Fachbüro auch nach dem Eintragen noch entfernbar (kein Ergebnis, nur Anwesenheit) -
-  // bei Talks nur, solange nichts bewertet ist, sonst verschwaenden Kleeblaetter.
+  // bei Talks nur, solange nichts bewertet ist, sonst verschwaenden Flammen.
   const canRemove = isAdminView && (it.typ === 'input' || it.presentedStatus === 'ausstehend');
   const pills = inv.map(iv => {
     // Offene Anfragen sind gelb und bekommen für die Lernbegleitung ✓/✗ statt des ×-Buttons.
@@ -5001,7 +5001,7 @@ function awRenderBar() {
   // solange der Termin noch bevorsteht - danach trägt man Teilnahmen ein, lädt aber nicht
   // mehr ein. Ohne den Knopf musste man dafür in den Kalender wechseln.
   const einladbar = darf && s.typ === 'input' && !slotVorbei(s) && s.presentedStatus !== 'erledigt';
-  // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Kleeblaetter und
+  // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Flammen und
   // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
   const schnell = darf && gelaufen && s.typ === 'input';
   // Echte <button>, keine anklickbaren <span>: nur so sind die Entscheidungen auch
@@ -5014,7 +5014,7 @@ function awRenderBar() {
   const weg = (id) => ` <button type="button" class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen" aria-label="Aus dem Termin entfernen">×</button>`;
   // Am Fachbüro bleibt Entfernen IMMER moeglich - ein "da gewesen"/"gefehlt" ist dort
   // reine Anwesenheit und kein Ergebnis, das verloren gehen koennte. Bei Talks haengen
-  // Kleeblaetter an der Bewertung, deshalb dort nur solange nichts bewertet ist.
+  // Flammen an der Bewertung, deshalb dort nur solange nichts bewertet ist.
   const entfernbar = iv => darf && iv.id && (s.typ === 'input'
     || (iv.attendedStatus === 'ausstehend' && s.presentedStatus === 'ausstehend'));
 
@@ -5058,7 +5058,7 @@ function awRenderBar() {
 
   const hinweis = !darf ? 'Termin einer anderen Lernbegleitung.'
     : !leute.length ? 'Noch niemand auf diesem Termin.'
-    : (s.typ === 'talk' && gelaufen) ? 'Talks werden im Talks-Tab bewertet (Kleeblätter).'
+    : (s.typ === 'talk' && gelaufen) ? 'Talks werden im Talks-Tab bewertet (Flammen).'
     : !gelaufen ? 'Teilnahme eintragen geht ab dem Termintag; × nimmt jemanden schon vorher wieder raus.'
     : '✓ war da · ✗ hat gefehlt · × ganz vom Termin nehmen (ohne Fehlzeit).';
 
@@ -5087,7 +5087,7 @@ async function awEntscheiden(invitationId, zusagen) {
   loadCalendar();
 }
 async function awAnwesenheit(invitationId, status) {
-  // Fachbüro kennt keine Kleeblaetter - pokale bleibt bewusst 0.
+  // Fachbüro kennt keine Flammen - pokale bleibt bewusst 0.
   const r = await fetch(`/api/admin/talking-invitations/${invitationId}/confirm-attended`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ status, pokale: 0 })
@@ -5200,7 +5200,7 @@ function renderMyHalbjahr() {
   const talksPresented = subjVals.reduce((sum, s) => sum + (s.talksPresented || 0), 0);
   const talksListened = subjVals.reduce((sum, s) => sum + (s.talksListened || 0), 0);
   const inputParticipated = subjVals.reduce((sum, s) => sum + (s.inputParticipated || 0), 0);
-  const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🍀 ${escHtml(l.typ)}-LZK</span>`).join(' ');
+  const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🔥 ${escHtml(l.typ)}-LZK</span>`).join(' ');
   el.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
     <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">🎓 Mein Halbjahr ${escHtml(hj)}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -5335,7 +5335,7 @@ function renderHalbjahr() {
       if (nothing) nothingCount++;
       const lzkBestandenCount = isMathe ? (b.lzk||[]).filter(l => l.status==='bestanden').length : 0;
       const extraCols = isMathe ? `
-        <td>${lzkBestandenCount ? '🍀 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
+        <td>${lzkBestandenCount ? '🔥 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
         <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '';
       return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id},'${subj.key}')" title="Details anzeigen">
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
@@ -5355,7 +5355,7 @@ function renderHalbjahr() {
     // stellt die Standardreihenfolge wieder her. Der Pfeil zeigt, was gerade gilt.
     const th = (spalte, text) => `<th onclick="hjSortieren('${spalte}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`
       + ` title="Nach ${escHtml(text)} sortieren">${text}${hjSort === spalte ? (hjSortAb ? ' ▾' : ' ▴') : ''}</th>`;
-    const headCols = isMathe ? th('lzk', '🍀 LZK') + th('stationen', '📚 Stationen') : '';
+    const headCols = isMathe ? th('lzk', '🔥 LZK') + th('stationen', '📚 Stationen') : '';
     return `
       <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px;">
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
@@ -5385,7 +5385,7 @@ function renderHalbjahr() {
 function hjDetailHtml(s, subjectKey) {
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
-  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🍀'.repeat(t.pokale):''}</span></div>`;
+  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🔥'.repeat(t.pokale):''}</span></div>`;
   // "noch offen" heisst: Termin war, die Lernbegleitung hat aber nichts eingetragen.
   // Ein Termin, der erst noch kommt, ist etwas anderes - sonst sieht es aus, als waere
   // da etwas liegengeblieben.
@@ -5395,7 +5395,7 @@ function hjDetailHtml(s, subjectKey) {
     : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
   const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> ${fabuePill(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
-  const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🍀 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🍀'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
+  const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🔥 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🔥'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
   const subjList = subjectKey ? orderedSubjects().filter(x => x.key === subjectKey) : orderedSubjects();
@@ -5434,7 +5434,7 @@ function hjDetailHtml(s, subjectKey) {
       </div>
       ${rubrik('🎤👂 Talks', sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
       ${rubrik('📘 FaBü-Teilnahmen', sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
-      ${isMathe ? rubrik('🍀 LZK', b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')
+      ${isMathe ? rubrik('🔥 LZK', b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')
         + rubrik('📚 Stationen', b.stationDetails, stationRow,
                  'Keine erfassten Stationsabschlüsse in diesem Halbjahr.', b.stationsCompleted || 0)
         : ''}`;
@@ -5501,7 +5501,7 @@ function renderTalkingStudent() {
 
   const trophyCard = `
     <div class="stat-card">
-      <div class="stat-lbl">🍀 ${escHtml(subj.name)}-Talk-Kleeblätter</div>
+      <div class="stat-lbl">🔥 ${escHtml(subj.name)}-Talk-Flammen</div>
       <div style="margin-top:6px;font-size:18px;font-weight:700;">${talkingMine.trophies?.earned || 0} <span style="font-size:13px;font-weight:500;color:var(--ink2);">von ${talkingMine.trophies?.max || 0}</span></div>
     </div>`;
   const progressCards = groupsFull.length ? groupsFull.map(g => {
@@ -5513,7 +5513,7 @@ function renderTalkingStudent() {
     // Nur bestaetigte Teilnahmen - "gefehlt"/"offen" sind keine Leistung, die hier zaehlt.
     const fabueDa = (talkingMine.fabue || [])
       .filter(f => fabueHalbjahr(f) === g.halbjahr && f.status === 'erledigt').length;
-    const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🍀 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
+    const trophyLine = hjTrophies ? `<div style="margin-top:2px;font-size:14px;">🔥 ${hjTrophies.earned} von ${hjTrophies.max}</div>` : '';
     return `
       <div class="stat-card tt-tier-${tier}" title="${TALK_TIER_TEXT[tier]}">
         <div class="stat-lbl">Halbjahr ${escHtml(g.halbjahr)}</div>
@@ -6273,7 +6273,7 @@ function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, 
   document.getElementById('trate-modal-status-no').textContent = type === 'presented' ? '✗ Nicht gehalten' : '✗ Nicht teilgenommen';
   document.getElementById('trate-modal-status').value = currentStatus || 'ausstehend';
   document.getElementById('trate-modal-pokale').innerHTML = Array.from({ length: maxPokale + 1 }, (_, v) =>
-    `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🍀</button>`
+    `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🔥</button>`
   ).join('');
   document.getElementById('trate-modal-emojis').innerHTML = TALKING_QUALITY_EMOJIS.map(e =>
     `<button class="lzk-pokal-btn ${e === currentEmoji ? 'active' : ''}" data-e="${e}" onclick="selectTalkingRateEmoji('${e}')" style="font-size:16px;">${e}</button>`
