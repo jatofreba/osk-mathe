@@ -5549,8 +5549,15 @@ function renderTalkingOverview(slots, roster) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  // Die Vorgabe steht AM HALBJAHR, nicht als eine Zeile über allem: sie ist je Fach UND
+  // je Halbjahr einstellbar (subject_halbjahr_targets), und unter dieser Überschrift
+  // stehen mehrere Halbjahre untereinander. Vorher war hier "1x präsentieren · mind. 2x
+  // zuhören" fest eingetragen - wer die Vorgabe umstellte, sah oben weiter die alte.
   const hjLabel = (hj, nothingCount) =>
-    `Halbjahr ${escHtml(hj)}${nothingCount ? ` <span style="color:var(--md-error);font-weight:500;">– ${nothingCount} ohne jeden Fortschritt</span>` : ''}`;
+    `Halbjahr ${escHtml(hj)}`
+    + ` <span style="font-weight:500;color:var(--md-on-surface-variant);">`
+    + `· Pflicht: 🎤 ${subjPflichtP(ovSubj, hj)}× präsentieren, 👂 ${subjPflichtZ(ovSubj, hj)}× zuhören</span>`
+    + (nothingCount ? ` <span style="color:var(--md-error);font-weight:500;">– ${nothingCount} ohne jeden Fortschritt</span>` : '');
 
   // Ein Halbjahr gilt als "vergangen", wenn es Termine hat und KEINER davon noch in der Zukunft liegt.
   const isPastHalbjahr = (hj) => {
@@ -5578,7 +5585,6 @@ function renderTalkingOverview(slots, roster) {
     <div class="admin-top">
       <div class="admin-title" style="font-size:16px;">👥 Übersicht: Wer hat sein Soll erledigt?</div>
     </div>
-    <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">Pflicht je Halbjahr: 🎤 1x präsentieren · 👂 mind. 2x zuhören</div>
     ${currentSections}
   ` : '';
 
