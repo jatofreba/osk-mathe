@@ -170,6 +170,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    bleibt lesbar, wo Feinzeichnung und Farbe es nicht mehr sind - bei 14 px, im
    Schwarz-Weiß-Ausdruck und bei Farbsehschwäche. */
 .lw-chip-subj.is-talk{border-radius:50%;}
+.lw-typ{
+  margin-left:4px;font-size:8.5px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;color:var(--md-on-surface-variant);
+}
 .lw-chip-meta{color:var(--md-on-surface-variant);}
 /* Piktogramme (Mikrofon = Talk, Buch = Fachbüro): erben per currentColor die Fach-Farbe,
    anders als Emoji, die sich nicht einfärben lassen. */
@@ -1900,6 +1904,18 @@ function lwIcon(typ) {
   return `<svg class="lw-ico" viewBox="0 0 16 16" aria-hidden="true">${inner}</svg>`;
 }
 
+// Probeweise (2026-09-21): zusaetzlich zum runden Badge und zum Mikrofon steht
+// das Wort "Talk" auf der Kachel. NUR bei Talks - die sind selten, das Fachbuero
+// ist der Normalfall und braucht keine Beschriftung.
+// Zum Abschalten: auf false setzen. Sonst aendert sich nichts.
+const LW_TALK_TEXT = true;
+
+// Kurzform der Terminart fuer die Zeitzeile - steht HINTER der Uhrzeit, damit die
+// Zeiten ueber alle Kacheln hinweg untereinander bleiben.
+function lwTypText(typ) {
+  return (LW_TALK_TEXT && typ === 'talk') ? '<span class="lw-typ">Talk</span>' : '';
+}
+
 // Fach-Buchstabe mit Formkennzeichen. `typ` weglassen, wo es gar nicht um einen
 // Termin geht (z.B. die Kursanzeige in der Topbar) - dann bleibt der Badge eckig.
 function lwBadge(typ, buchstabe, farbe) {
@@ -1919,7 +1935,7 @@ function lwChip(s) {
   const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
   return `<div class="lw-chip" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
-    <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
     <div class="lw-chip-meta">${metaText}</div>
   </div>`;
 }
@@ -1996,7 +2012,7 @@ async function loadLoginWeek() {
       const color = s.subjectColor || '#94a3b8';
       const subjLetter = (s.subjectName || '?').trim().charAt(0).toUpperCase();
       return `<div class="lw-chip" style="margin-bottom:3px;border-left-color:${color};">
-        <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''}</div>
+        <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwFmtDay(s.datum)}${s.uhrzeit ? ' · ' + lwTimeRange(s.uhrzeit, s.dauer) : ''}${lwTypText(s.typ)}</div>
         <div class="lw-chip-meta">${s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht')
           : (s.slotThema ? escHtml(s.slotThema) + ' · frei' : 'frei')}</div>
       </div>`;
@@ -2396,7 +2412,7 @@ function mwChip(s) {
   return `<div class="lw-chip mw-${state}"${chipStyle} ${desc}
     data-mw="${s.id}" role="button" tabindex="0" onclick="mwSelect(${s.id})"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSelect(${s.id});}">
-    <div class="lw-chip-time" style="color:${neutral ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    <div class="lw-chip-time" style="color:${neutral ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
     <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
@@ -2491,7 +2507,7 @@ function lwSerieChip(g, opt) {
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSerieToggle(this);}">
       <div class="lw-chip-time" style="color:var(--md-on-surface);">
         ${lwBadge(s.typ, subjLetter, color)}
-        <span style="color:${color};">${lwIcon(s.typ)}</span>${zeit}</div>
+        <span style="color:${color};">${lwIcon(s.typ)}</span>${zeit}${lwTypText(s.typ)}</div>
       <div class="lw-chip-meta"><span class="mw-chip-status">${anzahl} · ${stand}</span>${thema}<span class="mw-serie-pfeil">▸</span></div>
       ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
     </div>
@@ -4978,7 +4994,7 @@ function awChip(s) {
   return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}" aria-label="${tip}"
     data-aw="${s.id}" role="button" tabindex="0" onclick="awSelect(${s.id})"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();awSelect(${s.id});}">
-    <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}</div>
+    <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
     ${line2 ? `<div class="lw-chip-meta">${line2}</div>` : ''}
     ${meta.length ? `<div class="lw-chip-meta lw-chip-sub">${meta.join(' · ')}</div>` : ''}
     ${personenHtml ? `<div class="aw-people">${personenHtml}</div>` : ''}
