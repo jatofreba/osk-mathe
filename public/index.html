@@ -1904,10 +1904,12 @@ function lwIcon(typ) {
   return `<svg class="lw-ico" viewBox="0 0 16 16" aria-hidden="true">${inner}</svg>`;
 }
 
-// Probeweise (2026-09-21): zusaetzlich zum runden Badge und zum Mikrofon steht
-// das Wort "Talk" auf der Kachel. NUR bei Talks - die sind selten, das Fachbuero
-// ist der Normalfall und braucht keine Beschriftung.
-// Zum Abschalten: auf false setzen. Sonst aendert sich nichts.
+// Drittes Erkennungsmerkmal neben dem runden Badge und dem Mikrofon: das Wort
+// "Talk" auf der Kachel (seit 2026-09-21 fest so gewollt). NUR bei Talks - das
+// Fachbuero ist der Normalfall und braucht keine Beschriftung; der Kontrast
+// entsteht dadurch, DASS dort etwas steht, nicht durch zwei konkurrierende
+// Begriffe nebeneinander. Der Schalter bleibt, weil sich die Entscheidung damit
+// in einer Zeile zurueckdrehen laesst.
 const LW_TALK_TEXT = true;
 
 // Kurzform der Terminart fuer die Zeitzeile - steht HINTER der Uhrzeit, damit die
