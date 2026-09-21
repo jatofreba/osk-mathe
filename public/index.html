@@ -170,6 +170,52 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    bleibt lesbar, wo Feinzeichnung und Farbe es nicht mehr sind - bei 14 px, im
    Schwarz-Weiß-Ausdruck und bei Farbsehschwäche. */
 .lw-chip-subj.is-talk{border-radius:50%;}
+/* ── Plenums-Ansicht ─────────────────────────────────────────────────────
+   Dasselbe Raster wie sonst, nur zum Zeigen: groessere Schrift, keine
+   Bearbeiten-Knoepfe, Namen erst auf Klick. */
+#view-plenum .lw-grid{gap:7px;min-width:760px;}
+#view-plenum .lw-chip{font-size:13px;padding:7px 10px;border-left-width:4px;}
+#view-plenum .lw-chip-time{font-size:14px;}
+#view-plenum .lw-chip-subj{width:18px;height:18px;font-size:11px;}
+#view-plenum .lw-ico{width:15px;height:15px;}
+#view-plenum .lw-blockhead{font-size:13px;}
+#view-plenum .lw-cell{min-height:60px;}
+.pl-wrap{max-width:1500px;margin:0 auto;padding:18px;}
+.pl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+.pl-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.pl-suche{width:210px;}
+.pl-btn{
+  border:1px solid var(--md-outline-variant);background:var(--md-surface);
+  color:var(--md-on-surface);border-radius:999px;padding:6px 14px;
+  font-size:13px;font-weight:600;cursor:pointer;
+}
+.pl-btn:hover{background:var(--md-surface-container-low);}
+.pl-btn.active{background:var(--md-primary);border-color:var(--md-primary);color:#fff;}
+.pl-hinweis{font-size:13px;color:var(--md-on-surface-variant);margin-bottom:10px;min-height:18px;}
+.pl-thema{font-weight:600;margin-top:2px;}
+.pl-zahl{color:var(--md-on-surface-variant);margin-top:2px;}
+/* Namenssuche: Treffer bleiben, alles andere tritt zurueck - nicht ausblenden,
+   damit der Termin im Raster an seinem Platz sichtbar bleibt. */
+.pl-blass{opacity:.25;}
+.pl-treffer{box-shadow:0 0 0 2px var(--md-primary);}
+.pl-detail{
+  margin-top:16px;padding:16px 18px;border-radius:14px;
+  background:var(--md-surface-container-low);border:1px solid var(--md-outline-variant);
+}
+.pl-detail-kopf{font-size:17px;font-weight:800;margin-bottom:2px;}
+.pl-detail-meta{font-size:13.5px;color:var(--md-on-surface-variant);margin-bottom:12px;}
+.pl-namen{display:flex;flex-wrap:wrap;gap:8px;}
+.pl-name{
+  background:var(--md-surface);border:1px solid var(--md-outline-variant);
+  border-radius:999px;padding:6px 14px;font-size:15px;font-weight:600;
+}
+.pl-name-haupt{border-color:var(--md-primary);color:var(--md-primary);}
+.pl-name-treffer{background:var(--md-primary);border-color:var(--md-primary);color:#fff;}
+/* Vollbild: echtes Fullscreen, falls der Browser es kann - sonst blendet die
+   Klasse am body Kopf- und Tableiste aus. */
+#view-plenum:fullscreen{background:var(--md-surface);overflow:auto;}
+#view-plenum:fullscreen .pl-wrap{padding:26px;}
+body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .lw-typ{
   margin-left:4px;font-size:8.5px;font-weight:800;letter-spacing:.4px;
   text-transform:uppercase;color:var(--md-on-surface-variant);
@@ -1005,6 +1051,7 @@ textarea.form-input{
     <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
     <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
     <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Tandem-Übersicht</button>
+    <button type="button" class="tab" id="tab-plenum" style="display:none" onclick="showView('plenum')">🖥️ Plenum</button>
   </nav>
 
   <div id="view-lerntheke" style="width:100%;">
@@ -1103,6 +1150,30 @@ textarea.form-input{
     </div>
     <div id="talking-student" style="display:none;"></div>
     <div id="talking-admin" style="display:none;"></div>
+  </div>
+
+  <div id="view-plenum" style="display:none;">
+    <div class="pl-wrap">
+      <div class="pl-head">
+        <div>
+          <div class="cal-title">🖥️ Plenum</div>
+          <div class="cal-subtitle">Zum Zeigen im Tandem – ein Termin antippen zeigt, wer eingetragen ist.</div>
+        </div>
+        <div class="pl-tools">
+          <input class="form-input pl-suche" id="pl-suche" type="search" placeholder="Name nachschlagen…"
+                 oninput="plSuche(this.value)" aria-label="Name nachschlagen">
+          <span role="group" aria-label="Zeitraum" style="display:flex;gap:6px;">
+            <button type="button" class="pl-btn" id="pl-btn-heute" onclick="plZeitraum('heute')">Heute</button>
+            <button type="button" class="pl-btn" id="pl-btn-woche" onclick="plZeitraum('woche')">Diese Woche</button>
+          </span>
+          <button type="button" class="pl-btn" id="pl-btn-voll" onclick="plVollbild()">⛶ Vollbild</button>
+          <button type="button" class="pl-btn" onclick="loadPlenum()">↺ Laden</button>
+        </div>
+      </div>
+      <div class="pl-hinweis" id="pl-hinweis" role="status" aria-live="polite"></div>
+      <div id="pl-grid">Lade…</div>
+      <div class="pl-detail" id="pl-detail" hidden></div>
+    </div>
   </div>
 
   <div id="view-calendar">
@@ -2590,6 +2661,206 @@ function lwSerienKnoepfe() {
   });
 }
 
+// ── Plenums-Ansicht ──────────────────────────────────────────────────────────
+// Zum Zeigen im Tandem: dasselbe Wochenraster, aber gross, ohne Bearbeiten-Knoepfe
+// und ohne Namen in den Kacheln. Wer dabei ist, kommt auf Klick - und die
+// Namenssuche beantwortet die Gegenrichtung ("wo muss diese Person hin?").
+// Eigener Datenstand, damit die Ansicht den Kalender nicht neu zeichnet.
+let _plDaten = null;
+let _plZeitraum = 'woche';      // 'woche' | 'heute'
+let _plSuche = '';
+let _plPicked = null;
+
+async function loadPlenum() {
+  const grid = document.getElementById('pl-grid');
+  if (grid) grid.innerHTML = '<div style="padding:18px;color:var(--md-on-surface-variant);">Lade…</div>';
+  try {
+    const r = await fetch('/api/calendar');
+    _plDaten = r.ok ? await r.json() : { slots: [] };
+  } catch { _plDaten = { slots: [] }; }
+  plRender();
+}
+
+// Alle, die an einem Termin beteiligt sind: buchende Person zuerst, Absagen raus.
+function plPersonen(s) {
+  const leute = [];
+  if (s.presenterUsername) leute.push({ name: s.presenterUsername, haupt: true });
+  (s.invitees || []).forEach(iv => {
+    if (iv.status === 'abgelehnt') return;
+    leute.push({ name: iv.username, haupt: false, offen: iv.status !== 'angenommen' });
+  });
+  return leute;
+}
+
+function plPasst(s) {
+  if (!_plSuche) return false;
+  return plPersonen(s).some(p => String(p.name || '').toLowerCase().includes(_plSuche));
+}
+
+function plSuche(text) {
+  _plSuche = String(text || '').trim().toLowerCase();
+  plRender();
+}
+
+function plZeitraum(wert) {
+  _plZeitraum = wert;
+  plRender();
+}
+
+function plSelect(id) {
+  _plPicked = (_plPicked === id) ? null : id;
+  plRender();
+}
+
+// Spalten des Rasters. "Heute" zeigt nur die eine - ausser heute ist Wochenende,
+// dann bleibt die ganze Woche stehen, statt eine leere Ansicht zu zeigen.
+function plTage(zeitraum, heute) {
+  const montag = lwMonday();
+  const tage = LW_DAY_NAMES.map((name, i) => {
+    const d = new Date(montag); d.setDate(montag.getDate() + i);
+    return { name, datum: lwDateStr(d), d };
+  });
+  if (zeitraum !== 'heute') return tage;
+  const nurHeute = tage.filter(t => t.datum === heute);
+  return nurHeute.length ? nurHeute : tage;
+}
+
+function plChip(s) {
+  const subj = subjectById(s.subjectId);
+  const color = subj.color || '#94a3b8';
+  const letter = (subj.name || '?').trim().charAt(0).toUpperCase();
+  const leute = plPersonen(s);
+  const klassen = ['lw-chip'];
+  if (_plSuche) klassen.push(plPasst(s) ? 'pl-treffer' : 'pl-blass');
+  if (_plPicked === s.id) klassen.push('mw-picked');
+  const thema = s.thema || s.slotThema || '';
+  const stand = leute.length ? `👥 ${leute.length}` : (s.booked ? 'gebucht' : 'frei');
+  const tip = escHtml([subj.name, s.typ === 'input' ? 'Fachbüro' : 'Talk', s.uhrzeit, s.ort,
+    thema, stand, 'antippen zeigt, wer eingetragen ist'].filter(Boolean).join(' · '));
+  return `<div class="${klassen.join(' ')}" style="border-left-color:${color};"
+    title="${tip}" aria-label="${tip}" role="button" tabindex="0"
+    onclick="plSelect(${s.id})"
+    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();plSelect(${s.id});}">
+    <div class="lw-chip-time">${lwBadge(s.typ, letter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
+    ${thema ? `<div class="pl-thema">${escHtml(thema)}</div>` : ''}
+    <div class="pl-zahl">${stand}${s.teacherUsername ? ' · ' + escHtml(formatTeacherShort(s.teacherUsername)) : ''}</div>
+  </div>`;
+}
+
+function plDetailHtml() {
+  const s = ((_plDaten && _plDaten.slots) || []).find(x => x.id === _plPicked);
+  const el = document.getElementById('pl-detail');
+  if (!el) return;
+  if (!s) { el.hidden = true; el.innerHTML = ''; return; }
+  const subj = subjectById(s.subjectId);
+  const leute = plPersonen(s);
+  const kopf = [lwFmtDay(s.datum), lwTimeRange(s.uhrzeit, s.dauer),
+    subj.name + (s.typ === 'input' ? '-FaBü' : '-Talk')].filter(Boolean).join(' · ');
+  const meta = [s.thema || s.slotThema || '', s.ort,
+    s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : ''
+  ].filter(Boolean).join(' · ');
+  const namen = leute.length
+    ? `<div class="pl-namen">${leute.map(p => {
+        const klassen = ['pl-name'];
+        if (p.haupt) klassen.push('pl-name-haupt');
+        if (_plSuche && String(p.name).toLowerCase().includes(_plSuche)) klassen.push('pl-name-treffer');
+        // Offen heisst: eingeladen, aber noch nicht zugesagt - im Plenum genau die,
+        // die man ansprechen will.
+        return `<span class="${klassen.join(' ')}">${escHtml(p.name)}${p.offen ? ' ⏳' : ''}</span>`;
+      }).join('')}</div>`
+    : '<div style="color:var(--md-on-surface-variant);">Noch niemand eingetragen.</div>';
+  el.hidden = false;
+  el.innerHTML = `<div class="pl-detail-kopf">${escHtml(kopf)}</div>
+    ${meta ? `<div class="pl-detail-meta">${escHtml(meta)}</div>` : ''}
+    ${namen}`;
+}
+
+function plRender() {
+  const grid = document.getElementById('pl-grid');
+  if (!grid) return;
+  const alle = (_plDaten && _plDaten.slots) || [];
+  const heute = lwDateStr(new Date());
+  const tage = plTage(_plZeitraum, heute);
+  const istSchultag = plTage('woche', heute).some(t => t.datum === heute);
+
+  const cells = LW_BLOCKS.map(() => tage.map(() => []));
+  const extras = [];
+  alle.forEach(s => {
+    const tagIdx = tage.findIndex(t => t.datum === s.datum);
+    if (tagIdx === -1) return;
+    const start = lwMin(s.uhrzeit);
+    const bi = start === null ? -1 : LW_BLOCKS.findIndex(b => start >= lwMin(b.von) && start < lwMin(b.bis));
+    if (bi === -1) extras.push(s); else cells[bi][tagIdx].push(s);
+  });
+  cells.forEach(zeile => zeile.forEach(liste => liste.sort((a, b) => (lwMin(a.uhrzeit) ?? 0) - (lwMin(b.uhrzeit) ?? 0))));
+
+  const zelle = (liste) => lwSerien(liste, (x) => !x.booked)
+    .map(g => g.slots.length > 1
+      ? lwSerieChip(g, { kind: plChip, ort: (x) => x.ort || '' })
+      : plChip(g.slots[0])).join('');
+
+  const kopfZeile = '<div></div>' + tage.map(t =>
+    `<div class="lw-dayhead">${t.name}<span>${String(t.d.getDate()).padStart(2,'0')}.${String(t.d.getMonth()+1).padStart(2,'0')}.</span></div>`).join('');
+  const zeilen = LW_BLOCKS.map((b, bi) => {
+    const { trenner, zebra } = lwZeilenStil(bi);
+    return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>`
+      + tage.map((_, ti) => `<div class="lw-cell${zebra}">${zelle(cells[bi][ti])}</div>`).join('');
+  }).join('');
+
+  grid.innerHTML = `<div class="lw-grid-wrap"><div class="lw-grid"
+    style="grid-template-columns:auto repeat(${tage.length},minmax(150px,1fr));min-width:${220 + tage.length * 150}px;">
+    ${kopfZeile}${zeilen}</div></div>`
+    + (extras.length ? `<div class="lw-extra"><div class="lw-extra-title">Ausserhalb der Blockzeiten</div>
+        ${extras.map(x => `<div style="margin-bottom:4px;">${plChip(x)}</div>`).join('')}</div>` : '');
+
+  document.getElementById('pl-btn-heute').classList.toggle('active', _plZeitraum === 'heute');
+  document.getElementById('pl-btn-woche').classList.toggle('active', _plZeitraum !== 'heute');
+
+  const hinweis = document.getElementById('pl-hinweis');
+  if (hinweis) {
+    if (_plSuche) {
+      const treffer = alle.filter(x => tage.some(t => t.datum === x.datum) && plPasst(x));
+      hinweis.textContent = treffer.length
+        ? `${treffer.length} Termin${treffer.length === 1 ? '' : 'e'} mit „${_plSuche}“ – hervorgehoben im Raster.`
+        : `Niemand mit „${_plSuche}“ in diesem Zeitraum eingetragen.`;
+    } else if (_plZeitraum === 'heute' && !istSchultag) {
+      hinweis.textContent = 'Heute ist kein Schultag – gezeigt wird die ganze Woche.';
+    } else {
+      hinweis.textContent = '';
+    }
+  }
+  plDetailHtml();
+  lwSerienKnoepfe();
+}
+
+// Vollbild fuer den Beamer. Kann der Browser kein Fullscreen, blendet die Klasse
+// am body wenigstens Kopf- und Tableiste aus.
+function plVollbild() {
+  const el = document.getElementById('view-plenum');
+  if (!el) return;
+  if (document.fullscreenElement) {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    return;
+  }
+  if (el.requestFullscreen) {
+    el.requestFullscreen().catch(() => document.body.classList.toggle('plenum-voll'));
+  } else {
+    document.body.classList.toggle('plenum-voll');
+  }
+  plVollbildKnopf();
+}
+
+function plVollbildKnopf() {
+  const knopf = document.getElementById('pl-btn-voll');
+  if (!knopf) return;
+  const voll = !!document.fullscreenElement || document.body.classList.contains('plenum-voll');
+  knopf.textContent = voll ? '⤡ Vollbild beenden' : '⛶ Vollbild';
+}
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) document.body.classList.remove('plenum-voll');
+  plVollbildKnopf();
+});
+
 // ── Auswahl in "Meine Woche" ──────────────────────────────────────────────────
 // Eine Kachel antippen, unten steht in einer Zeile, was mit dem Termin geht. Bewusst
 // nur EIN Knopf: die Kacheln sind winzig, und alles, wofuer es ein Formular braucht
@@ -2984,6 +3255,8 @@ async function showApp() {
     if (btnCreateAdmin && me.superAdmin) btnCreateAdmin.style.display = '';
     const tabKlasse = document.getElementById('tab-klasse');
     if (tabKlasse) tabKlasse.style.display = '';
+    const tabPlenum = document.getElementById('tab-plenum');
+    if (tabPlenum) tabPlenum.style.display = '';
     // Kein eigenständiger Lerntheke-/Start-Tab für Admins: die Vorschau einer Lerntheke
     // läuft ausschließlich über den 👁-Button (viewStudent()) in der Lerntheken-Übersicht,
     // und "Start" zeigt eigene Pokale/Talks, die Admins nicht haben.
@@ -3125,13 +3398,13 @@ function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','home','picker','admin','talking','calendar','halbjahr','klasse','changepw'].forEach(id => {
+  ['lerntheke','home','picker','admin','talking','calendar','halbjahr','klasse','plenum','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr' || id === 'klasse') {
+    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr' || id === 'klasse' || id === 'plenum') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -3163,6 +3436,7 @@ function showView(v) {
   if (v === 'calendar') loadCalendar();
   if (v === 'halbjahr') loadHalbjahr();
   if (v === 'klasse') loadKlasse();
+  if (v === 'plenum') loadPlenum();
   if (v === 'changepw') {
     const forcedMsg = document.getElementById('cpw-forced-msg');
     const cancelBtn = document.getElementById('cpw-cancel-btn');
