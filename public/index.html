@@ -125,6 +125,14 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 /* Stundenraster: Zeilen = Blöcke, Spalten = Mo-Fr. Schmale Viewports scrollen horizontal. */
 .lw-grid-wrap{overflow-x:auto;}
 .lw-grid{display:grid;grid-template-columns:auto repeat(5,minmax(92px,1fr));gap:5px;min-width:600px;}
+/* Eine Blockzeile soll als Band lesbar sein: durchgehende Trennlinie ueber die ganze
+   Breite, abwechselnder Ton und eine Kopfspalte mit Farbbalken. Ohne das liefen die
+   fuenf 45-Minuten-Zeilen optisch ineinander. */
+.lw-trenner{grid-column:1/-1;height:2px;margin:5px 0;border-radius:1px;
+  background:var(--md-on-surface-variant);opacity:.45;}
+/* Innerhalb eines Blocks nur ein Hauch von Linie - die beiden Haelften gehoeren zusammen. */
+.lw-trenner-fein{height:1px;margin:1px 0;opacity:.2;}
+.lw-cell.lw-zeile-b{background:var(--md-surface-container);}
 .lw-dayhead{
   display:flex;flex-direction:column;align-items:center;gap:1px;
   font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
@@ -133,9 +141,11 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .lw-dayhead span{font-weight:500;font-size:10px;letter-spacing:0;}
 .lw-blockhead{
   display:flex;flex-direction:column;justify-content:center;gap:1px;
-  padding-right:10px;white-space:nowrap;
+  padding:4px 10px 4px 8px;white-space:nowrap;
+  border-left:3px solid var(--md-outline-variant);border-radius:3px;
   font-size:11.5px;font-weight:700;color:var(--md-on-surface);
 }
+.lw-blockhead.lw-zeile-b{border-left-color:var(--md-on-surface-variant);}
 .lw-blockhead span{font-weight:500;font-size:10px;color:var(--md-on-surface-variant);}
 .lw-cell{
   min-height:46px;padding:4px;
@@ -948,7 +958,10 @@ textarea.form-input{
     <div class="login-week" id="login-week">
       <div class="login-week-head">
         <span class="login-week-title">📅 Fachbüro-Angebote</span>
-        <span class="login-week-sub" id="login-week-range"></span>
+        <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="mw-serie-knopf" id="lw-serien-knopf" type="button" style="display:none;"></button>
+          <span class="login-week-sub" id="login-week-range"></span>
+        </span>
       </div>
       <div id="login-week-body" style="color:var(--md-on-surface-variant);font-size:13px;">Lade…</div>
     </div>
@@ -1814,13 +1827,26 @@ const LW_DAY_NAMES = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
 // Stundenraster der Schule. Ein Termin landet in dem Block, in dessen Zeitfenster
 // seine Startzeit fällt; alles andere (Randzeiten, Wochenende, Termine ohne Uhrzeit)
 // wandert in die "Weitere Termine"-Liste unter dem Raster, statt still zu verschwinden.
+// `gruppe` haelt die beiden Haelften eines Blocks zusammen: gleicher Farbton, und die
+// kraeftige Trennlinie laeuft nur zwischen den Bloecken, nicht mitten durch einen.
 const LW_BLOCKS = [
-  { label: '1. Block (1/2)', von: '08:45', bis: '09:30' },
-  { label: '1. Block (2/2)', von: '09:30', bis: '10:15' },
-  { label: '2. Block (1/2)', von: '10:45', bis: '11:30' },
-  { label: '2. Block (2/2)', von: '11:30', bis: '12:15' },
-  { label: 'Mittagsband',    von: '12:30', bis: '13:15' },
+  { label: '1. Block (1/2)', von: '08:45', bis: '09:30', gruppe: 1 },
+  { label: '1. Block (2/2)', von: '09:30', bis: '10:15', gruppe: 1 },
+  { label: '2. Block (1/2)', von: '10:45', bis: '11:30', gruppe: 2 },
+  { label: '2. Block (2/2)', von: '11:30', bis: '12:15', gruppe: 2 },
+  { label: 'Mittagsband',    von: '12:30', bis: '13:15', gruppe: 3 },
 ];
+
+// Trenner und Farbton einer Rasterzeile - fuer alle drei Wochenraster dieselbe Regel.
+function lwZeilenStil(bi) {
+  const b = LW_BLOCKS[bi];
+  const vorher = bi ? LW_BLOCKS[bi - 1] : null;
+  const trenner = !vorher ? ''
+    : vorher.gruppe === b.gruppe
+      ? '<div class="lw-trenner lw-trenner-fein"></div>'
+      : '<div class="lw-trenner"></div>';
+  return { trenner, zebra: b.gruppe % 2 ? '' : ' lw-zeile-b' };
+}
 
 function lwMin(hhmm) {
   const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
@@ -1940,9 +1966,10 @@ async function loadLoginWeek() {
   ).join('');
 
   const blockRows = LW_BLOCKS.map((b, bi) => {
-    const head = `<div class="lw-blockhead">${b.label}<span>${b.von}–${b.bis}</span></div>`;
+    const { trenner, zebra } = lwZeilenStil(bi);
+    const head = `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>`;
     const cellsHtml = LW_DAY_NAMES.map((_, di) =>
-      `<div class="lw-cell">${cells[bi][di].map(lwChip).join('')}</div>`
+      `<div class="lw-cell${zebra}">${lwZelleHtml(cells[bi][di])}</div>`
     ).join('');
     return head + cellsHtml;
   }).join('');
@@ -1968,8 +1995,11 @@ async function loadLoginWeek() {
     ? '<div class="lw-empty" style="margin-top:10px;">Diese Woche sind keine Termine eingetragen.</div>' : '';
 
   body.innerHTML = `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
-    <div class="lw-legend">Buchstabe/Farbe = Fach</div>
+    <div class="lw-legend">Buchstabe/Farbe = Fach · Kacheln wie „3 × 15 Min“ fassen aufeinanderfolgende Termine zusammen</div>
     ${extrasHtml}${emptyHint}`;
+  // Erst jetzt steht im Dokument, wie viele Serien es gibt - danach kennt der Schalter
+  // "alle aufklappen" seine Anzahl.
+  lwSerienKnoepfe();
 }
 
 // ══ Login ════════════════════════════════════════════════════════════════════
@@ -2364,9 +2394,9 @@ function mwChip(s) {
 //
 // Nie gebuendelt werden eigene, eingeladene, angefragte und kollidierende Termine:
 // nach denen sucht man, die muessen ohne Klick sichtbar bleiben.
-function mwSerien(liste) {
+function lwSerien(liste, buendelbar) {
   const schluessel = (s) => [
-    s.subjectId, s.typ, s.teacherUsername || '', s.ort || '',
+    s.subjectId ?? s.subjectName ?? '', s.typ, s.teacherUsername || '', s.ort || '',
     ((s.booked ? s.thema : s.slotThema) || '').trim().toLowerCase(),
   ].join('|');
   const gruppen = [];
@@ -2375,12 +2405,11 @@ function mwSerien(liste) {
   // also oft mitten zwischen zwei Viertelstunden derselben Reihe.
   const ketten = new Map();
   (liste || []).forEach(s => {
-    const zustand = mwState(s);
-    const buendelbar = zustand === 'free' || zustand === 'taken';
+    const darfBuendeln = buendelbar(s);
     const start = lwMin(s.uhrzeit);
     const ende = start === null ? null : start + (parseInt(s.dauer, 10) || 45);
     const k = schluessel(s);
-    if (!buendelbar || start === null) {
+    if (!darfBuendeln || start === null) {
       gruppen.push({ slots: [s], start });
       ketten.delete(k);          // eigener Termin mittendrin bricht die Reihe auf
       return;
@@ -2406,20 +2435,24 @@ function lwFmtMin(min) {
   return `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 }
 
-function mwSerieChip(g) {
+function lwSerieChip(g, opt) {
+  const kindChip = opt.kind;
   const s = g.slots[0];
-  const subj = subjectById(s.subjectId);
+  const subj = opt.subj ? opt.subj(s) : subjectById(s.subjectId);
   const color = subj.color || '#94a3b8';
   const subjLetter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const typLabel = s.typ === 'input' ? 'Fachbüro' : 'Talk';
-  const frei = g.slots.filter(x => mwState(x) === 'free').length;
+  // "frei" heisst hier schlicht: noch nicht gebucht. Termine, die fuer die
+  // anschauende Person aus anderen Gruenden nicht in Frage kommen (Konflikt,
+  // eigene Anfrage laeuft), werden gar nicht erst gebuendelt.
+  const frei = g.slots.filter(x => !x.booked).length;
   const dauer = parseInt(s.dauer, 10) || 45;
   const zeit = `${lwFmtMin(g.start)}–${lwFmtMin(g.ende)}`;
   const themaText = lwThemaOhneFrei((s.booked ? s.thema : s.slotThema) || '');
   const thema = themaText ? ` · „${escHtml(themaText)}“` : '';
   const anzahl = `${g.slots.length} × ${dauer} Min`;
   const stand = frei ? `${frei} frei` : 'alle vergeben';
-  const meta = [escHtml(lwOrtAbweichend(s)),
+  const meta = [escHtml(opt.ort ? opt.ort(s) : lwOrtAbweichend(s)),
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : ''].filter(Boolean).join(' · ');
   const full = [subj.name, typLabel, zeit, anzahl, stand, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
@@ -2436,13 +2469,43 @@ function mwSerieChip(g) {
       <div class="lw-chip-meta"><span class="mw-chip-status">${anzahl} · ${stand}</span>${thema}<span class="mw-serie-pfeil">▸</span></div>
       ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
     </div>
-    <div class="mw-serie-kinder" hidden>${g.slots.map(mwChip).join('')}</div>
+    <div class="mw-serie-kinder" hidden>${g.slots.map(kindChip).join('')}</div>
   </div>`;
 }
 
+// Schueler:innen-Woche: alles buendelbar ausser dem, wonach man sucht.
 function mwZelleHtml(liste) {
-  return mwSerien(liste).map(g => g.slots.length > 1 ? mwSerieChip(g) : mwChip(g.slots[0])).join('');
+  const buendelbar = (s) => ['free', 'taken'].includes(mwState(s));
+  return lwSerien(liste, buendelbar)
+    .map(g => g.slots.length > 1 ? lwSerieChip(g, { kind: mwChip }) : mwChip(g.slots[0])).join('');
 }
+
+// Admin-Woche: NUR freie Termine stapeln. Ein gebuchter Termin traegt die
+// Teilnehmenden und offenen Anfragen - genau das Tagesgeschaeft, das nicht hinter
+// einen Klick gehoert. Der Ort steht hier voll da, wie in den Einzelkacheln.
+function awZelleHtml(liste) {
+  return lwSerien(liste, (s) => !s.booked)
+    .map(g => g.slots.length > 1
+      ? lwSerieChip(g, { kind: awChip, ort: (s) => s.ort || '' })
+      : awChip(g.slots[0])).join('');
+}
+
+// Loginseite: dort gibt es keine persoenliche Sicht, also darf alles gestapelt werden.
+function lwZelleHtml(liste) {
+  return lwSerien(liste, () => true)
+    .map(g => g.slots.length > 1
+      ? lwSerieChip(g, { kind: lwChip, ort: (s) => s.ort || '',
+                         subj: (s) => ({ name: s.subjectName || '', color: s.subjectColor || '#94a3b8' }) })
+      : lwChip(g.slots[0])).join('');
+}
+
+// Je Raster ein Schalter: [Wurzel-Element, Knopf]. Nach jedem Auf-/Zuklappen
+// werden alle vorhandenen Schalter nachgezogen, egal aus welchem Raster der Klick kam.
+const LW_SERIEN_RASTER = [
+  ['home-myweek', 'mw-serien-knopf'],
+  ['cal-adminweek', 'aw-serien-knopf'],
+  ['login-week-body', 'lw-serien-knopf'],
+];
 
 function mwSerieToggle(kopf) {
   const kinder = kopf.nextElementSibling;
@@ -2452,13 +2515,13 @@ function mwSerieToggle(kopf) {
   kopf.setAttribute('aria-expanded', String(!warOffen));
   const pfeil = kopf.querySelector('.mw-serie-pfeil');
   if (pfeil) pfeil.textContent = warOffen ? '▸' : '▾';
-  mwSerienKnopf();
+  lwSerienKnoepfe();
 }
 
 // Ein Schalter fuer alles: wer lieber jeden Termin einzeln sieht, klappt einmal auf
 // und hat die Ansicht von frueher.
-function mwSerienAlle(aufklappen) {
-  document.querySelectorAll('#home-myweek .mw-serie').forEach(serie => {
+function mwSerienAlle(wurzelId, aufklappen) {
+  document.querySelectorAll(`#${wurzelId} .mw-serie`).forEach(serie => {
     const kopf = serie.querySelector('.mw-serie-kopf');
     const kinder = serie.querySelector('.mw-serie-kinder');
     if (!kopf || !kinder) return;
@@ -2467,18 +2530,20 @@ function mwSerienAlle(aufklappen) {
     const pfeil = kopf.querySelector('.mw-serie-pfeil');
     if (pfeil) pfeil.textContent = aufklappen ? '▾' : '▸';
   });
-  mwSerienKnopf();
+  lwSerienKnoepfe();
 }
 
-function mwSerienKnopf() {
-  const knopf = document.getElementById('mw-serien-knopf');
-  if (!knopf) return;
-  const kinder = [...document.querySelectorAll('#home-myweek .mw-serie-kinder')];
-  if (!kinder.length) { knopf.style.display = 'none'; return; }
-  knopf.style.display = '';
-  const nochZu = kinder.some(k => k.hidden);
-  knopf.textContent = nochZu ? `▾ Alle ${kinder.length} Serien aufklappen` : '▸ Serien zuklappen';
-  knopf.onclick = () => mwSerienAlle(nochZu);
+function lwSerienKnoepfe() {
+  LW_SERIEN_RASTER.forEach(([wurzelId, knopfId]) => {
+    const knopf = document.getElementById(knopfId);
+    if (!knopf) return;
+    const kinder = [...document.querySelectorAll(`#${wurzelId} .mw-serie-kinder`)];
+    if (!kinder.length) { knopf.style.display = 'none'; return; }
+    knopf.style.display = '';
+    const nochZu = kinder.some(k => k.hidden);
+    knopf.textContent = nochZu ? `▾ Alle ${kinder.length} Serien aufklappen` : '▸ Serien zuklappen';
+    knopf.onclick = () => mwSerienAlle(wurzelId, nochZu);
+  });
 }
 
 // ── Auswahl in "Meine Woche" ──────────────────────────────────────────────────
@@ -2667,10 +2732,11 @@ async function loadMyWeek() {
     </div>`
   ).join('');
 
-  const blockRows = LW_BLOCKS.map((b, bi) =>
-    `<div class="lw-blockhead">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-    LW_DAY_NAMES.map((_, di) => `<div class="lw-cell">${mwZelleHtml(cells[bi][di])}</div>`).join('')
-  ).join('');
+  const blockRows = LW_BLOCKS.map((b, bi) => {
+    const { trenner, zebra } = lwZeilenStil(bi);
+    return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>` +
+      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${mwZelleHtml(cells[bi][di])}</div>`).join('');
+  }).join('');
 
   const extrasHtml = extras.length ? `<div class="lw-extra">
     <div class="lw-extra-title">Weitere Termine dieser Woche</div>
@@ -2710,7 +2776,7 @@ async function loadMyWeek() {
   // (storniert, abgelaufen oder in einer anderen Woche).
   if (!_mwSlots.some(s => s.id === _mwPicked)) _mwPicked = null;
   mwApplyPick();
-  mwSerienKnopf();
+  lwSerienKnoepfe();
 }
 
 async function showLerntheken() {
@@ -5074,10 +5140,11 @@ function renderAdminWeek() {
     </div>`
   ).join('');
 
-  const blockRows = LW_BLOCKS.map((b, bi) =>
-    `<div class="lw-blockhead">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-    LW_DAY_NAMES.map((_, di) => `<div class="lw-cell">${cells[bi][di].map(awChip).join('')}</div>`).join('')
-  ).join('');
+  const blockRows = LW_BLOCKS.map((b, bi) => {
+    const { trenner, zebra } = lwZeilenStil(bi);
+    return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>` +
+      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${awZelleHtml(cells[bi][di])}</div>`).join('');
+  }).join('');
 
   const extrasHtml = extras.length ? `<div class="lw-extra">
     <div class="lw-extra-title">Weitere Termine dieser Woche</div>
@@ -5091,7 +5158,10 @@ function renderAdminWeek() {
         <div class="mw-title">📅 Meine Woche</div>
         <div class="mw-sub">${fmt(dayDates[0])}–${fmt(dayDates[4])} · ${booked} gebucht${free ? ` · ${free} frei` : ''} · ${teilnahmen} Teilnahme${teilnahmen === 1 ? '' : 'n'}</div>
       </div>
-      <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button class="mw-serie-knopf" id="aw-serien-knopf" type="button" style="display:none;"></button>
+        <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
+      </div>
     </div>
     ${weekSlots.length
       ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
@@ -5106,6 +5176,7 @@ function renderAdminWeek() {
            <span>📋 von dir eingeladen – weiß es noch nicht</span>
            <span>👥 = Anzahl statt Namen, wenn es viele sind</span>
            <span>Termin antippen, um Anfragen und Teilnahmen einzutragen.</span>
+           <span>Kacheln wie „3 × 15 Min" fassen freie Termine zusammen – gebuchte stehen immer einzeln.</span>
          </div>`
       : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
     <div class="mw-bar" id="aw-actionbar"></div>
@@ -5114,6 +5185,7 @@ function renderAdminWeek() {
   // Auswahl ueberlebt das Neuzeichnen, solange es den Termin noch gibt.
   if (!(calData.slots || []).some(s => s.id === _awPicked)) _awPicked = null;
   awApplyPick();
+  lwSerienKnoepfe();
 }
 
 function renderMyHalbjahr() {
