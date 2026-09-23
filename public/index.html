@@ -4913,12 +4913,6 @@ function slotVorbei(s) {
   return !!s.datum && s.datum < new Date().toISOString().slice(0, 10);
 }
 
-// Ein Termin gehoert mir, wenn ich ihn halte oder dazu eingeladen/angemeldet bin -
-// unabhaengig davon, ob es dort noch etwas zu tun gibt.
-function calMeinTermin(it) {
-  return !!(it.mineAsPresenter || it.mineAsListener);
-}
-
 function calSlotState(it) {
   if (it.mineAsPresenter || it.mineAsListener) return 'mine';
   if (me && me.role === 'admin') return it.booked ? 'closed' : 'free';
