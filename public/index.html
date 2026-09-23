@@ -4754,6 +4754,12 @@ function slotVorbei(s) {
   return !!s.datum && s.datum < new Date().toISOString().slice(0, 10);
 }
 
+// Ein Termin gehoert mir, wenn ich ihn halte oder dazu eingeladen/angemeldet bin -
+// unabhaengig davon, ob es dort noch etwas zu tun gibt.
+function calMeinTermin(it) {
+  return !!(it.mineAsPresenter || it.mineAsListener);
+}
+
 function calSlotState(it) {
   if (it.mineAsPresenter || it.mineAsListener) return 'mine';
   if (me && me.role === 'admin') return it.booked ? 'closed' : 'free';
@@ -4938,6 +4944,13 @@ function renderCalDetail() {
         actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere einladen' : '+ einladen'}</button> ` + actions;
       }
     }
+    // Schueler:innen sehen im Tagesdetail nur, was sie noch angeht: etwas zu tun
+    // (ein Knopf) oder ein eigener Termin. Fremde, schon gebuchte Termine und
+    // abgelaufene freie Slots blaehen die Liste sonst nur auf. Bewusst am fertigen
+    // `actions` entschieden statt an einer zweiten, nachgebauten Bedingung - sonst
+    // laufen die beiden Regeln beim naechsten Knopf auseinander.
+    // Deadlines sind oben schon zurueckgegeben und bleiben immer sichtbar.
+    if (!isAdmin && !actions.includes('<button') && !calMeinTermin(it)) return '';
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
         <div>
@@ -4950,7 +4963,9 @@ function renderCalDetail() {
   }).join('');
 
   el.innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px;color:#1d4ed8;">${dateLabel}</div>
-    ${items.length ? rows : '<div class="cal-detail-empty">Keine Mathe-Termine an diesem Tag.</div>'}
+    ${rows || `<div class="cal-detail-empty">${items.length
+        ? 'An diesem Tag gibt es nichts mehr für dich zu buchen.'
+        : 'Keine Termine an diesem Tag.'}</div>`}
     ${isAdmin ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn-sm" onclick="openInputSlotModal('${calSelected}')">+ FaBü-Termin an diesem Tag</button>
       <button class="btn-sm" onclick="openDeadlineModal('${calSelected}')">+ Deadline an diesem Tag</button>
