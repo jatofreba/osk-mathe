@@ -264,6 +264,15 @@ async function initDB() {
         ALTER TABLE talking_slots ADD COLUMN thema TEXT NOT NULL DEFAULT '';
       END IF;
     END $$;
+    -- Ein Fachbuero laesst sich fuer weitere Anmeldungen schliessen (2026-09): der Termin
+    -- bleibt bestehen, wer schon dabei ist behaelt ihn, aber es kommt niemand mehr dazu.
+    -- Fuer alle uebrigen Schueler:innen verschwindet er damit aus dem Kalender - das ist
+    -- gewollt, ein Termin ohne jede Handlungsmoeglichkeit ist fuer sie nur Rauschen.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='geschlossen') THEN
+        ALTER TABLE talking_slots ADD COLUMN geschlossen BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
     -- Deadlines/Termine der Lernbegleitungen (klassenweit sichtbar im Kalender, alles Mathe = blau).
     CREATE TABLE IF NOT EXISTS math_deadlines (
       id         SERIAL PRIMARY KEY,
@@ -1819,7 +1828,7 @@ app.get('/api/talking-slots/open', requireLogin, async (req, res) => {
       FROM talking_slots s
       JOIN subjects sub ON sub.id = s.subject_id
       WHERE s.klasse=$1 AND s.typ=$2 AND sub.key=$3 AND s.datum >= CURRENT_DATE
-        AND sub.nur_zugewiesen = false
+        AND sub.nur_zugewiesen = false AND s.geschlossen = false
         AND NOT EXISTS (SELECT 1 FROM talking_sessions ts WHERE ts.slot_id=s.id)
       ORDER BY s.datum, s.uhrzeit
     `, [req.session.klasse, typ, subjectKey]);
@@ -1923,7 +1932,7 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   try {
     await client.query('BEGIN');
     const slotCheck = await client.query(
-      `SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
+      `SELECT sl.id, sl.typ, sl.thema, sl.geschlossen, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
               (sl.datum < CURRENT_DATE) AS vorbei
        FROM talking_slots sl LEFT JOIN subjects sub ON sub.id = sl.subject_id
        WHERE sl.id=$1 AND sl.klasse=$2`,
@@ -1937,6 +1946,11 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
     if (slotCheck.rows[0].nurZugewiesen && req.session.role !== 'admin') {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
+    }
+    // Fuer weitere Anmeldungen geschlossen - die Lernbegleitung darf weiterhin eintragen.
+    if (slotCheck.rows[0].geschlossen && req.session.role !== 'admin') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Dieser Termin nimmt keine weiteren Anmeldungen mehr an.' });
     }
     // Vergangene Termine sind fuer Schueler:innen zu - nachtraeglich buchen ergibt keinen
     // Sinn. Nachpflegen darf das nur die Lernbegleitung.
@@ -2101,7 +2115,7 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
   try {
     if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können anfragen' });
     const slotRes = await pool.query(`
-      SELECT sl.id, sl.typ, sl.thema, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
+      SELECT sl.id, sl.typ, sl.thema, sl.geschlossen, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
              (sl.datum < CURRENT_DATE) AS vorbei,
              ts.id AS "sessionId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus"
       FROM talking_slots sl
@@ -2114,6 +2128,7 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
     if ((s.typ || 'talk') !== 'input') return res.status(400).json({ error: 'Anfragen gibt es nur bei Fachbüro-Terminen' });
     // Zu einer Lernberatung meldet man sich nicht selbst an.
     if (s.nurZugewiesen) return res.status(403).json({ error: 'Diesen Termin vergibt die Lernbegleitung.' });
+    if (s.geschlossen) return res.status(409).json({ error: 'Dieser Termin nimmt keine weiteren Anmeldungen mehr an.' });
     // Nach dem Termin gibt es nichts mehr anzufragen - wer doch da war, wird von der
     // Lernbegleitung nachgetragen.
     if (s.vorbei) return res.status(409).json({ error: 'Dieser Termin ist vorbei - sprich die Lernbegleitung an, wenn du nachgetragen werden willst.' });
@@ -2366,7 +2381,7 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     const subjectKey = req.query.subject || 'mathe';
     const r = await pool.query(`
       SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer, s.subject_id AS "subjectId",
-             s.thema AS "slotThema",
+             s.thema AS "slotThema", s.geschlossen,
              ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji", pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
@@ -2445,6 +2460,26 @@ app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
 // buchende Person; die Lernbegleitung darf es praezisieren, ohne den Termin neu anzulegen.
 // Die Berechtigung haengt am Termin, nicht an der Buchung - deshalb dieselbe Pruefung wie
 // beim Verschieben (eigener Termin, oder Super-Admin).
+// Ein Fachbuero fuer weitere Anmeldungen schliessen (oder wieder oeffnen). Der Termin
+// bleibt bestehen; wer schon dabei ist, behaelt ihn. Nur Fachbueros - bei einem Talk
+// gibt es nichts zu schliessen, der ist mit der Buchung ohnehin vergeben.
+app.post('/api/admin/talking-slots/:id/geschlossen', requireAdmin, async (req, res) => {
+  try {
+    const geschlossen = req.body.geschlossen === true;
+    const slot = await pool.query(
+      'SELECT id, typ FROM talking_slots WHERE id=$1 AND klasse=$2',
+      [req.params.id, req.session.klasse]
+    );
+    if (!slot.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    if ((slot.rows[0].typ || 'talk') !== 'input')
+      return res.status(400).json({ error: 'Nur Fachbüro-Termine lassen sich schließen.' });
+    const may = await mayManageSlot(req, slot.rows[0].id);
+    if (!may.ok) return res.status(may.status).json({ error: may.error });
+    await pool.query('UPDATE talking_slots SET geschlossen=$1 WHERE id=$2', [geschlossen, slot.rows[0].id]);
+    res.json({ ok: true, geschlossen });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/admin/talking-sessions/:id/thema', requireAdmin, async (req, res) => {
   try {
     const thema = (req.body.thema || '').trim();
@@ -2747,7 +2782,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
     const [slots, deadlines, nurZugewiesen] = await Promise.all([
       pool.query(`
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
-               s.thema AS "slotThema",
+               s.thema AS "slotThema", s.geschlossen,
                ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
                pu.username AS "presenterUsername",
                tu.username AS "teacherUsername", s.admin_id AS "teacherId",
@@ -2781,12 +2816,16 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
       mineAsPresenter: s.presenterId === uid,
       mineAsListener: !!s.myInvitationId,
     })).filter(s => {
-      // Termine eines "nur zugewiesen"-Fachs (Lernberatung) gehen nur die an, die
-      // ihnen zugeordnet sind. Das wird hier serverseitig gefiltert, damit sie gar
-      // nicht erst beim Browser ankommen. Admins sehen weiterhin alles.
+      // Serverseitig gefiltert, damit solche Termine gar nicht erst beim Browser
+      // ankommen. Admins sehen weiterhin alles.
       if (req.session.role === 'admin') return true;
-      if (!nurZugewiesenIds.has(s.subjectId)) return true;
-      return s.mineAsPresenter || s.mineAsListener;
+      // Wer schon dabei ist, behaelt seinen Termin in jedem Fall - auch einen
+      // geschlossenen, sonst verschwaende ihm der eigene Termin unter den Haenden.
+      if (s.mineAsPresenter || s.mineAsListener) return true;
+      // Fuer weitere Anmeldungen geschlossen: geht die uebrigen nichts mehr an.
+      if (s.geschlossen) return false;
+      // Termine eines "nur zugewiesen"-Fachs (Lernberatung) vergibt die Lernbegleitung.
+      return !nurZugewiesenIds.has(s.subjectId);
     });
     res.json({ slots: rows, deadlines: deadlines.rows });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }

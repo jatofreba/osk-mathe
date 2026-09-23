@@ -4935,6 +4935,8 @@ function renderCalDetail() {
       const nurAnfragen = it.typ === 'input' && !!it.slotThema && !subj.nurZugewiesen;
       if (!isAdmin) actions = slotVorbei(it)
         ? `<span class="pill" style="font-size:10px;">Termin ist vorbei</span>`
+        : it.geschlossen
+        ? `<span class="pill" style="font-size:10px;">Keine weiteren Anmeldungen</span>`
         : nurAnfragen
           ? `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`
           : `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
@@ -4962,7 +4964,7 @@ function renderCalDetail() {
         if (s) actions = `<span class="pill pill-blue">${s}</span>`
           + (invEingeteilt(meins) && !meins.gesehen && !slotVorbei(it)
              ? ` <button class="btn-act btn-green" onclick="calGesehen(${it.myInvitationId})">Alles klar</button>` : '');
-      } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter
+      } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter && !it.geschlossen
                  && it.presentedStatus === 'ausstehend' && !slotVorbei(it)) {
         // Bei einem schon laufenden Fachbüro, bei dem man nicht dabei ist, kann man mitmachen anfragen.
         actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`;
@@ -4984,22 +4986,25 @@ function renderCalDetail() {
       // Admin darf bei Fachbüro-Terminen direkt Schüler:innen einladen - bei Erstellung (noch offen)
       // UND nachträglich (schon gebucht, weitere Personen dazu).
       if (it.typ === 'input') {
+        // Schliessen laesst den Termin und alle Angemeldeten unberuehrt - es kommt nur
+        // niemand mehr dazu, und fuer alle uebrigen verschwindet er aus dem Kalender.
+        actions = `<button class="btn-act btn-outline" onclick="calSlotGeschlossen(${it.id}, ${!it.geschlossen})">`
+          + `${it.geschlossen ? 'Wieder öffnen' : 'Keine weiteren Anmeldungen'}</button> ` + actions;
         actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere einladen' : '+ einladen'}</button> ` + actions;
       }
     }
-    // Ausgeblendet wird fuer Schueler:innen NUR ein Talk, bei dem nichts mehr geht:
-    // ein fremder Talk ist belegt, sobald er gebucht ist, und steht dann nur noch im
-    // Weg. Fachbueros bleiben IMMER stehen - dort kann man auch dann noch mitmachen
-    // anfragen, wenn schon einzelne Leute gebucht haben, und ein Termin ohne Knopf
-    // ist dort kein Beleg dafuer, dass nichts mehr geht.
+    // Schueler:innen sehen nur, wo sie noch etwas tun koennen - oder was ihnen selbst
+    // gehoert. Das trifft beide Terminarten richtig: ein fremder Talk ist mit der
+    // Buchung vergeben, ein Fachbuero bleibt dagegen anfragbar, solange es laeuft und
+    // offen ist. Was hier ohne Knopf ankommt, ist vorbei oder geschlossen.
     // Entschieden wird am fertigen `actions` statt an einer zweiten, nachgebauten
     // Bedingung - sonst laufen die beiden Regeln beim naechsten Knopf auseinander.
-    // Eigene Termine (auch nur mit Pille) und Deadlines bleiben ebenfalls sichtbar.
-    if (!isAdmin && it.typ === 'talk' && !actions.includes('<button') && !calMeinTermin(it)) return '';
+    // Eigene Termine (auch nur mit Pille) und Deadlines bleiben sichtbar.
+    if (!isAdmin && !actions.includes('<button') && !calMeinTermin(it)) return '';
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
         <div>
-          <div>${icon} <strong>${typLabel}</strong> ${it.booked ? '<span class="pill pill-green" style="font-size:10px;">✓ gebucht</span>' : '<span class="pill pill-yellow" style="font-size:10px;">○ offen</span>'}</div>
+          <div>${icon} <strong>${typLabel}</strong> ${it.booked ? '<span class="pill pill-green" style="font-size:10px;">✓ gebucht</span>' : '<span class="pill pill-yellow" style="font-size:10px;">○ offen</span>'}${it.geschlossen ? ' <span class="pill" style="font-size:10px;">🔒 keine weiteren Anmeldungen</span>' : ''}</div>
           <div style="color:var(--md-on-surface-variant);font-size:12px;">${meta}</div>
           <div style="margin-top:4px;">${body}</div>
         </div>
@@ -5015,6 +5020,17 @@ function renderCalDetail() {
       <button class="btn-sm" onclick="openInputSlotModal('${calSelected}')">+ FaBü-Termin an diesem Tag</button>
       <button class="btn-sm" onclick="openDeadlineModal('${calSelected}')">+ Deadline an diesem Tag</button>
     </div>` : ''}`;
+}
+
+// Fachbuero fuer weitere Anmeldungen schliessen bzw. wieder oeffnen (nur Lernbegleitung).
+async function calSlotGeschlossen(slotId, geschlossen) {
+  const r = await fetch(`/api/admin/talking-slots/${slotId}/geschlossen`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ geschlossen })
+  });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) { alert(d.error || 'Fehler.'); return; }
+  loadCalendar();
 }
 
 async function calRespondInvite(id, accept) {
