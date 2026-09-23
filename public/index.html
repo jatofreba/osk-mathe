@@ -1658,6 +1658,19 @@ textarea.form-input{
 </div>
 
 <!-- ══ MODAL: Fachbüro-Termin - Schüler:innen einladen (Admin, bei Erstellung + nachträglich) ══ -->
+<!-- ══ MODAL: Wunsch → Termin (vorhandenen nehmen oder neu anlegen) ═══════════ -->
+<div class="overlay" id="modal-wunsch-termin">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title" id="wt-titel">Termin daraus machen</div>
+    <div id="wt-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:12px;"></div>
+    <div id="wt-liste" style="max-height:280px;overflow-y:auto;margin-bottom:12px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-wunsch-termin')">Abbrechen</button>
+      <button class="btn-act btn-blue" id="wt-neu" onclick="wunschTerminNeu()">+ Neuen Termin anlegen</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-input-assign">
   <div class="modal" style="max-width:440px;">
     <div class="modal-title" id="iassign-title">Schüler:innen einladen</div>
@@ -2891,11 +2904,75 @@ async function wunschAblehnen(id) {
 
 // Die Brücke zum Termin: der bestehende Fachbüro-Dialog wird mit Fach und Thema
 // des Wunsches vorbelegt. Was danach passiert, steht in submitInputSlot().
+// Freie Termine, die noch kein Thema tragen: die kann man fuer einen Wunsch
+// benutzen, statt einen zweiten danebenzulegen. Fremde Termine bleiben aussen vor
+// (der Server wuerde sie ohnehin ablehnen), vergangene auch.
+function wunschFreieTermine(w) {
+  return (calData.slots || [])
+    .filter(s => s.typ === 'input' && !s.booked && !slotVorbei(s)
+      && !String(s.slotThema || '').trim() && awDarfVerwalten(s))
+    // Termine im Fach des Wunsches zuerst - danach nach Datum.
+    .sort((a, b) => (Number(b.subjectId === w.subjectId) - Number(a.subjectId === w.subjectId))
+      || String(a.datum).localeCompare(String(b.datum))
+      || String(a.uhrzeit || '').localeCompare(String(b.uhrzeit || '')));
+}
+
 function wunschTermin(id) {
   const w = _wuensche.find(x => x.id === id);
   if (!w) return;
   _wunschFuerTermin = id;
+  const frei = wunschFreieTermine(w);
+  // Gibt es nichts zur Auswahl, ist die Frage ueberfluessig - dann gleich anlegen.
+  if (!frei.length) return wunschTerminNeu();
+
+  document.getElementById('wt-titel').textContent = `„${w.titel}“ → Termin`;
+  document.getElementById('wt-info').innerHTML =
+    `👥 ${w.anzahl} wollen mitmachen. Nimm einen freien Termin ohne Thema – oder leg einen neuen an.`;
+  document.getElementById('wt-liste').innerHTML = frei.map(s => {
+    const subj = subjectById(s.subjectId);
+    const passt = s.subjectId === w.subjectId;
+    const wann = `${lwFmtDay(s.datum)} · ${lwTimeRange(s.uhrzeit, s.dauer)}`;
+    const meta = [s.ort, s.teacherUsername ? formatTeacherShort(s.teacherUsername) : '',
+      passt ? '' : 'anderes Fach'].filter(Boolean).join(' · ');
+    return `<div class="wu-zeile">
+      <div class="wu-haupt">
+        <div class="wu-titel">${lwBadge(s.typ, (subj.name || '?').charAt(0).toUpperCase(), subj.color || '#94a3b8')} ${escHtml(wann)}</div>
+        ${meta ? `<div class="wu-sub">${escHtml(meta)}</div>` : ''}
+      </div>
+      <button type="button" class="wu-btn dabei" onclick="wunschTerminAnSlot(${s.id})">Diesen nehmen</button>
+    </div>`;
+  }).join('');
+  openModal('modal-wunsch-termin');
+}
+
+// "Neuen anlegen": der bekannte Fachbuero-Dialog, vorbelegt aus dem Wunsch.
+function wunschTerminNeu() {
+  const w = _wuensche.find(x => x.id === _wunschFuerTermin);
+  if (!w) return;
+  closeModal('modal-wunsch-termin');
   openInputSlotModal(null, { subjectId: w.subjectId, thema: w.titel });
+}
+
+// Vorhandenen Termin nehmen: Thema am Termin nachtragen, Buchung anlegen,
+// Interessierte einladen - macht alles der Endpunkt.
+async function wunschTerminAnSlot(slotId) {
+  const wid = _wunschFuerTermin;
+  if (!wid) return;
+  _wunschFuerTermin = null;
+  closeModal('modal-wunsch-termin');
+  const r = await fetch(`/api/admin/wuensche/${wid}/termin`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slotId })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    alert(d.error || 'Das hat nicht geklappt.');
+  } else if (d.conflicts && d.conflicts.length) {
+    alert(`${d.eingeladen} eingeladen.\n\nNicht eingeladen (Zeitkonflikt):\n`
+      + d.conflicts.map(c => `${c.username}: ${c.reason}`).join('\n'));
+  }
+  loadCalendar();
+  loadWuensche();
 }
 
 // ── Plenums-Ansicht ──────────────────────────────────────────────────────────

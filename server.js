@@ -2695,6 +2695,10 @@ app.post('/api/admin/wuensche/:id/termin', requireAdmin, async (req, res) => {
     const slot = await pool.query('SELECT id, thema FROM talking_slots WHERE id=$1 AND klasse=$2',
       [slotId, req.session.klasse]);
     if (!slot.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
+    // Ein Wunsch darf nur an einen Termin gehaengt werden, den man auch aendern
+    // duerfte - sonst belegt man den Termin einer anderen Lernbegleitung.
+    const may = await mayManageSlot(req, slotId);
+    if (!may.ok) return res.status(may.status).json({ error: may.error });
 
     const interessierte = await pool.query(
       `SELECT wi.user_id FROM wunsch_interesse wi JOIN users u ON u.id = wi.user_id
@@ -2714,6 +2718,12 @@ app.post('/api/admin/wuensche/:id/termin', requireAdmin, async (req, res) => {
         'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,NULL,$2) RETURNING id',
         [slotId, thema]);
       sessionId = neu.rows[0].id;
+      // Haengt der Wunsch an einem Termin, der noch ohne Thema ausgeschrieben war,
+      // bekommt der Termin selbst den Titel - sonst stuende er in der Wochenansicht
+      // weiterhin ohne Thema da.
+      if (!(slot.rows[0].thema || '').trim()) {
+        await pool.query('UPDATE talking_slots SET thema=$1 WHERE id=$2', [w.rows[0].titel, slotId]);
+      }
     }
     for (const uid of okIds) {
       await pool.query(
