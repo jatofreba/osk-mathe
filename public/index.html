@@ -198,6 +198,10 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    oder eine Status-Pille, sind sie hoeher - dann sieht man zweieinhalb und
    merkt genauso, dass es weitergeht. */
 .wu-liste{max-height:192px;overflow-y:auto;padding-right:4px;}
+/* Was schon entschieden ist, braucht nur eine Zeile Platz - es steht da zum
+   Nachlesen, nicht zum Arbeiten. Der angeschnittene Rand der naechsten Zeile
+   zeigt, dass es weitergeht. */
+.wu-liste-klein{max-height:76px;}
 .wu-liste .wu-zeile:last-child{margin-bottom:0;}
 .wu-form .form-input{padding:7px 10px;font-size:13px;}
 .wu-aehnlich{
@@ -2797,7 +2801,7 @@ function renderWuenscheHome() {
     ${offen.length ? `<div class="wu-liste">${offen.map(zeile).join('')}</div>`
       : '<div class="lw-empty">Noch keine Wünsche – trag den ersten ein.</div>'}
     ${entschieden.length ? `<div class="mw-sub" style="margin-top:10px;">Schon entschieden:</div>
-      <div class="wu-liste">${entschieden.map(zeile).join('')}</div>` : ''}
+      <div class="wu-liste wu-liste-klein">${entschieden.map(zeile).join('')}</div>` : ''}
   </div>`;
 }
 
@@ -2846,7 +2850,11 @@ async function wunschInteresse(id) {
 }
 
 async function wunschLoeschen(id) {
-  if (!confirm('Diesen Wunsch zurückziehen?')) return;
+  // Fuer die Lernbegleitung ein Klick: sie raeumt die Liste laufend auf, und eine
+  // Rueckfrage pro Zeile haelt nur auf. Schueler:innen werden gefragt - dort ist es
+  // der eigene Wunsch, und ein Fehlgriff kostet die Eingabe.
+  const istAdmin = me && me.role === 'admin';
+  if (!istAdmin && !confirm('Diesen Wunsch zurückziehen?')) return;
   await fetch(`/api/wuensche/${id}`, { method: 'DELETE' });
   await loadWuensche();
 }
@@ -2888,7 +2896,7 @@ function renderWuenscheAdmin() {
     ${offen.length ? `<div class="wu-liste">${offen.map(zeile).join('')}</div>`
       : '<div class="lw-empty">Gerade keine offenen Wünsche.</div>'}
     ${rest.length ? `<div class="mw-sub" style="margin-top:10px;">Schon bearbeitet:</div>
-      <div class="wu-liste">${rest.map(zeile).join('')}</div>` : ''}
+      <div class="wu-liste wu-liste-klein">${rest.map(zeile).join('')}</div>` : ''}
   </div>`;
 }
 
