@@ -170,6 +170,35 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
    bleibt lesbar, wo Feinzeichnung und Farbe es nicht mehr sind - bei 14 px, im
    Schwarz-Weiß-Ausdruck und bei Farbsehschwäche. */
 .lw-chip-subj.is-talk{border-radius:50%;}
+/* ── Wunschliste ─────────────────────────────────────────────────────────
+   Gleiche Anmutung wie "Meine Woche" (mw-panel), damit es nicht wie ein
+   Fremdkoerper wirkt. */
+.wu-zeile{
+  display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;
+  padding:9px 10px;border-radius:10px;background:var(--md-surface-container-low);
+  margin-bottom:6px;
+}
+.wu-haupt{flex:1 1 220px;min-width:0;}
+.wu-titel{font-weight:700;font-size:13.5px;}
+.wu-sub{font-size:11.5px;color:var(--md-on-surface-variant);margin-top:2px;}
+.wu-zahl{
+  display:inline-flex;align-items:center;gap:4px;white-space:nowrap;
+  font-weight:800;font-size:13px;color:var(--md-on-surface);
+}
+.wu-btn{
+  border:1px solid var(--md-outline-variant);background:var(--md-surface);
+  color:var(--md-on-surface);border-radius:999px;padding:5px 12px;
+  font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.wu-btn:hover{background:var(--md-surface-container);}
+.wu-btn.dabei{background:var(--md-primary);border-color:var(--md-primary);color:#fff;}
+.wu-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px;}
+.wu-form .form-input{padding:7px 10px;font-size:13px;}
+.wu-aehnlich{
+  font-size:12px;color:var(--md-on-surface-variant);
+  background:#fef9c3;border:1px solid #fde68a;border-radius:8px;
+  padding:7px 10px;margin-bottom:10px;
+}
 /* ── Plenums-Ansicht ─────────────────────────────────────────────────────
    Dasselbe Raster wie sonst, nur zum Zeigen: groessere Schrift, keine
    Bearbeiten-Knoepfe, Namen erst auf Klick. */
@@ -1071,6 +1100,7 @@ textarea.form-input{
       <h2 style="font-size:22px;font-weight:800;margin-bottom:6px;">🏠 Übersicht</h2>
       <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Woche und deine in LZKs, Talks und Lerntheken gesammelten Flammen im Überblick.</p>
       <div id="home-myweek" style="margin-bottom:24px;"></div>
+      <div id="home-wuensche" style="margin-bottom:24px;"></div>
       <div id="home-trophy-summary"></div>
     </div>
   </div>
@@ -1195,6 +1225,7 @@ textarea.form-input{
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
+      <div id="cal-wuensche"></div>
       <div id="cal-adminweek"></div>
       <div id="cal-myhj"></div>
       <div id="cal-invites"></div>
@@ -2397,7 +2428,7 @@ async function showHome() {
   showView('home');
   // Wochenansicht und Pokale-Übersicht laden parallel - die Woche steht oben und
   // soll nicht auf die (langsamere) Lerntheken-/Leaderboard-Auswertung warten.
-  await Promise.all([loadMyWeek(), loadPickerData()]);
+  await Promise.all([loadMyWeek(), loadPickerData(), loadWuensche()]);
 }
 
 // ── "Meine Woche" (Startseite) ───────────────────────────────────────────────
@@ -2659,6 +2690,202 @@ function lwSerienKnoepfe() {
     knopf.textContent = nochZu ? `▾ Alle ${kinder.length} Serien aufklappen` : '▸ Serien zuklappen';
     knopf.onclick = () => mwSerienAlle(wurzelId, nochZu);
   });
+}
+
+// ── Wunschliste ──────────────────────────────────────────────────────────────
+// Schüler:innen wünschen sich Themen fürs Fachbüro und stimmen mit "Ich auch" zu.
+// Die Lernbegleitung sieht die Nachfrage und macht daraus einen Termin.
+// Beide Seiten lesen dieselbe Liste, zeigen sie aber verschieden: Schüler:innen
+// sehen nur die ANZAHL, die Lernbegleitung auch die Namen (sie lädt ja ein).
+let _wuensche = [];
+let _wunschFuerTermin = null;   // Wunsch, aus dem gerade ein Termin entsteht
+
+async function loadWuensche() {
+  try {
+    const r = await fetch('/api/wuensche');
+    _wuensche = r.ok ? await r.json() : [];
+  } catch { _wuensche = []; }
+  renderWuenscheHome();
+  renderWuenscheAdmin();
+}
+
+function wunschBadge(w) {
+  const farbe = w.subjectColor || '#94a3b8';
+  const buchstabe = (w.subjectName || '?').trim().charAt(0).toUpperCase();
+  return `<span class="lw-chip-subj" style="background:${farbe};">${escHtml(buchstabe)}</span>`;
+}
+
+function wunschStatusPille(w) {
+  if (w.status === 'geplant') {
+    const wann = w.terminDatum ? lwFmtDay(w.terminDatum) + (w.terminUhrzeit ? ' · ' + w.terminUhrzeit : '') : '';
+    return `<span class="pill pill-green" style="font-size:10px;">📅 Termin steht${wann ? ' · ' + escHtml(wann) : ''}</span>`;
+  }
+  if (w.status === 'erledigt') return '<span class="pill" style="font-size:10px;">✓ erledigt</span>';
+  if (w.status === 'abgelehnt') {
+    return `<span class="pill pill-red" style="font-size:10px;">✗ abgelehnt${w.notiz ? ' · ' + escHtml(w.notiz) : ''}</span>`;
+  }
+  return '';
+}
+
+// ── Sicht der Schüler:innen ──────────────────────────────────────────────────
+function renderWuenscheHome() {
+  const el = document.getElementById('home-wuensche');
+  if (!el) return;
+  if (me && me.role === 'admin') { el.innerHTML = ''; return; }
+  const offen = _wuensche.filter(w => w.status === 'offen');
+  // Was entschieden ist, steht darunter - aber nur, wenn es einen selbst angeht:
+  // der eigene Wunsch oder einer, bei dem man mitgestimmt hat. Sonst fuellt sich
+  // die Startseite mit fremden Absagen. Die Begruendung einer Absage ist genau
+  // fuer diese Leute geschrieben, deshalb darf sie nicht wegfallen.
+  const entschieden = _wuensche.filter(w =>
+    w.status === 'geplant' ? true : (w.status !== 'offen' && (w.vonMir || w.ichDabei)));
+  const faecher = angebotsFaecher();
+
+  const zeile = (w) => `<div class="wu-zeile">
+    <div class="wu-haupt">
+      <div class="wu-titel">${wunschBadge(w)} ${escHtml(w.titel)}</div>
+      ${w.beschreibung ? `<div class="wu-sub">${escHtml(w.beschreibung)}</div>` : ''}
+      ${w.status !== 'offen' ? `<div class="wu-sub">${wunschStatusPille(w)}</div>` : ''}
+    </div>
+    <span class="wu-zahl" title="So viele wünschen sich das">👥 ${w.anzahl}</span>
+    ${w.status === 'offen' ? `<button type="button" class="wu-btn${w.ichDabei ? ' dabei' : ''}"
+      onclick="wunschInteresse(${w.id})"
+      aria-pressed="${w.ichDabei ? 'true' : 'false'}">${w.ichDabei ? '✓ Ich bin dabei' : '+ Ich auch'}</button>` : ''}
+    ${w.vonMir && w.status === 'offen'
+      ? `<button type="button" class="wu-btn" onclick="wunschLoeschen(${w.id})" title="Eigenen Wunsch zurückziehen">×</button>` : ''}
+  </div>`;
+
+  el.innerHTML = `<div class="mw-panel">
+    <div class="mw-head">
+      <div>
+        <div class="mw-title">💡 Wünsch dir ein Fachbüro</div>
+        <div class="mw-sub">Was sollte mal drankommen? Trag es ein – oder stimm bei einem Wunsch zu, den es schon gibt.</div>
+      </div>
+    </div>
+    <div class="wu-form">
+      <select class="form-input" id="wu-fach" style="width:auto;" aria-label="Fach">
+        ${faecher.map(f => `<option value="${f.id}">${escHtml(f.name)}</option>`).join('')}
+      </select>
+      <input class="form-input" id="wu-titel" style="flex:1 1 240px;" maxlength="120"
+             placeholder="z.B. Bruchrechnen noch mal von vorn" oninput="wunschAehnliche()"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();wunschNeu();}" aria-label="Wunsch">
+      <button type="button" class="mw-book-btn" onclick="wunschNeu()">Wunsch eintragen</button>
+    </div>
+    <div id="wu-aehnlich" class="wu-aehnlich" style="display:none;"></div>
+    <div id="wu-fehler" style="color:var(--md-error);font-size:12.5px;margin-bottom:8px;display:none;"></div>
+    ${offen.length ? offen.map(zeile).join('')
+      : '<div class="lw-empty">Noch keine Wünsche – trag den ersten ein.</div>'}
+    ${entschieden.length ? `<div class="mw-sub" style="margin-top:10px;">Schon entschieden:</div>
+      ${entschieden.map(zeile).join('')}` : ''}
+  </div>`;
+}
+
+// Während des Tippens zeigen, was es schon gibt - das ist die einzige wirksame
+// Bremse gegen fünf Varianten desselben Wunsches.
+function wunschAehnliche() {
+  const feld = document.getElementById('wu-titel');
+  const kasten = document.getElementById('wu-aehnlich');
+  if (!feld || !kasten) return;
+  const text = feld.value.trim().toLowerCase();
+  if (text.length < 3) { kasten.style.display = 'none'; return; }
+  const treffer = _wuensche.filter(w => w.status === 'offen' && w.titel.toLowerCase().includes(text)).slice(0, 3);
+  if (!treffer.length) { kasten.style.display = 'none'; return; }
+  kasten.style.display = '';
+  kasten.innerHTML = 'Gibt es vielleicht schon: '
+    + treffer.map(w => `<button type="button" class="wu-btn" onclick="wunschInteresse(${w.id})">`
+        + `${escHtml(w.titel)} · 👥 ${w.anzahl}${w.ichDabei ? ' ✓' : ' – ich auch'}</button>`).join(' ');
+}
+
+async function wunschNeu() {
+  const titelFeld = document.getElementById('wu-titel');
+  const fehler = document.getElementById('wu-fehler');
+  const titel = (titelFeld.value || '').trim();
+  const zeigeFehler = (text) => { fehler.textContent = text; fehler.style.display = 'block'; };
+  fehler.style.display = 'none';
+  if (!titel) return zeigeFehler('Bitte schreib kurz, was du dir wünschst.');
+  const subjectId = parseInt(document.getElementById('wu-fach').value) || null;
+  const r = await fetch('/api/wuensche', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ titel, subjectId })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return zeigeFehler(d.error || 'Das hat nicht geklappt.');
+  titelFeld.value = '';
+  document.getElementById('wu-aehnlich').style.display = 'none';
+  await loadWuensche();
+}
+
+async function wunschInteresse(id) {
+  const r = await fetch(`/api/wuensche/${id}/interesse`, { method: 'POST' });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    alert(d.error || 'Das hat nicht geklappt.');
+  }
+  await loadWuensche();
+}
+
+async function wunschLoeschen(id) {
+  if (!confirm('Diesen Wunsch zurückziehen?')) return;
+  await fetch(`/api/wuensche/${id}`, { method: 'DELETE' });
+  await loadWuensche();
+}
+
+// ── Sicht der Lernbegleitung ─────────────────────────────────────────────────
+function renderWuenscheAdmin() {
+  const el = document.getElementById('cal-wuensche');
+  if (!el) return;
+  if (!me || me.role !== 'admin') { el.innerHTML = ''; return; }
+  const offen = _wuensche.filter(w => w.status === 'offen');
+  const rest = _wuensche.filter(w => w.status !== 'offen').slice(0, 8);
+  if (!_wuensche.length) { el.innerHTML = ''; return; }
+
+  const zeile = (w) => {
+    const leute = (w.interessierte || []);
+    return `<div class="wu-zeile">
+      <div class="wu-haupt">
+        <div class="wu-titel">${wunschBadge(w)} ${escHtml(w.titel)}</div>
+        <div class="wu-sub">${leute.length ? escHtml(leute.join(', ')) : 'noch niemand'}${
+          w.vonUsername ? ' · vorgeschlagen von ' + escHtml(w.vonUsername) : ''}</div>
+        ${w.status !== 'offen' ? `<div class="wu-sub">${wunschStatusPille(w)}</div>` : ''}
+      </div>
+      <span class="wu-zahl">👥 ${w.anzahl}</span>
+      ${w.status === 'offen' ? `
+        <button type="button" class="wu-btn dabei" onclick="wunschTermin(${w.id})">📅 Termin daraus machen</button>
+        <button type="button" class="wu-btn" onclick="wunschAblehnen(${w.id})">Ablehnen</button>` : ''}
+      <button type="button" class="wu-btn" onclick="wunschLoeschen(${w.id})" title="Löschen">×</button>
+    </div>`;
+  };
+
+  el.innerHTML = `<div class="mw-panel" style="margin-bottom:14px;">
+    <div class="mw-head">
+      <div>
+        <div class="mw-title">💡 Wünsche aus dem Tandem</div>
+        <div class="mw-sub">${offen.length} offen · nach Nachfrage sortiert</div>
+      </div>
+      <button type="button" class="wu-btn" onclick="loadWuensche()">↺ Laden</button>
+    </div>
+    ${offen.length ? offen.map(zeile).join('') : '<div class="lw-empty">Gerade keine offenen Wünsche.</div>'}
+    ${rest.length ? `<div class="mw-sub" style="margin-top:10px;">Schon bearbeitet:</div>${rest.map(zeile).join('')}` : ''}
+  </div>`;
+}
+
+async function wunschAblehnen(id) {
+  const grund = prompt('Kurz sagen, warum – die Schüler:innen sehen das:', '');
+  if (grund === null) return;
+  await fetch(`/api/admin/wuensche/${id}/status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'abgelehnt', notiz: grund })
+  });
+  await loadWuensche();
+}
+
+// Die Brücke zum Termin: der bestehende Fachbüro-Dialog wird mit Fach und Thema
+// des Wunsches vorbelegt. Was danach passiert, steht in submitInputSlot().
+function wunschTermin(id) {
+  const w = _wuensche.find(x => x.id === id);
+  if (!w) return;
+  _wunschFuerTermin = id;
+  openInputSlotModal(null, { subjectId: w.subjectId, thema: w.titel });
 }
 
 // ── Plenums-Ansicht ──────────────────────────────────────────────────────────
@@ -4704,7 +4931,7 @@ function applyInputSlotSubjectDefaults() {
   const themaHinweis = document.getElementById('islot-thema-hinweis');
   if (themaHinweis) themaHinweis.style.display = subj.nurZugewiesen ? 'none' : '';
 }
-async function openInputSlotModal(presetDate) {
+async function openInputSlotModal(presetDate, vorbelegung) {
   const subjSel = document.getElementById('islot-subject');
   if (subjSel) {
     subjSel.innerHTML = subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
@@ -4744,6 +4971,15 @@ async function openInputSlotModal(presetDate) {
   document.getElementById('islot-thema').value = '';
   document.getElementById('islot-error').style.display = 'none';
   applyInputSlotSubjectDefaults();
+  // Aus einem Wunsch heraus: Fach und Thema stehen schon drin, bleiben aber
+  // aenderbar - der Titel kommt von Schueler:innen und soll nachschaerfbar sein.
+  if (vorbelegung) {
+    if (vorbelegung.subjectId && subjSel) {
+      subjSel.value = String(vorbelegung.subjectId);
+      applyInputSlotSubjectDefaults();
+    }
+    if (vorbelegung.thema) document.getElementById('islot-thema').value = vorbelegung.thema;
+  }
   openModal('modal-input-slot');
 }
 async function submitInputSlot() {
@@ -4774,8 +5010,27 @@ async function submitInputSlot() {
   });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler.'; errEl.style.display = 'block'; return; }
+  // Kam der Termin aus einem Wunsch, werden jetzt die Interessierten eingeladen.
+  // Bei einer Serie haengt der Wunsch am ersten Termin.
+  if (_wunschFuerTermin && d.ids && d.ids.length) {
+    const wid = _wunschFuerTermin;
+    _wunschFuerTermin = null;
+    const tr = await fetch(`/api/admin/wuensche/${wid}/termin`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slotId: d.ids[0] })
+    });
+    const td = await tr.json().catch(() => ({}));
+    if (!tr.ok) {
+      alert(td.error || 'Der Termin steht, aber die Einladungen haben nicht geklappt.');
+    } else if (td.conflicts && td.conflicts.length) {
+      alert(`${td.eingeladen} eingeladen.\n\nNicht eingeladen (Zeitkonflikt):\n`
+        + td.conflicts.map(c => `${c.username}: ${c.reason}`).join('\n'));
+    }
+  }
+  _wunschFuerTermin = null;
   closeModal('modal-input-slot');
   loadCalendar();
+  loadWuensche();
 }
 
 // Admin: bei einem Fachbüro-Termin direkt Schüler:innen einladen (bei Erstellung, wenn noch offen -
@@ -5504,6 +5759,9 @@ function renderAdminWeek() {
   if (!(calData.slots || []).some(s => s.id === _awPicked)) _awPicked = null;
   awApplyPick();
   lwSerienKnoepfe();
+  // Die Wunschliste steht ueber der Woche - sie gehoert zum selben Arbeitsschritt
+  // ("was lege ich als naechstes an?") und wird deshalb hier mitgeladen.
+  loadWuensche();
 }
 
 function renderMyHalbjahr() {

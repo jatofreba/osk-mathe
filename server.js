@@ -373,6 +373,33 @@ async function initDB() {
     -- Lerntheken-Default-Logik (Aufbau-Gruppe etc.) ausschließlich von dort liest - siehe
     -- /api/access, /api/admin/students u.a. Englisch/Deutsch haben aktuell keine Lerntheken,
     -- der Kurs-Wert wird dort nur gespeichert (Grundlage für spätere Differenzierung).
+    -- Wunschliste (2026-09-23) -- steht bewusst HINTER subjects und talking_slots:
+    -- die Fremdschluessel zeigen dorthin, und initDB laeuft als EIN Stapel.
+    -- Schüler:innen tragen Themen ein, die sie sich als
+    -- Fachbüro wünschen, und stimmen bei fremden Wünschen mit "ich auch" zu.
+    -- slot_id haelt fest, welcher Termin daraus geworden ist (Status 'geplant').
+    CREATE TABLE IF NOT EXISTS wunsch (
+      id            SERIAL PRIMARY KEY,
+      klasse        TEXT NOT NULL,
+      subject_id    INTEGER REFERENCES subjects(id),
+      titel         TEXT NOT NULL,
+      beschreibung  TEXT NOT NULL DEFAULT '',
+      user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      status        TEXT NOT NULL DEFAULT 'offen',   -- offen | geplant | erledigt | abgelehnt
+      notiz         TEXT NOT NULL DEFAULT '',        -- Begründung bei abgelehnt
+      slot_id       INTEGER REFERENCES talking_slots(id) ON DELETE SET NULL,
+      admin_id      INTEGER REFERENCES users(id),
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+    -- Gemeinsamer Primärschlüssel: dieselbe Person kann pro Wunsch nur einmal
+    -- zustimmen - das haelt die Datenbank fest, nicht der Anwendungscode.
+    CREATE TABLE IF NOT EXISTS wunsch_interesse (
+      wunsch_id  INTEGER NOT NULL REFERENCES wunsch(id) ON DELETE CASCADE,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (wunsch_id, user_id)
+    );
     CREATE TABLE IF NOT EXISTS user_subject_kurs (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -2272,14 +2299,18 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
       dates.push(datum);
     }
+    const neueIds = [];
     for (const d of dates) {
-      await pool.query(`
+      const r = await pool.query(`
         INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id, thema)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id
       `, [req.session.klasse, d, uhrzeit || '', ort || '', halbjahr || '', teacherUserId, slotTyp, slotDauer, subjId,
           (thema || '').trim()]);
+      neueIds.push(r.rows[0].id);
     }
-    res.json({ ok: true, count: dates.length });
+    // ids: damit der Aufrufer den erzeugten Termin weiterverwenden kann (z.B. einen
+    // Wunsch daran haengen). Bei einer Serie ist der erste der frueheste.
+    res.json({ ok: true, count: dates.length, ids: neueIds });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -2534,6 +2565,166 @@ app.delete('/api/admin/deadlines/:id', requireAdmin, async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Wunschliste ───────────────────────────────────────────────────────────────
+// Schüler:innen tragen Themen ein, die sie sich als Fachbüro wünschen, und stimmen
+// bei fremden Wünschen mit "ich auch" zu. Die Lernbegleitung sieht die Nachfrage
+// und macht daraus einen Termin, zu dem alle Interessierten eingeladen werden.
+//
+// Namen der Interessierten bekommen NUR Admins: für Schüler:innen zählt die Zahl.
+// Das nimmt den sozialen Druck raus, bei etwas mitzustimmen, weil bestimmte
+// Leute dabei sind - und niemand braucht die Liste, um selbst zuzustimmen.
+const WUNSCH_STATUS = ['offen', 'geplant', 'erledigt', 'abgelehnt'];
+
+app.get('/api/wuensche', requireLogin, async (req, res) => {
+  try {
+    const uid = req.session.userId;
+    const istAdmin = req.session.role === 'admin';
+    const r = await pool.query(`
+      SELECT w.id, w.titel, w.beschreibung, w.status, w.notiz, w.slot_id AS "slotId",
+             to_char(w.created_at,'YYYY-MM-DD') AS erstellt,
+             w.subject_id AS "subjectId", sub.name AS "subjectName", sub.color AS "subjectColor",
+             u.username AS "vonUsername", (w.user_id = $2) AS "vonMir",
+             (SELECT COUNT(*) FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id)::int AS anzahl,
+             EXISTS (SELECT 1 FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id AND wi.user_id = $2) AS "ichDabei",
+             COALESCE((SELECT json_agg(iu.username ORDER BY iu.username)
+                       FROM wunsch_interesse wi JOIN users iu ON iu.id = wi.user_id
+                       WHERE wi.wunsch_id = w.id), '[]') AS interessierte,
+             to_char(sl.datum,'YYYY-MM-DD') AS "terminDatum", sl.uhrzeit AS "terminUhrzeit"
+      FROM wunsch w
+      LEFT JOIN subjects sub ON sub.id = w.subject_id
+      LEFT JOIN users u ON u.id = w.user_id
+      LEFT JOIN talking_slots sl ON sl.id = w.slot_id
+      WHERE w.klasse = $1
+      ORDER BY (w.status = 'offen') DESC, anzahl DESC, w.created_at DESC
+    `, [req.session.klasse, uid]);
+    // Wer den Wunsch gestellt hat und wer zugestimmt hat, sieht nur die Lernbegleitung.
+    res.json(r.rows.map(w => istAdmin ? w
+      : { ...w, interessierte: undefined, vonUsername: w.vonMir ? w.vonUsername : undefined }));
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/wuensche', requireLogin, async (req, res) => {
+  try {
+    const titel = (req.body.titel || '').trim();
+    const beschreibung = (req.body.beschreibung || '').trim();
+    if (!titel) return res.status(400).json({ error: 'Bitte einen Titel angeben.' });
+    if (titel.length > 120) return res.status(400).json({ error: 'Bitte kürzer fassen (max. 120 Zeichen).' });
+    let subjId = parseInt(req.body.subjectId) || null;
+    if (subjId) {
+      const check = await pool.query('SELECT id FROM subjects WHERE id=$1', [subjId]);
+      if (!check.rows.length) return res.status(400).json({ error: 'Ungültiges Fach' });
+    } else {
+      const mathe = await pool.query("SELECT id FROM subjects WHERE key='mathe'");
+      subjId = mathe.rows[0] && mathe.rows[0].id;
+    }
+    const r = await pool.query(
+      `INSERT INTO wunsch (klasse, subject_id, titel, beschreibung, user_id) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [req.session.klasse, subjId, titel, beschreibung, req.session.userId]
+    );
+    // Wer etwas vorschlägt, will es auch - sonst stünde da eine 0.
+    await pool.query(
+      `INSERT INTO wunsch_interesse (wunsch_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [r.rows[0].id, req.session.userId]
+    );
+    res.json({ ok: true, id: r.rows[0].id });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// "Ich auch" an- und abwählen. Nur solange der Wunsch offen ist: hängt schon ein
+// Termin dran, wird über die Einladung entschieden, nicht mehr über die Liste.
+app.post('/api/wuensche/:id/interesse', requireLogin, async (req, res) => {
+  try {
+    const w = await pool.query('SELECT id, status FROM wunsch WHERE id=$1 AND klasse=$2',
+      [req.params.id, req.session.klasse]);
+    if (!w.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    if (w.rows[0].status !== 'offen') return res.status(409).json({ error: 'Dieser Wunsch ist schon abgehakt.' });
+    const vorhanden = await pool.query(
+      'SELECT 1 FROM wunsch_interesse WHERE wunsch_id=$1 AND user_id=$2', [req.params.id, req.session.userId]);
+    if (vorhanden.rows.length) {
+      await pool.query('DELETE FROM wunsch_interesse WHERE wunsch_id=$1 AND user_id=$2',
+        [req.params.id, req.session.userId]);
+    } else {
+      await pool.query('INSERT INTO wunsch_interesse (wunsch_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [req.params.id, req.session.userId]);
+    }
+    const n = await pool.query('SELECT COUNT(*)::int AS n FROM wunsch_interesse WHERE wunsch_id=$1', [req.params.id]);
+    res.json({ ok: true, dabei: !vorhanden.rows.length, anzahl: n.rows[0].n });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Eigener Wunsch zurückziehen, solange er offen ist. Admins dürfen immer löschen.
+app.delete('/api/wuensche/:id', requireLogin, async (req, res) => {
+  try {
+    const w = await pool.query('SELECT id, user_id, status FROM wunsch WHERE id=$1 AND klasse=$2',
+      [req.params.id, req.session.klasse]);
+    if (!w.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const meiner = w.rows[0].user_id === req.session.userId && w.rows[0].status === 'offen';
+    if (!meiner && req.session.role !== 'admin') return res.status(403).json({ error: 'Kein Zugriff' });
+    await pool.query('DELETE FROM wunsch WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/wuensche/:id/status', requireAdmin, async (req, res) => {
+  try {
+    const { status, notiz } = req.body;
+    if (!WUNSCH_STATUS.includes(status)) return res.status(400).json({ error: 'Ungültiger Status' });
+    const r = await pool.query(
+      `UPDATE wunsch SET status=$1, notiz=$2, admin_id=$3, updated_at=NOW()
+       WHERE id=$4 AND klasse=$5 RETURNING id`,
+      [status, (notiz || '').trim(), req.session.userId, req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Aus einem Wunsch wird ein Termin: der Slot ist schon angelegt (neu oder vorhanden),
+// hier entsteht die Buchung und alle Interessierten werden eingeladen. Zeitkonflikte
+// werden pro Person gemeldet, der Rest wird trotzdem eingetragen - dieselbe Regel
+// wie beim Zuweisen von Hand.
+app.post('/api/admin/wuensche/:id/termin', requireAdmin, async (req, res) => {
+  try {
+    const slotId = parseInt(req.body.slotId);
+    if (!slotId) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const w = await pool.query('SELECT id, titel FROM wunsch WHERE id=$1 AND klasse=$2',
+      [req.params.id, req.session.klasse]);
+    if (!w.rows.length) return res.status(404).json({ error: 'Wunsch nicht gefunden' });
+    const slot = await pool.query('SELECT id, thema FROM talking_slots WHERE id=$1 AND klasse=$2',
+      [slotId, req.session.klasse]);
+    if (!slot.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
+
+    const interessierte = await pool.query(
+      `SELECT wi.user_id FROM wunsch_interesse wi JOIN users u ON u.id = wi.user_id
+       WHERE wi.wunsch_id=$1 AND u.role='student' AND u.klasse=$2 AND u.aktiv=true`,
+      [req.params.id, req.session.klasse]);
+    const ids = interessierte.rows.map(r => r.user_id);
+    const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, slotId, ids);
+
+    // Buchung: entweder es gibt schon eine (dann nur ergänzen) oder sie entsteht hier.
+    const vorhanden = await pool.query('SELECT id FROM talking_sessions WHERE slot_id=$1', [slotId]);
+    let sessionId;
+    if (vorhanden.rows.length) {
+      sessionId = vorhanden.rows[0].id;
+    } else {
+      const thema = (slot.rows[0].thema || '').trim() || w.rows[0].titel;
+      const neu = await pool.query(
+        'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,NULL,$2) RETURNING id',
+        [slotId, thema]);
+      sessionId = neu.rows[0].id;
+    }
+    for (const uid of okIds) {
+      await pool.query(
+        `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angenommen')
+         ON CONFLICT (session_id, listener_id) DO NOTHING`,
+        [sessionId, uid]);
+    }
+    await pool.query(
+      `UPDATE wunsch SET status='geplant', slot_id=$1, admin_id=$2, updated_at=NOW() WHERE id=$3`,
+      [slotId, req.session.userId, req.params.id]);
+    res.json({ ok: true, eingeladen: okIds.length, conflicts });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
