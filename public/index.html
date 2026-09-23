@@ -5795,6 +5795,9 @@ function awRenderBar() {
   // solange der Termin noch bevorsteht - danach trägt man Teilnahmen ein, lädt aber nicht
   // mehr ein. Ohne den Knopf musste man dafür in den Kalender wechseln.
   const einladbar = darf && s.typ === 'input' && !slotVorbei(s) && s.presentedStatus !== 'erledigt';
+  // Schliessen betrifft nur die Selbst-Anmeldung der Schueler:innen. Die Lernbegleitung
+  // kann weiterhin Leute eintragen - deshalb bleibt "+ einladen" davon unberuehrt.
+  const schliessbar = darf && s.typ === 'input';
   // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Flammen und
   // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
   const schnell = darf && gelaufen && s.typ === 'input';
@@ -5858,13 +5861,14 @@ function awRenderBar() {
 
   bar.style.display = 'flex';
   bar.innerHTML = `<div style="min-width:0;">
-      <div class="mw-bar-kopf">${escHtml(kopf)}</div>
+      <div class="mw-bar-kopf">${escHtml(kopf)}${s.geschlossen ? ' <span class="pill" style="font-size:10px;">🔒 keine weiteren Anmeldungen</span>' : ''}</div>
       ${thema ? `<div class="mw-bar-thema">„${escHtml(thema)}“</div>` : ''}
       ${leute.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${leute.join('')}</div>` : ''}
       ${hinweis ? `<div class="mw-bar-hint" style="margin-top:4px;">${escHtml(hinweis)}</div>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       ${einladbar ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openInputAssignModal(${s.id})">${s.booked ? '+ weitere einladen' : '+ einladen'}</button>` : ''}
+      ${schliessbar ? `<button class="mw-bar-btn" onclick="calSlotGeschlossen(${s.id}, ${!s.geschlossen})">${s.geschlossen ? 'Wieder öffnen' : 'Keine weiteren Anmeldungen'}</button>` : ''}
       ${darf ? `<button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>` : ''}
       ${(darf && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-rot" onclick="calCancelSession(${s.session_id})">Stornieren</button>` : ''}
     </div>`;
