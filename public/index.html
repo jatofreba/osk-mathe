@@ -638,6 +638,7 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .cal-title{font-size:20px;font-weight:800;display:flex;align-items:center;gap:8px;color:#1d4ed8;}
 .cal-subtitle{font-size:12.5px;color:var(--md-on-surface-variant);margin-top:2px;}
 .cal-nav{display:flex;align-items:center;gap:10px;}
+.cal-gridnav{display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0 6px;flex-wrap:wrap;}
 .cal-nav-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--md-outline-variant);background:var(--md-surface);font-size:18px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s;}
 .cal-nav-btn:hover{background:#eff6ff;border-color:#93c5fd;}
 .cal-month{font-size:18px;font-weight:800;min-width:160px;text-align:center;}
@@ -1268,6 +1269,17 @@ textarea.form-input{
       <div id="cal-adminweek"></div>
       <div id="cal-myhj"></div>
       <div id="cal-invites"></div>
+      <div id="cal-leer-hinweis" style="display:none;margin:10px 0;padding:12px 14px;border-radius:12px;
+        background:var(--md-surface-container-low);border:1px solid var(--md-outline-variant);
+        font-size:13px;color:var(--md-on-surface-variant);"></div>
+      <!-- Ueber dem Raster nochmal blaettern: die Kopfzeile ist durch Wunschliste
+           und Wochenansicht weit nach oben gerutscht, man schaut aber hierhin. -->
+      <div class="cal-gridnav">
+        <button class="cal-nav-btn" onclick="calShiftMonth(-1)" title="Vorheriger Monat" aria-label="Vorheriger Monat">‹</button>
+        <div class="cal-month" id="cal-month-label2"></div>
+        <button class="cal-nav-btn" onclick="calShiftMonth(1)" title="Nächster Monat" aria-label="Nächster Monat">›</button>
+        <button class="btn-sm" onclick="calGoToday()">Heute</button>
+      </div>
       <div class="cal-grid" id="cal-dow-row"></div>
       <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
       <div class="cal-legend">
@@ -4814,7 +4826,15 @@ function calShiftMonth(delta) {
   calMonth += delta;
   if (calMonth < 0) { calMonth = 11; calYear--; }
   if (calMonth > 11) { calMonth = 0; calYear++; }
+  // Die Liste unter dem Raster zieht mit: sonst blaettert man den Monat weiter und
+  // liest darunter weiter den Tag aus dem alten - es sieht aus, als waere nichts
+  // passiert. Im laufenden Monat ist das Heute, sonst der Monatserste.
+  const heute = new Date();
+  calSelected = (heute.getFullYear() === calYear && heute.getMonth() === calMonth)
+    ? calDateStr(heute)
+    : calDateStr(new Date(calYear, calMonth, 1));
   renderCalendar();
+  renderCalDetail();
 }
 function calGoToday() {
   const n = new Date();
@@ -4921,7 +4941,10 @@ function renderCalendar() {
   const grid = document.getElementById('cal-grid');
   const label = document.getElementById('cal-month-label');
   if (!grid) return;
-  if (label) label.textContent = CAL_MONTHS[calMonth] + ' ' + calYear;
+  const beschriftung = CAL_MONTHS[calMonth] + ' ' + calYear;
+  if (label) label.textContent = beschriftung;
+  const label2 = document.getElementById('cal-month-label2');
+  if (label2) label2.textContent = beschriftung;
   if (dowRow) dowRow.innerHTML = ['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => `<div class="cal-dow">${d}</div>`).join('');
 
   const legendSubj = document.getElementById('cal-legend-subjects');
@@ -4941,11 +4964,25 @@ function renderCalendar() {
        <span>${swatch('background:#fff;border:1px solid #94a3b8;')} Offen</span>
        <span>${swatch('background:#e2e8f0;border:1px solid #94a3b8;')} Gebucht</span>`
     : `<span>${swatch('background:#94a3b8;')} Deine Termine (gefüllt)</span>
-       <span>${swatch('background:#fff;border:1px solid #94a3b8;')} Frei – direkt buchbar</span>
-       <span>${swatch('background:#e2e8f0;border:1px solid #94a3b8;')} Fachbüro – mitmachen anfragen</span>
-       <span>${swatch('background:#eef1f5;border:1px solid #cbd5e1;')} Ausgebucht</span>`;
+       <span>${swatch('background:#fef9c3;border:1px solid #ca8a04;')} Einladung – noch offen</span>`;
+  // Frei/ausgebucht stand hier frueher auch: seit der Kalender nur eigene Termine
+  // zeigt, kann es das nicht mehr geben - eine Legende, die Nichtvorhandenes
+  // erklaert, laesst die Ansicht kaputt aussehen.
 
   const byDay = calItemsByDay();
+  // Ein leerer Kalender ist der Normalfall, solange man nichts gebucht hat - dann
+  // muss dort stehen, wo gebucht wird, sonst wirkt die Ansicht kaputt.
+  const hinweis = document.getElementById('cal-leer-hinweis');
+  if (hinweis) {
+    const nichts = !Object.keys(byDay).length;
+    hinweis.style.display = nichts ? '' : 'none';
+    hinweis.innerHTML = nichts
+      ? (isAdminView
+          ? 'Hier stehen deine Termine und die aus deinem Fach. Leg unten am Tag einen Fachbüro-Termin oder eine Deadline an.'
+          : 'Hier stehen deine gebuchten Termine, Einladungen und Deadlines. '
+            + '<button type="button" class="btn-sm" onclick="showHome()">Zu deiner Woche</button> – dort buchst du neue Termine.')
+      : '';
+  }
   const todayStr = calDateStr(new Date());
   const first = new Date(calYear, calMonth, 1);
   const startOffset = (first.getDay() + 6) % 7; // Montag = 0
