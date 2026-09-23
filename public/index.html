@@ -393,8 +393,8 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .lw-chip.mw-invited .mw-chip-status,.lw-chip.mw-requested .mw-chip-status{color:#854d0e;}
 /* "belegt": nur der Rahmen ist neutral, Fach-Badge und -Symbol bleiben farbig -
    man kann sich ueber die Lernbegleitung noch dazubuchen. */
-.lw-chip.mw-taken{border-left-color:var(--md-outline-variant);}
-.lw-chip.mw-taken .mw-chip-status{color:var(--md-on-surface-variant);}
+.lw-chip.mw-taken,.lw-chip.mw-zu{border-left-color:var(--md-outline-variant);}
+.lw-chip.mw-taken .mw-chip-status,.lw-chip.mw-zu .mw-chip-status{color:var(--md-on-surface-variant);}
 /* Terminkonflikt: der einzige Zustand, der wirklich komplett ausgegraut wird. */
 .lw-chip.mw-conflict{border-left-color:var(--md-outline-variant);opacity:.55;}
 .lw-chip.mw-conflict .mw-chip-status{color:var(--md-on-surface-variant);}
@@ -2513,6 +2513,10 @@ function mwState(s) {
   if (s.mineAsListener && s.myInvitationStatus === 'eingeladen') return 'invited';
   // Eigene offene Anfrage: der Termin ist weder "frei" noch fremd "belegt".
   if (s.mineAsListener && s.myInvitationStatus === 'angefragt') return 'requested';
+  // Fuer weitere Anmeldungen geschlossen: der Termin bleibt sichtbar (er findet ja
+  // statt), aber es gibt nichts mehr zu buchen. Steht vor dem Terminkonflikt, weil
+  // "hier kommt niemand mehr rein" die genauere Auskunft ist.
+  if (s.geschlossen) return 'zu';
   // _conflict wird in loadMyWeek() gesetzt: der Termin ueberschneidet sich mit einer
   // eigenen Buchung und ist deshalb fuer mich nicht belegbar (Server: 409).
   if (s._conflict) return 'conflict';
@@ -2532,6 +2536,7 @@ function mwChip(s) {
     requested:'⏳ Anfrage läuft',
     free:     'frei',
     taken:    'gebucht',
+    zu:       '🔒 keine Anmeldung mehr',
     conflict: '✕ Terminkonflikt',
   }[state];
   // Komplett ausgegraut wird NUR der Terminkonflikt - dort ist wirklich nichts zu
@@ -2564,7 +2569,7 @@ function mwChip(s) {
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean).join(' · ');
 
-  const chipStyle = (neutral || state === 'taken') ? '' : ` style="border-left-color:${color};color:${color};"`;
+  const chipStyle = (neutral || state === 'taken' || state === 'zu') ? '' : ` style="border-left-color:${color};color:${color};"`;
   return `<div class="lw-chip mw-${state}"${chipStyle} ${desc}
     data-mw="${s.id}" role="button" tabindex="0" onclick="mwSelect(${s.id})"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSelect(${s.id});}">
@@ -3285,6 +3290,7 @@ function mwAktion(s) {
   // Ab hier gilt: was vorbei ist, gehoert der Lernbegleitung - auch das Zurueckziehen
   // einer Anfrage. Nur der eigene Termin (oben) bleibt als solcher erkennbar.
   if (slotVorbei(s))      return { hinweis: 'Dieser Termin ist vorbei.' };
+  if (st === 'zu')        return { hinweis: '🔒 Dieser Termin nimmt keine weiteren Anmeldungen an.' };
   // Eine laufende Anfrage war bisher eine Sackgasse: wer sich vertippt hatte, musste
   // warten, bis die Lernbegleitung entscheidet. Jetzt kann man sie selbst zurueckziehen.
   if (st === 'requested') return { text: 'Anfrage zurückziehen', ruf: `calWithdrawRequest(${s.myInvitationId})` };
@@ -4857,6 +4863,8 @@ function calSlotState(it) {
   if (it.mineAsPresenter || it.mineAsListener) return 'mine';
   if (me && me.role === 'admin') return it.booked ? 'closed' : 'free';
   if (slotVorbei(it)) return 'closed';
+  // Fuer weitere Anmeldungen geschlossen - sichtbar, aber nicht mehr buchbar.
+  if (it.geschlossen) return 'closed';
   // Lernberatung & Co. vergibt die Lernbegleitung; solche Termine sieht man ohnehin
   // nur, wenn man zugeordnet ist - dann greift schon 'mine' oben.
   if (subjectById(it.subjectId).nurZugewiesen) return 'closed';

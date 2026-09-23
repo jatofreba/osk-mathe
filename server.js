@@ -2819,11 +2819,12 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
       // Serverseitig gefiltert, damit solche Termine gar nicht erst beim Browser
       // ankommen. Admins sehen weiterhin alles.
       if (req.session.role === 'admin') return true;
-      // Wer schon dabei ist, behaelt seinen Termin in jedem Fall - auch einen
-      // geschlossenen, sonst verschwaende ihm der eigene Termin unter den Haenden.
+      // Wer schon dabei ist, behaelt seinen Termin in jedem Fall.
       if (s.mineAsPresenter || s.mineAsListener) return true;
-      // Fuer weitere Anmeldungen geschlossen: geht die uebrigen nichts mehr an.
-      if (s.geschlossen) return false;
+      // Geschlossene Termine werden bewusst WEITER ausgeliefert: sie sollen in der
+      // Wochenuebersicht stehen bleiben (man sieht, dass da etwas laeuft), nur eben
+      // ohne Anmeldemoeglichkeit. Aus dem Tagesdetail fallen sie ueber die dortige
+      // Regel "kein Knopf -> nicht auflisten" heraus.
       // Termine eines "nur zugewiesen"-Fachs (Lernberatung) vergibt die Lernbegleitung.
       return !nurZugewiesenIds.has(s.subjectId);
     });
