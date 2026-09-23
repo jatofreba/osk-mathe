@@ -3378,7 +3378,25 @@ function mwWocheHeute() {
 function mwWochenName(versatz) {
   if (versatz === 0) return 'Diese Woche';
   if (versatz === 1) return 'Nächste Woche';
-  return `In ${versatz} Wochen`;
+  if (versatz === -1) return 'Letzte Woche';
+  return versatz > 0 ? `In ${versatz} Wochen` : `Vor ${Math.abs(versatz)} Wochen`;
+}
+
+// Die Lernbegleitung darf auch zurueck: Teilnahmen traegt man nachtraeglich ein,
+// und dafuer muss die vergangene Woche erreichbar sein. Gebucht wird hier nicht,
+// also braucht es die Untergrenze der Schueler:innen-Ansicht nicht.
+let _awWoche = 0;
+
+function awWocheWechseln(delta) {
+  _awWoche += delta;
+  _awPicked = null;
+  renderAdminWeek();
+}
+
+function awWocheHeute() {
+  _awWoche = 0;
+  _awPicked = null;
+  renderAdminWeek();
 }
 
 async function loadMyWeek() {
@@ -5916,6 +5934,7 @@ function renderAdminWeek() {
   if (!me || me.role !== 'admin') { el.innerHTML = ''; return; }
 
   const monday = lwMonday();
+  monday.setDate(monday.getDate() + _awWoche * 7);
   const dayDates = LW_DAY_NAMES.map((_, i) => {
     const d = new Date(monday); d.setDate(monday.getDate() + i); return d;
   });
@@ -5958,13 +5977,22 @@ function renderAdminWeek() {
   </div>` : '';
 
   const fmt = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.`;
-  el.innerHTML = `<div class="mw-panel" style="margin-bottom:14px;">
+  const andereWoche = _awWoche !== 0;
+  el.innerHTML = `<div class="mw-panel${andereWoche ? ' mw-andere-woche' : ''}" style="margin-bottom:14px;">
     <div class="mw-head">
       <div>
-        <div class="mw-title">📅 Meine Woche</div>
-        <div class="mw-sub">${fmt(dayDates[0])}–${fmt(dayDates[4])} · ${booked} gebucht${free ? ` · ${free} frei` : ''} · ${teilnahmen} Teilnahme${teilnahmen === 1 ? '' : 'n'}</div>
+        <div class="mw-title">📅 Meine Woche${andereWoche
+          ? `<span class="mw-wochenmarke">${escHtml(mwWochenName(_awWoche))}</span>` : ''}</div>
+        <div class="mw-sub">${fmt(dayDates[0])}–${fmt(dayDates[4])} · ${booked} gebucht${free ? ` · ${free} frei` : ''} · ${teilnahmen} Teilnahme${teilnahmen === 1 ? '' : 'n'}${andereWoche ? ' – in dieser Woche' : ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="mw-nav">
+          <button type="button" class="mw-nav-btn" onclick="awWocheWechseln(-1)"
+            title="Eine Woche zurück" aria-label="Eine Woche zurück">‹</button>
+          <button type="button" class="mw-nav-btn" onclick="awWocheWechseln(1)"
+            title="Eine Woche weiter" aria-label="Eine Woche weiter">›</button>
+          ${andereWoche ? '<button type="button" class="mw-serie-knopf" onclick="awWocheHeute()">Heute</button>' : ''}
+        </span>
         <button class="mw-serie-knopf" id="aw-serien-knopf" type="button" style="display:none;"></button>
         <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
       </div>
