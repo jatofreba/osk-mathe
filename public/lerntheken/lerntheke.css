@@ -67,7 +67,14 @@ button,input,textarea,select{font-family:inherit;}
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .view{display:none;}
-.view.active{display:block;animation:rise .18s ease both;}
+/* Der Ansichtswechsel blendet NUR ein - kein translateY. Ein Vorfahr mit einer
+   (auch fuellenden) transform-Animation wird zum Bezugsrahmen fuer
+   position:sticky; auf iPad-Safari verlor die Stationsleiste dadurch ihre
+   Haftung und der Zurueck-Knopf scrollte aus dem Bild. Betrifft beide
+   sticky-Leisten in #view-st: .st-top (oben) und .hilfe-strip (unten).
+   'rise' mit translateY bleibt fuer .sol-panel - dort haengt nichts Klebriges drin. */
+.view.active{display:block;animation:view-in .18s ease;}
+@keyframes view-in{from{opacity:0;}to{opacity:1;}}
 @keyframes rise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 .inner{
   max-width:1080px;margin:0 auto;
