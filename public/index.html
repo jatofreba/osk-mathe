@@ -4844,14 +4844,36 @@ async function loadCalendar() {
   // Hinweis war nicht erkennbar, wofür man welche Ansicht nimmt.
   const calSub = document.getElementById('cal-subtitle');
   if (calSub) calSub.textContent = (me && me.role === 'admin')
-    ? 'Alle Termine des Tandems – hier legst du Fachbüro-Termine und Deadlines an.'
-    : 'Hier buchst du freie Termine und beantwortest Einladungen. Deinen Wochenüberblick findest du unter „Start".';
+    ? (me.defaultSubjectId != null
+        ? 'Deine Termine und die aus deinem Fach – hier legst du Fachbüro-Termine und Deadlines an.'
+        : 'Deine eigenen Termine – hier legst du Fachbüro-Termine und Deadlines an. (Setz oben ein Standard-Fach, dann siehst du auch die Termine dieses Fachs.)')
+    : 'Deine gebuchten Termine und offene Einladungen. Neue Termine buchst du unter „Start" in deiner Woche.';
   renderAdminWeek(); renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
+}
+
+// Der Kalender zeigt nur, was einen selbst angeht. Gebucht wird seit der
+// Wochenuebersicht ohnehin dort; der Monatskalender ist der Ueberblick ueber die
+// eigenen Termine - vorher stand dort das gesamte Tandem, und eigene Termine gingen
+// zwischen fremden unter ("+10 mehr").
+//
+// Lernbegleitung: eigene Termine (auch die noch ohne zugeordnete Person) und alles
+// aus dem eigenen Fach. Ohne gesetztes Standard-Fach bleiben es die eigenen.
+// Schueler:innen: gebuchte UND solche, zu denen sie eingeladen oder angefragt sind -
+// dort wird geantwortet, das darf nicht verschwinden.
+function calMeinTermin(s) {
+  if (!me) return true;
+  if (me.role === 'admin') {
+    const meiner = s.teacherId == null || s.teacherId === me.userId;
+    const meinFach = me.defaultSubjectId != null && s.subjectId === me.defaultSubjectId;
+    return meiner || meinFach;
+  }
+  return !!(s.mineAsPresenter || s.mineAsListener);
 }
 
 function calItemsByDay() {
   const map = {};
-  (calData.slots || []).forEach(s => { (map[s.datum] = map[s.datum] || []).push({ kind: 'slot', ...s }); });
+  // Deadlines bleiben fuer alle sichtbar: sie gehoeren dem ganzen Tandem.
+  (calData.slots || []).filter(calMeinTermin).forEach(s => { (map[s.datum] = map[s.datum] || []).push({ kind: 'slot', ...s }); });
   (calData.deadlines || []).forEach(d => { (map[d.datum] = map[d.datum] || []).push({ kind: 'deadline', ...d }); });
   return map;
 }
