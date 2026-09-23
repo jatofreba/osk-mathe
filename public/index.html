@@ -4987,13 +4987,15 @@ function renderCalDetail() {
         actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere einladen' : '+ einladen'}</button> ` + actions;
       }
     }
-    // Schueler:innen sehen im Tagesdetail nur, was sie noch angeht: etwas zu tun
-    // (ein Knopf) oder ein eigener Termin. Fremde, schon gebuchte Termine und
-    // abgelaufene freie Slots blaehen die Liste sonst nur auf. Bewusst am fertigen
-    // `actions` entschieden statt an einer zweiten, nachgebauten Bedingung - sonst
-    // laufen die beiden Regeln beim naechsten Knopf auseinander.
-    // Deadlines sind oben schon zurueckgegeben und bleiben immer sichtbar.
-    if (!isAdmin && !actions.includes('<button') && !calMeinTermin(it)) return '';
+    // Ausgeblendet wird fuer Schueler:innen NUR ein Talk, bei dem nichts mehr geht:
+    // ein fremder Talk ist belegt, sobald er gebucht ist, und steht dann nur noch im
+    // Weg. Fachbueros bleiben IMMER stehen - dort kann man auch dann noch mitmachen
+    // anfragen, wenn schon einzelne Leute gebucht haben, und ein Termin ohne Knopf
+    // ist dort kein Beleg dafuer, dass nichts mehr geht.
+    // Entschieden wird am fertigen `actions` statt an einer zweiten, nachgebauten
+    // Bedingung - sonst laufen die beiden Regeln beim naechsten Knopf auseinander.
+    // Eigene Termine (auch nur mit Pille) und Deadlines bleiben ebenfalls sichtbar.
+    if (!isAdmin && it.typ === 'talk' && !actions.includes('<button') && !calMeinTermin(it)) return '';
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
         <div>
@@ -5007,7 +5009,7 @@ function renderCalDetail() {
 
   el.innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px;color:#1d4ed8;">${dateLabel}</div>
     ${rows || `<div class="cal-detail-empty">${items.length
-        ? 'An diesem Tag gibt es nichts mehr für dich zu buchen.'
+        ? 'An diesem Tag ist nichts für dich dabei.'
         : 'Keine Termine an diesem Tag.'}</div>`}
     ${isAdmin ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn-sm" onclick="openInputSlotModal('${calSelected}')">+ FaBü-Termin an diesem Tag</button>
