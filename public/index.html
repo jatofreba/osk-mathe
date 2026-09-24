@@ -3517,7 +3517,6 @@ async function loadMyWeek() {
           ${andereWoche ? '<button type="button" class="mw-serie-knopf" onclick="mwWocheHeute()">Heute</button>' : ''}
         </span>
         <button class="mw-serie-knopf" id="mw-serien-knopf" type="button" style="display:none;"></button>
-        <button class="mw-book-btn" onclick="showView('calendar')">+ Weitere Termine buchen</button>
       </div>
     </div>
     ${weekSlots.length
@@ -4877,9 +4876,10 @@ async function loadCalendar() {
 // aus dem eigenen Fach. Ohne gesetztes Standard-Fach bleiben es die eigenen.
 // Schueler:innen: gebuchte UND solche, zu denen sie eingeladen oder angefragt sind -
 // dort wird geantwortet, das darf nicht verschwinden.
-// ACHTUNG beim Benennen: es gibt weiter unten ein calMeinTermin(it) mit anderer
-// Bedeutung ("gehoert mir persoenlich"). Gleiche Namen ueberschreiben sich in
-// dieser einen grossen Datei stillschweigend - deshalb hier ein eigener Name.
+// Zwei Fragen, die leicht zu verwechseln sind: WAS steht im Kalender (hier) und
+// GEHOERT ein Termin mir persoenlich (calGehoertMir weiter unten). Beide hiessen
+// einmal calMeinTermin und haben sich still ueberschrieben - Funktionsnamen sind
+// in dieser einen grossen Datei global, deshalb tragen sie jetzt klare Namen.
 function calImKalenderZeigen(s) {
   if (!me) return true;
   if (me.role === 'admin') {
@@ -4888,6 +4888,12 @@ function calImKalenderZeigen(s) {
     return meiner || meinFach;
   }
   return !!(s.mineAsPresenter || s.mineAsListener);
+}
+
+// Ein Termin gehoert mir, wenn ich ihn halte oder dazu eingeladen/angemeldet bin -
+// unabhaengig davon, ob es dort noch etwas zu tun gibt.
+function calGehoertMir(it) {
+  return !!(it.mineAsPresenter || it.mineAsListener);
 }
 
 function calItemsByDay() {
@@ -5129,7 +5135,7 @@ function renderCalDetail() {
     // Entschieden wird am fertigen `actions` statt an einer zweiten, nachgebauten
     // Bedingung - sonst laufen die beiden Regeln beim naechsten Knopf auseinander.
     // Eigene Termine (auch nur mit Pille) und Deadlines bleiben sichtbar.
-    if (!isAdmin && !actions.includes('<button') && !calMeinTermin(it)) return '';
+    if (!isAdmin && !actions.includes('<button') && !calGehoertMir(it)) return '';
     return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid ${subj.color};">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
         <div>
