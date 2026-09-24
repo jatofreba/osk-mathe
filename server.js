@@ -57,12 +57,10 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
     CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
     CREATE INDEX IF NOT EXISTS idx_korrektur_user ON korrektur(user_id);
-    -- Migrate old class-based lzk table to per-user lzk table
-    DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lzk' AND column_name='klasse') THEN
-        DROP TABLE lzk;
-      END IF;
-    END $$;
+    -- Hier stand frueher: DROP TABLE lzk, falls die Tabelle noch klassenbasiert war
+    -- (Spalte "klasse"). Die Umstellung ist lange durch, die Zeile lief aber bei JEDEM
+    -- Start weiter - jede kuenftige Spalte "klasse" an lzk haette alle LZK geloescht.
+    -- Entfernt (2026-09-24). lzk bekommt nie wieder eine Spalte dieses Namens.
     CREATE TABLE IF NOT EXISTS lzk (
       id         SERIAL PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -368,6 +366,46 @@ async function initDB() {
       END IF;
     END $$;
     UPDATE talking_slots SET subject_id=(SELECT id FROM subjects WHERE key='mathe') WHERE subject_id IS NULL;
+    -- LZK fachuebergreifend (2026-09-24). Bisher gab es LZK nur zu Mathe-Lerntheken
+    -- (lerntheke + Basis/Aufbau). Jetzt auch ohne Lerntheke, fachgebunden, mit Thema und
+    -- als Anfrage. Alles additiv: bestehende Eintraege werden Mathe, sonst bleibt alles.
+    -- lerntheke darf leer (NULL) sein = freie LZK (Deutsch, Englisch, ...). Postgres setzt
+    -- NULL in UNIQUE nicht gleich - UNIQUE(user_id, lerntheke, typ) bindet damit weiter
+    -- nur die Lerntheken-LZK, freie kann es beliebig viele geben.
+    ALTER TABLE lzk ALTER COLUMN lerntheke DROP NOT NULL;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lzk' AND column_name='subject_id') THEN
+        ALTER TABLE lzk ADD COLUMN subject_id INTEGER REFERENCES subjects(id);
+      END IF;
+    END $$;
+    UPDATE lzk SET subject_id=(SELECT id FROM subjects WHERE key='mathe') WHERE subject_id IS NULL;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lzk' AND column_name='thema') THEN
+        ALTER TABLE lzk ADD COLUMN thema TEXT NOT NULL DEFAULT '';
+      END IF;
+    END $$;
+    -- anfrage: NULL = fester Termin, 'offen' = von der Schueler:in angefragt, 'abgelehnt'.
+    -- Bewusst ein eigenes Feld statt eines weiteren status-Werts: status wird an vielen
+    -- Stellen als ausstehend/bestanden/nicht_bestanden ausgewertet.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lzk' AND column_name='anfrage') THEN
+        ALTER TABLE lzk ADD COLUMN anfrage TEXT;
+      END IF;
+    END $$;
+    -- herkunft: 'selbst' (von der Schueler:in) oder 'lernbegleitung'.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lzk' AND column_name='herkunft') THEN
+        ALTER TABLE lzk ADD COLUMN herkunft TEXT NOT NULL DEFAULT 'selbst';
+      END IF;
+    END $$;
+    CREATE INDEX IF NOT EXISTS idx_lzk_subject ON lzk(subject_id);
+    -- Je Fach: duerfen Schueler:innen LZK-Termine selbst setzen ('direkt') oder nur
+    -- anfragen ('anfrage')? Mathe bleibt wie bisher direkt.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='lzk_modus') THEN
+        ALTER TABLE subjects ADD COLUMN lzk_modus TEXT NOT NULL DEFAULT 'direkt';
+      END IF;
+    END $$;
     -- Admin-erstellte Input-Sessions ohne festen "Presenter" (nur zugewiesene Teilnehmer:innen) - siehe [[project_talking_sessions]].
     ALTER TABLE talking_sessions ALTER COLUMN presenter_id DROP NOT NULL;
     -- Persönliche Fach-Präferenz je Admin (2026-08-26): das gewählte Fach steht in Übersichten immer
@@ -1429,7 +1467,7 @@ app.get('/api/subjects', requireLogin, async (req, res) => {
     const [r, ov] = await Promise.all([
       pool.query(`
         SELECT id, key, name, color, color_bg AS "colorBg", default_ort AS "defaultOrt",
-               nur_zugewiesen AS "nurZugewiesen",
+               nur_zugewiesen AS "nurZugewiesen", lzk_modus AS "lzkModus",
                default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
                pflicht_zuhoeren AS "pflichtZuhoeren",
                optional_praesentieren AS "optionalPraesentieren",
@@ -1482,6 +1520,12 @@ app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
 
     await pool.query(`UPDATE subjects SET default_ort=$1, default_dauer=$2 WHERE id=$3`,
       [defaultOrt || '', dauer, req.params.id]);
+    // LZK-Modus nur aendern, wenn er mitgeschickt wird - aeltere Aufrufer kennen ihn nicht.
+    if (req.body.lzkModus !== undefined) {
+      if (!['direkt', 'anfrage'].includes(req.body.lzkModus))
+        return res.status(400).json({ error: 'Ungültiger LZK-Modus' });
+      await pool.query('UPDATE subjects SET lzk_modus=$1 WHERE id=$2', [req.body.lzkModus, req.params.id]);
+    }
 
     if (!hj) {
       await pool.query(
@@ -1533,7 +1577,7 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
     const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes, hjTargetsRes] = await Promise.all([
       pool.query(`SELECT id, username, kurs, klasse, created_at FROM users WHERE role='student' AND aktiv=true`),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
-      pool.query(`SELECT user_id, lerntheke, typ, pokale FROM lzk`),
+      pool.query(`SELECT user_id, lerntheke, typ, pokale, anfrage FROM lzk`),
       pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
       pool.query(`
         SELECT ts.presenter_id AS user_id, ts.presented_status AS "presentedStatus", ts.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
@@ -1603,6 +1647,13 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
           if (lu.groups[lzk.typ]) ownMax += 3; // only count LZK max when entry exists (matches client)
         });
       });
+      // Freie LZK (ohne Lerntheke, jedes Fach): ein fester Termin zaehlt wie eine
+      // Lerntheken-LZK 3 Flammen ins Maximum; offene/abgelehnte Anfragen zaehlen nicht.
+      (lzkByUser[u.id] || []).forEach(lzk => {
+        if (lzk.lerntheke || lzk.anfrage) return;
+        pokale += lzk.pokale || 0;
+        ownMax += 3;
+      });
       // Talk-Pokale je Fach getrennt berechnen (eigene Pflicht-Schwellen), dann summieren.
       const uPres = tsPresByUser[u.id] || [];
       const uListen = tsListenByUser[u.id] || [];
@@ -1626,13 +1677,83 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── LZK ─────────────────────────────────────────────────────────────────────
+// Ergebnis-Regel: Flammen heissen bestanden. Wer 1-3 Flammen vergibt, ohne den
+// Status mitzuschicken (oder mit 'ausstehend'), hat die LZK damit bestanden;
+// 'nicht_bestanden' und 'ausstehend' tragen keine Flammen. Liefert NUR die Felder,
+// die tatsaechlich gesetzt werden - nicht mitgeschickte bleiben unangetastet.
+const LZK_STATUS = ['ausstehend', 'bestanden', 'nicht_bestanden'];
+function lzkErgebnis(body) {
+  const hat = k => Object.prototype.hasOwnProperty.call(body, k) && body[k] !== undefined;
+  const out = {};
+  if (hat('status')) out.status = body.status;
+  if (hat('pokale')) out.pokale = Math.min(3, Math.max(0, parseInt(body.pokale) || 0));
+  if (out.pokale > 0 && out.status !== 'nicht_bestanden') out.status = 'bestanden';
+  if (out.status === 'nicht_bestanden' || out.status === 'ausstehend') out.pokale = 0;
+  return out;
+}
+const heuteIsoLzk = () => new Date().toISOString().slice(0, 10);
+const istIsoDatum = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+
+// Felder, die ueberall gleich ausgeliefert werden. datum bleibt im alten Format
+// (die Lerntheke liest es so), dazu datumIso fuer alles Neue.
+const LZK_FELDER = `l.id, l.user_id AS "userId", l.typ, l.lerntheke, l.datum,
+  to_char(l.datum,'YYYY-MM-DD') AS "datumIso", l.status, l.pokale,
+  l.subject_id AS "subjectId", l.thema, l.anfrage, l.herkunft`;
+
 app.get('/api/lzk', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT typ, lerntheke, datum, status, pokale FROM lzk WHERE user_id=$1',
+      `SELECT ${LZK_FELDER} FROM lzk l WHERE l.user_id=$1`,
       [req.session.userId]
     );
     res.json(r.rows);
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Schueler:in legt eine freie LZK an (ohne Lerntheke) - je nach Fach-Einstellung als
+// fester Termin oder als Anfrage. Eine Anfrage darf auch ohne Wunschdatum kommen.
+app.post('/api/lzk', requireLogin, async (req, res) => {
+  try {
+    if (req.session.role !== 'student')
+      return res.status(403).json({ error: 'Hier legen nur Schüler:innen ihre eigenen LZK an.' });
+    const subjectId = parseInt(req.body.subjectId);
+    const thema = String(req.body.thema || '').trim().slice(0, 200);
+    const datum = String(req.body.datum || '').trim() || null;
+    const subj = await pool.query(
+      'SELECT id, nur_zugewiesen AS "nurZugewiesen", lzk_modus AS "lzkModus" FROM subjects WHERE id=$1',
+      [subjectId]);
+    if (!subj.rows.length) return res.status(400).json({ error: 'Unbekanntes Fach.' });
+    if (subj.rows[0].nurZugewiesen)
+      return res.status(403).json({ error: 'In diesem Bereich vergibt die Lernbegleitung die Termine.' });
+    const anfragen = subj.rows[0].lzkModus === 'anfrage' || req.body.anfragen === true;
+    if (datum && !istIsoDatum(datum)) return res.status(400).json({ error: 'Ungültiges Datum.' });
+    if (!anfragen && !datum) return res.status(400).json({ error: 'Bitte ein Datum wählen.' });
+    if (datum && datum < heuteIsoLzk())
+      return res.status(409).json({ error: 'Der Termin liegt in der Vergangenheit.' });
+    const r = await pool.query(`
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, updated_at)
+      VALUES ($1, NULL, 'LZK', $2, 'ausstehend', 0, $3, $4, $5, 'selbst', NOW())
+      RETURNING id
+    `, [req.session.userId, datum, subjectId, thema, anfragen ? 'offen' : null]);
+    res.json({ ok: true, id: r.rows[0].id, anfrage: anfragen ? 'offen' : null });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Schueler:in nimmt eine eigene freie LZK wieder zurueck (Anfrage oder selbst gesetzter
+// Termin) - solange nichts bewertet ist und die Lernbegleitung sie nicht angelegt hat.
+app.delete('/api/lzk/:id', requireLogin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, lerntheke, herkunft, status FROM lzk WHERE id=$1 AND user_id=$2`,
+      [req.params.id, req.session.userId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden.' });
+    const l = r.rows[0];
+    if (l.lerntheke) return res.status(409).json({ error: 'LZK einer Lerntheke änderst du in der Lerntheke.' });
+    if (l.herkunft !== 'selbst') return res.status(409).json({ error: 'Diesen Termin hat die Lernbegleitung angelegt.' });
+    if (l.status !== 'ausstehend') return res.status(409).json({ error: 'Die LZK ist schon bewertet.' });
+    await pool.query('DELETE FROM lzk WHERE id=$1', [l.id]);
+    res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -1642,8 +1763,8 @@ app.post('/api/lzk/termin', requireLogin, async (req, res) => {
     const { lerntheke, typ, datum } = req.body;
     if (!lerntheke || !typ || !datum) return res.status(400).json({ error: 'Fehlende Angaben' });
     await pool.query(`
-      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, updated_at)
-      VALUES ($1,$2,$3,$4,'ausstehend',0,NOW())
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, updated_at, subject_id)
+      VALUES ($1,$2,$3,$4,'ausstehend',0,NOW(),(SELECT id FROM subjects WHERE key='mathe'))
       ON CONFLICT (user_id, lerntheke, typ) DO UPDATE
       SET datum=$4, updated_at=NOW()
     `, [req.session.userId, lerntheke, typ, datum]);
@@ -1655,7 +1776,7 @@ app.post('/api/lzk/termin', requireLogin, async (req, res) => {
 app.get('/api/admin/lzk', requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
-      SELECT l.id, l.user_id, l.typ, l.lerntheke, l.datum, l.status, l.pokale, l.updated_at, u.username
+      SELECT ${LZK_FELDER}, l.user_id, l.updated_at, u.username
       FROM lzk l JOIN users u ON u.id=l.user_id
       WHERE u.klasse=$1 AND u.role='student'
       ORDER BY u.username, l.lerntheke, l.typ
@@ -1664,20 +1785,117 @@ app.get('/api/admin/lzk', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Admin: upsert LZK for a specific student (datum, status, pokale)
+// Admin: LZK einer Lerntheke setzen (datum, status, pokale). Wird auch vom Python-Tool
+// benutzt. Seit 2026-09-24 werden NUR die mitgeschickten Felder geaendert - vorher
+// setzte ein Aufruf mit blossem Datum eine bestandene LZK samt Flammen zurueck.
 app.post('/api/admin/lzk', requireAdmin, async (req, res) => {
   try {
-    const { userId, lerntheke, typ, datum, status, pokale } = req.body;
+    const { userId, lerntheke, typ } = req.body;
     if (!userId || !lerntheke || !typ) return res.status(400).json({ error: 'Fehlende Angaben' });
-    if (!['ausstehend','bestanden','nicht_bestanden'].includes(status||'ausstehend'))
+    if (req.body.status !== undefined && !LZK_STATUS.includes(req.body.status))
       return res.status(400).json({ error: 'Ungültiger Status' });
-    const pk = Math.min(3, Math.max(0, parseInt(pokale)||0));
+    if (req.body.datum && !istIsoDatum(String(req.body.datum).slice(0, 10)))
+      return res.status(400).json({ error: 'Ungültiges Datum' });
+    const person = await pool.query(
+      "SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role='student'", [userId, req.session.klasse]);
+    if (!person.rows.length) return res.status(404).json({ error: 'Schüler:in nicht gefunden' });
+    const erg = lzkErgebnis(req.body);
+    const hatDatum = req.body.datum !== undefined;
     await pool.query(`
-      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, admin_id, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
-      ON CONFLICT (user_id, lerntheke, typ) DO UPDATE
-      SET datum=$4, status=$5, pokale=$6, admin_id=$7, updated_at=NOW()
-    `, [userId, lerntheke, typ, datum||null, status||'ausstehend', pk, req.session.userId]);
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, admin_id, updated_at, subject_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),(SELECT id FROM subjects WHERE key='mathe'))
+      ON CONFLICT (user_id, lerntheke, typ) DO UPDATE SET
+        datum  = CASE WHEN $8  THEN EXCLUDED.datum  ELSE lzk.datum  END,
+        status = CASE WHEN $9  THEN EXCLUDED.status ELSE lzk.status END,
+        pokale = CASE WHEN $10 THEN EXCLUDED.pokale ELSE lzk.pokale END,
+        admin_id=$7, updated_at=NOW()
+    `, [userId, lerntheke, typ,
+        hatDatum ? (String(req.body.datum || '').slice(0, 10) || null) : null,
+        erg.status || 'ausstehend', erg.pokale || 0, req.session.userId,
+        hatDatum, erg.status !== undefined, erg.pokale !== undefined]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Admin: freie LZK fuer eine Schueler:in anlegen (ohne Lerntheke, fachgebunden).
+app.post('/api/admin/lzk/eintrag', requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.body.userId);
+    const subjectId = parseInt(req.body.subjectId);
+    const thema = String(req.body.thema || '').trim().slice(0, 200);
+    const datum = String(req.body.datum || '').trim();
+    if (!userId || !subjectId) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (!istIsoDatum(datum)) return res.status(400).json({ error: 'Bitte ein Datum wählen.' });
+    const [person, subj] = await Promise.all([
+      pool.query("SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role='student'", [userId, req.session.klasse]),
+      pool.query('SELECT id FROM subjects WHERE id=$1', [subjectId]),
+    ]);
+    if (!person.rows.length) return res.status(404).json({ error: 'Schüler:in nicht gefunden' });
+    if (!subj.rows.length) return res.status(400).json({ error: 'Unbekanntes Fach' });
+    const r = await pool.query(`
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, admin_id, updated_at)
+      VALUES ($1, NULL, 'LZK', $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW())
+      RETURNING id
+    `, [userId, datum, subjectId, thema, req.session.userId]);
+    res.json({ ok: true, id: r.rows[0].id });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Admin: eine LZK aendern - Datum, Thema, Ergebnis (Status/Flammen) und/oder eine
+// Anfrage entscheiden. Nur mitgeschickte Felder werden geaendert.
+app.patch('/api/admin/lzk/:id', requireAdmin, async (req, res) => {
+  try {
+    const cur = await pool.query(`
+      SELECT l.id, l.lerntheke, l.anfrage, l.datum IS NOT NULL AS "hatDatum"
+      FROM lzk l JOIN users u ON u.id = l.user_id
+      WHERE l.id=$1 AND u.klasse=$2 AND u.role='student'
+    `, [req.params.id, req.session.klasse]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const b = req.body;
+    if (b.status !== undefined && !LZK_STATUS.includes(b.status))
+      return res.status(400).json({ error: 'Ungültiger Status' });
+    const sets = [], werte = [];
+    const setze = (spalte, wert) => { werte.push(wert); sets.push(`${spalte}=$${werte.length}`); };
+    if (b.datum !== undefined) {
+      const d = String(b.datum || '').slice(0, 10);
+      if (d && !istIsoDatum(d)) return res.status(400).json({ error: 'Ungültiges Datum' });
+      setze('datum', d || null);
+    }
+    if (b.thema !== undefined) {
+      if (cur.rows[0].lerntheke) return res.status(409).json({ error: 'Das Thema einer Lerntheken-LZK ist die Lerntheke.' });
+      setze('thema', String(b.thema || '').trim().slice(0, 200));
+    }
+    if (b.anfrage !== undefined) {
+      if (cur.rows[0].anfrage !== 'offen') return res.status(409).json({ error: 'Hier ist keine Anfrage offen.' });
+      if (b.anfrage === 'annehmen') {
+        // Angenommen heisst: es gibt einen festen Termin. Ohne Datum wuerde die LZK
+        // nirgends im Kalender auftauchen.
+        if (!cur.rows[0].hatDatum && !(b.datum && String(b.datum).trim()))
+          return res.status(400).json({ error: 'Zum Annehmen bitte ein Datum festlegen.' });
+        setze('anfrage', null);
+      } else if (b.anfrage === 'ablehnen') {
+        setze('anfrage', 'abgelehnt');
+      } else return res.status(400).json({ error: 'Ungültige Entscheidung' });
+    }
+    const erg = lzkErgebnis(b);
+    if (erg.status !== undefined) setze('status', erg.status);
+    if (erg.pokale !== undefined) setze('pokale', erg.pokale);
+    if (!sets.length) return res.status(400).json({ error: 'Nichts zu ändern' });
+    setze('admin_id', req.session.userId);
+    werte.push(cur.rows[0].id);
+    await pool.query(`UPDATE lzk SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${werte.length}`, werte);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.delete('/api/admin/lzk/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      DELETE FROM lzk l USING users u
+      WHERE l.id=$1 AND u.id=l.user_id AND u.klasse=$2 AND u.role='student'
+      RETURNING l.id
+    `, [req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -2779,7 +2997,7 @@ app.post('/api/admin/wuensche/:id/termin', requireAdmin, async (req, res) => {
 app.get('/api/calendar', requireLogin, async (req, res) => {
   try {
     const uid = req.session.userId;
-    const [slots, deadlines, nurZugewiesen] = await Promise.all([
+    const [slots, deadlines, nurZugewiesen, lzkRows] = await Promise.all([
       pool.query(`
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
                s.thema AS "slotThema", s.geschlossen,
@@ -2808,6 +3026,12 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
         [req.session.klasse]
       ),
       pool.query('SELECT id FROM subjects WHERE nur_zugewiesen = true'),
+      // LZK: Schueler:innen nur die eigenen, Lernbegleitungen die ganze Lerngruppe -
+      // sie sollen sehen, wer an welchem Tag eine LZK schreibt.
+      req.session.role === 'admin'
+        ? pool.query(`SELECT ${LZK_FELDER}, u.username FROM lzk l JOIN users u ON u.id = l.user_id
+                      WHERE u.klasse=$1 AND u.role='student' AND u.aktiv=true`, [req.session.klasse])
+        : pool.query(`SELECT ${LZK_FELDER} FROM lzk l WHERE l.user_id=$1`, [uid]),
     ]);
     const nurZugewiesenIds = new Set(nurZugewiesen.rows.map(r => r.id));
     const rows = slots.rows.map(s => ({
@@ -2828,7 +3052,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
       // Termine eines "nur zugewiesen"-Fachs (Lernberatung) vergibt die Lernbegleitung.
       return !nurZugewiesenIds.has(s.subjectId);
     });
-    res.json({ slots: rows, deadlines: deadlines.rows });
+    res.json({ slots: rows, deadlines: deadlines.rows, lzk: lzkRows.rows });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -2872,9 +3096,10 @@ async function halbjahrOverview(klasse, onlyUid) {
       WHERE u.klasse = $1${uidFilter}
     `, params),
     pool.query(`
-      SELECT l.user_id AS uid, l.lerntheke, l.typ, l.status, l.pokale, to_char(l.datum,'YYYY-MM-DD') AS datum
+      SELECT l.user_id AS uid, l.lerntheke, l.typ, l.status, l.pokale, to_char(l.datum,'YYYY-MM-DD') AS datum,
+             l.subject_id AS "subjectId", l.thema
       FROM lzk l JOIN users u ON u.id = l.user_id
-      WHERE u.klasse = $1 AND l.datum IS NOT NULL${uidFilter}
+      WHERE u.klasse = $1 AND l.datum IS NOT NULL AND l.anfrage IS NULL${uidFilter}
     `, params),
     pool.query(`
       SELECT se.user_id AS uid, se.progress_key, to_char(se.completed_at,'YYYY-MM-DD') AS datum
@@ -2977,7 +3202,8 @@ async function halbjahrOverview(klasse, onlyUid) {
     const hj = halbjahrForDate(r.datum); if (!hj) return;
     halbjahre.add(hj);
     const b = ensure(r.uid, hj);
-    b.lzk.push({ lerntheke: r.lerntheke, typ: r.typ, status: r.status, pokale: r.pokale, datum: r.datum });
+    b.lzk.push({ lerntheke: r.lerntheke, typ: r.typ, status: r.status, pokale: r.pokale, datum: r.datum,
+                 subjectId: r.subjectId, thema: r.thema });
     b.lastLzk = maxD(b.lastLzk, r.datum);
   });
   stationRows.rows.forEach(r => {
