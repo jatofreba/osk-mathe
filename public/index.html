@@ -1733,11 +1733,17 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Fach-Einstellungen (Admin) ═══════════════════════════════════════ -->
+<!-- ══ MODAL: LZK eintragen / aendern / Anfrage annehmen ════════════════════════ -->
 <div class="overlay" id="modal-lzk-eintrag">
   <div class="modal" style="max-width:420px;">
     <div class="modal-title" id="lzke-title">📝 LZK-Termin</div>
-    <div class="form-group" id="lzke-person-gruppe"><label class="form-label" for="lzke-person">Schüler:in</label><select class="form-input" id="lzke-person"></select></div>
+    <div class="form-group" id="lzke-person-gruppe">
+      <label class="form-label" id="lzke-person-lbl">Schüler:innen <span id="lzke-person-zahl" style="font-weight:400;color:var(--md-on-surface-variant);"></span></label>
+      <input class="form-input" id="lzke-person-suche" type="search" placeholder="Name suchen…" aria-label="Schüler:innen nach Namen filtern"
+             oninput="lzkePersonenFiltern(this.value)" style="margin-bottom:6px;">
+      <div role="group" aria-labelledby="lzke-person-lbl" id="lzke-personen"
+           style="max-height:200px;overflow-y:auto;border:1px solid var(--md-outline-variant);border-radius:8px;padding:4px 10px;"></div>
+    </div>
     <div class="form-group" id="lzke-fach-gruppe"><label class="form-label" for="lzke-fach">Fach</label><select class="form-input" id="lzke-fach" onchange="lzkeFachGewechselt()"></select></div>
     <div class="form-group"><label class="form-label" for="lzke-datum" id="lzke-datum-lbl">Datum</label><input class="form-input" id="lzke-datum" type="date"></div>
     <div class="form-group" id="lzke-thema-gruppe"><label class="form-label" for="lzke-thema">Thema</label><input class="form-input" id="lzke-thema" maxlength="200" placeholder="z.B. Erörterung, Vokabeln Unit 3"></div>
@@ -1754,6 +1760,7 @@ textarea.form-input{
   </div>
 </div>
 
+<!-- ══ MODAL: Fach-Einstellungen (Admin) ═══════════════════════════════════════ -->
 <div class="overlay" id="modal-subject-settings">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="ssettings-title">Fach-Einstellungen</div>
@@ -5082,6 +5089,25 @@ async function lzkZurueck(id) {
 //   'aendern'  - Lernbegleitung: Datum/Thema einer freien LZK
 //   'annehmen' - Lernbegleitung: Anfrage annehmen, Datum festlegen
 let _lzkeModus = 'neu', _lzkeId = null;
+// Ausgewaehlte Personen (Lernbegleitung, neu). Als Menge statt aus dem DOM gelesen:
+// die Suche blendet Zeilen aus, eine ausgeblendete Auswahl bleibt trotzdem bestehen.
+let _lzkePersonen = new Set();
+function lzkePersonUmschalten(id, an) {
+  if (an) _lzkePersonen.add(id); else _lzkePersonen.delete(id);
+  lzkePersonenZahl();
+}
+function lzkePersonenZahl() {
+  const n = _lzkePersonen.size;
+  const el = document.getElementById('lzke-person-zahl');
+  if (el) el.textContent = n ? `· ${n} ausgewählt` : '';
+  lzkeAnfrageGewechselt();
+}
+function lzkePersonenFiltern(text) {
+  const t = String(text || '').trim().toLowerCase();
+  document.querySelectorAll('#lzke-personen label[data-name]').forEach(l => {
+    l.hidden = !!t && !l.dataset.name.includes(t);
+  });
+}
 function lzkFaecher() { return (subjectsMeta || []).filter(x => !x.nurZugewiesen); }
 function openLzkEintragModal(datum, id, modus) {
   const isAdmin = !!(me && me.role === 'admin');
@@ -5093,8 +5119,16 @@ function openLzkEintragModal(datum, id, modus) {
   document.getElementById('lzke-title').textContent = neu ? '📝 LZK-Termin eintragen'
     : _lzkeModus === 'annehmen' ? `📝 LZK-Anfrage von ${l ? l.username || '' : ''} annehmen` : '📝 LZK ändern';
   zeige('lzke-person-gruppe', isAdmin && neu);
-  if (isAdmin && neu) document.getElementById('lzke-person').innerHTML =
-    (calClassmates || []).map(c => `<option value="${c.id}">${escHtml(c.username)}</option>`).join('');
+  _lzkePersonen = new Set();
+  if (isAdmin && neu) {
+    document.getElementById('lzke-person-suche').value = '';
+    document.getElementById('lzke-personen').innerHTML = (calClassmates || []).map(c =>
+      `<label data-name="${escHtml((c.username || '').toLowerCase())}" style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;">
+        <input type="checkbox" onchange="lzkePersonUmschalten(${c.id}, this.checked)"> ${escHtml(c.username)}
+      </label>`).join('')
+      || '<span style="color:var(--md-on-surface-variant);font-size:13px;">In dieser Lerngruppe gibt es keine Schüler:innen.</span>';
+    document.getElementById('lzke-person-zahl').textContent = '';
+  }
   zeige('lzke-fach-gruppe', neu);
   if (neu) {
     const faecher = lzkFaecher();
@@ -5139,7 +5173,10 @@ function lzkeFachGewechselt() {
 function lzkeAnfrageGewechselt() {
   const anfrage = document.getElementById('lzke-anfrage').checked && _lzkeModus === 'neu' && !(me && me.role === 'admin');
   document.getElementById('lzke-datum-lbl').textContent = anfrage ? 'Wunschtermin (optional)' : 'Datum';
-  document.getElementById('lzke-ok').textContent = anfrage ? 'Anfragen' : (_lzkeModus === 'annehmen' ? 'Annehmen' : 'Speichern');
+  const viele = _lzkeModus === 'neu' && me && me.role === 'admin' && _lzkePersonen.size > 1;
+  document.getElementById('lzke-ok').textContent = anfrage ? 'Anfragen'
+    : _lzkeModus === 'annehmen' ? 'Annehmen'
+    : viele ? `${_lzkePersonen.size} LZK anlegen` : 'Speichern';
 }
 async function submitLzkEintrag() {
   const errEl = document.getElementById('lzke-error');
@@ -5155,10 +5192,11 @@ async function submitLzkEintrag() {
     url = '/api/lzk';
     body = { subjectId: parseInt(document.getElementById('lzke-fach').value), datum: datum || null, thema, anfragen };
   } else if (_lzkeModus === 'neu') {
+    const userIds = [..._lzkePersonen];
+    if (!userIds.length) return fehler('Bitte mindestens eine Person auswählen.');
     if (!datum) return fehler('Bitte ein Datum wählen.');
     url = '/api/admin/lzk/eintrag';
-    body = { userId: parseInt(document.getElementById('lzke-person').value),
-             subjectId: parseInt(document.getElementById('lzke-fach').value), datum, thema };
+    body = { userIds, subjectId: parseInt(document.getElementById('lzke-fach').value), datum, thema };
   } else if (_lzkeModus === 'annehmen') {
     if (!datum) return fehler('Zum Annehmen bitte ein Datum festlegen.');
     url = `/api/admin/lzk/${_lzkeId}`; methode = 'PATCH'; body = { anfrage: 'annehmen', datum };

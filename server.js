@@ -1817,27 +1817,37 @@ app.post('/api/admin/lzk', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Admin: freie LZK fuer eine Schueler:in anlegen (ohne Lerntheke, fachgebunden).
+// Admin: freie LZK fuer eine oder mehrere Schueler:innen anlegen (ohne Lerntheke,
+// fachgebunden). Jede Person bekommt ihre EIGENE LZK - gleicher Tag, gleiches Thema,
+// aber Bewertung und Flammen bleiben personengebunden. userIds (Liste) oder, fuer
+// aeltere Aufrufer, userId. Alles oder nichts: steht auch nur eine Person nicht in
+// der eigenen Lerngruppe, wird gar nichts angelegt - sonst entstuende eine halbe Gruppe.
 app.post('/api/admin/lzk/eintrag', requireAdmin, async (req, res) => {
   try {
-    const userId = parseInt(req.body.userId);
+    const roh = Array.isArray(req.body.userIds) ? req.body.userIds : [req.body.userId];
+    const userIds = [...new Set(roh.map(x => parseInt(x)).filter(Boolean))];
     const subjectId = parseInt(req.body.subjectId);
     const thema = String(req.body.thema || '').trim().slice(0, 200);
     const datum = String(req.body.datum || '').trim();
-    if (!userId || !subjectId) return res.status(400).json({ error: 'Fehlende Angaben' });
+    if (!userIds.length || !subjectId) return res.status(400).json({ error: 'Bitte mindestens eine Person auswählen.' });
     if (!istIsoDatum(datum)) return res.status(400).json({ error: 'Bitte ein Datum wählen.' });
-    const [person, subj] = await Promise.all([
-      pool.query("SELECT id FROM users WHERE id=$1 AND klasse=$2 AND role='student'", [userId, req.session.klasse]),
+    const [personen, subj] = await Promise.all([
+      pool.query("SELECT id FROM users WHERE id = ANY($1::int[]) AND klasse=$2 AND role='student'",
+        [userIds, req.session.klasse]),
       pool.query('SELECT id FROM subjects WHERE id=$1', [subjectId]),
     ]);
-    if (!person.rows.length) return res.status(404).json({ error: 'Schüler:in nicht gefunden' });
+    if (personen.rows.length !== userIds.length)
+      return res.status(404).json({ error: 'Mindestens eine Person gehört nicht zu dieser Lerngruppe – nichts angelegt.' });
     if (!subj.rows.length) return res.status(400).json({ error: 'Unbekanntes Fach' });
+    // EIN Befehl fuer alle: Postgres legt entweder alle Zeilen an oder keine.
     const r = await pool.query(`
       INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, admin_id, updated_at)
-      VALUES ($1, NULL, 'LZK', $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW())
+      SELECT u, NULL, 'LZK', $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW()
+      FROM unnest($1::int[]) AS u
       RETURNING id
-    `, [userId, datum, subjectId, thema, req.session.userId]);
-    res.json({ ok: true, id: r.rows[0].id });
+    `, [userIds, datum, subjectId, thema, req.session.userId]);
+    const ids = r.rows.map(x => x.id);
+    res.json({ ok: true, id: ids[0], ids });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
