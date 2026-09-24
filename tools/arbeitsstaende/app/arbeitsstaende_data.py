@@ -192,9 +192,94 @@ def lt_lerntheke_zeilen(progress: dict, lzk_liste, lerntheken, aktuelles_hj: str
     return zeilen
 
 
+# Ergebnis einer LZK in EINEM Feld:
+#   ""                 hier (noch) nicht bewertet - wird nie zum Server geschickt
+#   "nicht_bestanden"
+#   "0".."3"           bestanden, mit so vielen Flammen ("0" nur fuer Altbestand)
+# Auf dem Server heisst das status + pokale; Flammen bedeuten dort bestanden.
+LZK_ERGEBNIS_WERTE = ["", "nicht_bestanden", "0", "1", "2", "3"]
+LZK_ERGEBNIS_TEXT = {
+    "": "– (nicht bewertet)",
+    "nicht_bestanden": "✗ nicht bestanden",
+    "0": "✓ bestanden (ohne Flammen)",
+    "1": "🔥 bestanden",
+    "2": "🔥🔥 bestanden",
+    "3": "🔥🔥🔥 bestanden",
+}
+LZK_ERGEBNIS_SYMBOL = {"nicht_bestanden": "✗", "0": "✓", "1": "🔥", "2": "🔥🔥", "3": "🔥🔥🔥"}
+
+
+def lzk_ergebnis_von_server(eintrag) -> str:
+    """Server-Eintrag (status, pokale) -> Ergebnis-Wert. 'ausstehend' ist ""."""
+    if not eintrag:
+        return ""
+    status = eintrag.get("status") or "ausstehend"
+    if status == "nicht_bestanden":
+        return "nicht_bestanden"
+    if status == "bestanden":
+        try:
+            pk = int(eintrag.get("pokale") or 0)
+        except (TypeError, ValueError):
+            pk = 0
+        return str(min(3, max(0, pk)))
+    return ""
+
+
+def lzk_ergebnis_zum_server(wert):
+    """Ergebnis-Wert -> (status, pokale). None fuer "": nicht bewertet wird nie
+    geschickt, sonst wuerde eine online eingetragene Bewertung geloescht."""
+    if wert == "nicht_bestanden":
+        return ("nicht_bestanden", 0)
+    if wert in ("0", "1", "2", "3"):
+        return ("bestanden", int(wert))
+    return None
+
+
 # LZK 1 in der Bausteinzeile ist die Basis-, LZK 2 die Aufbau-LZK -- genau so
 # baut lt_lerntheke_zeilen() die Zeilen aus den Serverdaten auf.
 LZK_TYP_JE_NUMMER = {1: "Basis", 2: "Aufbau"}
+
+
+def lt_lzk_ergebnis_unterschiede(student, konto: dict, titel_je_key: dict):
+    """Ergebnisse (bestanden/Flammen) einer Person: hier gegen den Server.
+
+    Wie bei den Terminen zaehlen nur App-Zeilen, deren Name zu einer Lerntheke
+    gehoert. Rueckgabe: je abweichender LZK ein dict mit 'hier' und 'online'
+    (Werte aus LZK_ERGEBNIS_WERTE) und allem, was zum Uebertragen noetig ist -
+    auch das Datum auf dem Server, damit es beim Schreiben unveraendert bleibt.
+    """
+    key_je_titel = {(t or "").strip().lower(): k for k, t in (titel_je_key or {}).items()}
+    server = {}
+    for eintrag in konto.get("lzk") or []:
+        server[(eintrag.get("lerntheke"), eintrag.get("typ"))] = eintrag
+
+    unterschiede = []
+    for b in student.bausteine:
+        if not _ist_app_zeile(b):
+            continue
+        key = key_je_titel.get((b.name or "").strip().lower())
+        if not key:
+            continue
+        for nummer, typ in LZK_TYP_JE_NUMMER.items():
+            hier = getattr(b, f"lzk_ergebnis_{nummer}") or ""
+            eintrag = server.get((key, typ))
+            online = lzk_ergebnis_von_server(eintrag)
+            if hier == online:
+                continue
+            unterschiede.append({
+                "person": student.voller_name,
+                "alias": student.alias.strip().lower(),
+                "user_id": konto.get("id"),
+                "lerntheke": key,
+                "titel": b.name,
+                "typ": typ,
+                "nummer": nummer,
+                "hier": hier,
+                "online": online,
+                "datum_server": (eintrag or {}).get("datum"),
+                "baustein": b,
+            })
+    return unterschiede
 
 
 def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
@@ -421,6 +506,10 @@ class Baustein:
     # Notiz zur jeweiligen LZK (z.B. "nur Teil 1 geschrieben", "Nachschreibtermin")
     lzk_bem_1: str = ""
     lzk_bem_2: str = ""
+    # Ergebnis der jeweiligen LZK, wie es auch auf dem Server steht (siehe
+    # LZK_ERGEBNIS_WERTE). Die "LZK-Note" daneben ist Freitext und bleibt lokal.
+    lzk_ergebnis_1: str = ""
+    lzk_ergebnis_2: str = ""
 
 
 @dataclass
@@ -472,10 +561,10 @@ def baustein_als_dict(b: Baustein) -> dict:
         "halbjahr": b.halbjahr,
         "bemerkung": b.bemerkung,
     }
-    for nr, (datum, note, bem) in enumerate(
-            ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1),
-             (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2)), start=1):
-        lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem})
+    for nr, (datum, note, bem, erg) in enumerate(
+            ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1, b.lzk_ergebnis_1),
+             (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2, b.lzk_ergebnis_2)), start=1):
+        lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem, "ergebnis": erg})
         if lzk:
             daten[f"lzk_{nr}"] = lzk
     return _ohne_leere(daten)
@@ -489,12 +578,16 @@ def baustein_aus_dict(d: dict) -> Baustein:
         halbjahr=d.get("halbjahr") or "",
         bemerkung=d.get("bemerkung") or "",
     )
-    for nr, felder in ((1, ("lzk_datum_1", "lzk_note_1", "lzk_bem_1")),
-                       (2, ("lzk_datum_2", "lzk_note_2", "lzk_bem_2"))):
+    for nr, felder in ((1, ("lzk_datum_1", "lzk_note_1", "lzk_bem_1", "lzk_ergebnis_1")),
+                       (2, ("lzk_datum_2", "lzk_note_2", "lzk_bem_2", "lzk_ergebnis_2"))):
         lzk = d.get(f"lzk_{nr}") or {}
         setattr(b, felder[0], _to_date(lzk.get("datum")))
         setattr(b, felder[1], lzk.get("note") or "")
         setattr(b, felder[2], lzk.get("bemerkung") or "")
+        # Aeltere Dateien kennen kein Ergebnis; ein unbekannter Wert wird nicht
+        # geraten, sondern bleibt leer ("nicht bewertet").
+        erg = str(lzk.get("ergebnis") or "")
+        setattr(b, felder[3], erg if erg in LZK_ERGEBNIS_WERTE else "")
     return b
 
 

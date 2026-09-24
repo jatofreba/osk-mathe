@@ -17,7 +17,8 @@ from typing import List
 from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
     halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren, ist_json_pfad,
-    lt_lzk_aenderungen,
+    lt_lzk_aenderungen, lt_lzk_ergebnis_unterschiede, lzk_ergebnis_zum_server,
+    LZK_ERGEBNIS_TEXT, LZK_ERGEBNIS_SYMBOL,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -51,6 +52,15 @@ def _einzeilig(text):
     """
     zeilen = [z.strip() for z in str(text or "").splitlines() if z.strip()]
     return " / ".join(zeilen)
+
+
+def _note_mit_ergebnis(note, ergebnis):
+    """Freie LZK-Note und Ergebnis (✗ / ✓ / 🔥…) in einer Zelle."""
+    symbol = LZK_ERGEBNIS_SYMBOL.get(ergebnis or "", "")
+    note = (note or "").strip()
+    if not symbol:
+        return note
+    return f"{note} {symbol}" if note else symbol
 
 
 def _mit_bemerkung(text, bemerkung):
@@ -131,12 +141,14 @@ class BausteinDialog(tk.Toplevel):
             ("Bausteinarbeit", "bausteinarbeit", "entry", None),
             ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
             ("LZK-Note 1", "lzk_note_1", "entry", None),
+            ("LZK-Ergebnis 1", "lzk_ergebnis_1", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
             # Mehrzeilig: in eine LZK-Bemerkung gehoeren oft mehrere Punkte
             # ("Bruchrechnen sicher / Textaufgaben ueben"), und die passten nicht
             # in eine Zeile. Die vierte Spalte ist bei "text" die Zeilenzahl.
             ("Bemerkung zur LZK 1", "lzk_bem_1", "text", 3),
             ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
             ("LZK-Note 2", "lzk_note_2", "entry", None),
+            ("LZK-Ergebnis 2", "lzk_ergebnis_2", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
             ("Bemerkung zur LZK 2", "lzk_bem_2", "text", 3),
             ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
             ("Bemerkung", "bemerkung", "text", 10),
@@ -149,8 +161,10 @@ class BausteinDialog(tk.Toplevel):
             wert = getattr(b, feld)
             if feld in ("lzk_datum_1", "lzk_datum_2"):
                 wert = fmt_datum(wert)
+            if art == "ergebnis":
+                wert = LZK_ERGEBNIS_TEXT.get(wert or "", LZK_ERGEBNIS_TEXT[""])
 
-            if art == "combo":
+            if art in ("combo", "ergebnis"):
                 var = tk.StringVar(value=wert)
                 w = ttk.Combobox(self, textvariable=var, values=optionen, width=28, state="readonly")
                 w.grid(row=row, column=1, sticky="w", padx=8, pady=4)
@@ -208,6 +222,10 @@ class BausteinDialog(tk.Toplevel):
 
             werte["lzk_datum_1"] = parse_datum(werte["lzk_datum_1"])
             werte["lzk_datum_2"] = parse_datum(werte["lzk_datum_2"])
+            # Angezeigt wird der Text, gespeichert der Wert.
+            wert_je_text = {t: w for w, t in LZK_ERGEBNIS_TEXT.items()}
+            for feld in ("lzk_ergebnis_1", "lzk_ergebnis_2"):
+                werte[feld] = wert_je_text.get(werte.get(feld, ""), "")
             if not werte["status"]:
                 werte["status"] = "Ausstehend"
 
@@ -406,6 +424,72 @@ class VorlageDialog(tk.Toplevel):
 
     def _speichern(self):
         self.result = list(self.box.get(0, "end"))
+        self.destroy()
+
+
+class LzkErgebnisAbgleichDialog(tk.Toplevel):
+    """LZK-Ergebnisse (bestanden/Flammen) zwischen Liste und Lerntheken-App.
+
+    Wie beim Kursungs-Abgleich: erst stehen die Unterschiede da, dann waehlt man
+    die Richtung. `result` ist None (Abbruch), "server_zu_liste" oder
+    "liste_zu_server".
+    """
+
+    def __init__(self, parent, unterschiede: list, ohne_konto: list, klasse: str):
+        super().__init__(parent)
+        self.title("LZK-Ergebnisse abgleichen")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self,
+                  text=f"Tandem {klasse} · Ergebnisse der Lerntheken-LZK (bestanden, Flammen).\n"
+                       "Die freie LZK-Note und die Bemerkungen bleiben immer nur hier.",
+                  justify="left", wraplength=560).pack(padx=12, pady=(12, 8), anchor="w")
+        if unterschiede:
+            ttk.Label(self, text=f"Unterschiede ({len(unterschiede)})").pack(padx=12, anchor="w")
+        else:
+            ttk.Label(self, text="Keine Unterschiede – hier und online steht dasselbe.",
+                      foreground="#0a0").pack(padx=12, anchor="w")
+
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=12, pady=(2, 6))
+        self.liste = tk.Listbox(rahmen, height=14, width=90, activestyle="none")
+        self.liste.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.liste.yview)
+        sb.pack(side="right", fill="y")
+        self.liste.config(yscrollcommand=sb.set)
+        for u in unterschiede:
+            self.liste.insert("end", f"{u['person']} · {u['titel']} ({u['typ']}):"
+                                     f"   hier {LZK_ERGEBNIS_TEXT.get(u['hier'], '–')}"
+                                     f"   ·   online {LZK_ERGEBNIS_TEXT.get(u['online'], '–')}")
+        if ohne_konto:
+            self.liste.insert("end", "")
+            self.liste.insert("end", f"Ohne passendes Konto – bleiben aussen vor ({len(ohne_konto)}):")
+            for name in ohne_konto:
+                self.liste.insert("end", f"   {name}")
+
+        ttk.Label(self,
+                  text="Die gewählte Richtung überschreibt die andere Seite. Ein leeres Ergebnis\n"
+                       "(„nicht bewertet“) überschreibt dabei nie ein eingetragenes.",
+                  foreground="#b3261e", justify="left", wraplength=560).pack(padx=12, anchor="w")
+
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=12, pady=(8, 12))
+        self.btn_holen = ttk.Button(btns, text="← Vom Server in diese Liste",
+                                    command=lambda: self._waehlen("server_zu_liste"))
+        self.btn_holen.pack(side="left")
+        self.btn_senden = ttk.Button(btns, text="Aus dieser Liste zum Server →",
+                                     command=lambda: self._waehlen("liste_zu_server"))
+        self.btn_senden.pack(side="left", padx=6)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="right")
+        if not unterschiede:
+            self.btn_holen.config(state="disabled")
+            self.btn_senden.config(state="disabled")
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _waehlen(self, richtung):
+        self.result = richtung
         self.destroy()
 
 
@@ -766,6 +850,8 @@ class App(tk.Tk):
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
         lerntheke_menu.add_command(label="Kursungen abgleichen…",
                                    command=self.kursungen_abgleichen)
+        lerntheke_menu.add_command(label="LZK-Ergebnisse abgleichen…",
+                                   command=self.lzk_ergebnisse_abgleichen)
         lerntheke_menu.add_command(label="Aliasse auf dem Server umbenennen…",
                                    command=self.alias_umbenennen)
         lerntheke_menu.add_separator()
@@ -921,8 +1007,8 @@ class App(tk.Tk):
         self._bausteine_umgekehrt = False
         for key, text, width in [
             ("status", "Status", 110), ("bausteinarbeit", "Bausteinarbeit", 140),
-            ("lzk1", "LZK 1", 90), ("note1", "Note", 55),
-            ("lzk2", "LZK 2", 90), ("note2", "Note", 55),
+            ("lzk1", "LZK 1", 90), ("note1", "Note", 80),
+            ("lzk2", "LZK 2", 90), ("note2", "Note", 80),
             ("halbjahr", "HJ", 65), ("bemerkung", "Bemerkung", 260),
         ]:
             self.tabelle.heading(key, text=text,
@@ -1497,9 +1583,9 @@ class App(tk.Tk):
             self.tabelle.insert("", "end", iid=str(i), text=b.name,
                                  values=(b.status, b.bausteinarbeit,
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_1), b.lzk_bem_1),
-                                         b.lzk_note_1,
+                                         _note_mit_ergebnis(b.lzk_note_1, b.lzk_ergebnis_1),
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_2), b.lzk_bem_2),
-                                         b.lzk_note_2,
+                                         _note_mit_ergebnis(b.lzk_note_2, b.lzk_ergebnis_2),
                                          b.halbjahr, _einzeilig(b.bemerkung)),
                                  tags=tuple(tags))
         # Die Tabelle wurde gerade neu gefuellt, also ist keine Zeile mehr markiert:
@@ -1700,6 +1786,109 @@ class App(tk.Tk):
             if len(ohne) > 10:
                 hinweis += f"\n... und {len(ohne) - 10} weitere"
         self._bericht("Aliasse exportieren", hinweis)
+
+    def lzk_ergebnisse_abgleichen(self):
+        """LZK-Ergebnisse (bestanden/Flammen) zwischen Liste und Lerntheken-App.
+
+        Bewertet werden darf an beiden Stellen, deshalb keine automatische
+        Zusammenfuehrung: Unterschiede zeigen, Richtung waehlen. Ein leeres
+        Ergebnis ueberschreibt nie ein eingetragenes - in keiner Richtung.
+        Geschrieben wird ueber dieselbe Schnittstelle wie die Termine; das
+        Datum auf dem Server geht dabei unveraendert mit.
+        """
+        titel_fenster = "LZK-Ergebnisse abgleichen"
+        if not self.az.students:
+            messagebox.showinfo(titel_fenster, "Keine Personen vorhanden.")
+            return
+        if self._dubletten_melden(titel_fenster):
+            return
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            konten, titel = self._lt_serverstand(client, neu_laden=True)
+        except Exception as e:
+            messagebox.showerror(titel_fenster, f"Abruf fehlgeschlagen:\n{e}")
+            return
+
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+        unterschiede, ohne_konto = [], []
+        for student in self.az.students:
+            alias = student.alias.strip().lower()
+            if not alias:
+                continue
+            konto = je_konto.get(alias)
+            if not konto:
+                ohne_konto.append(f"{student.voller_name} ({alias})")
+                continue
+            unterschiede += lt_lzk_ergebnis_unterschiede(student, konto, titel)
+
+        dlg = LzkErgebnisAbgleichDialog(self, unterschiede, ohne_konto, klasse)
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+        text_von = lambda w: LZK_ERGEBNIS_TEXT.get(w, "–")
+        zeile = lambda u: f"{u['person']} · {u['titel']} ({u['typ']})"
+
+        if dlg.result == "server_zu_liste":
+            uebernommen, leer = [], []
+            for u in unterschiede:
+                if not u["online"]:
+                    leer.append(f"{zeile(u)}: online nicht bewertet – hier bleibt {text_von(u['hier'])}")
+                    continue
+                setattr(u["baustein"], f"lzk_ergebnis_{u['nummer']}", u["online"])
+                uebernommen.append(f"{zeile(u)}: {text_von(u['hier'])} → {text_von(u['online'])}")
+            if uebernommen:
+                self._markiere_ungespeichert()
+                self._detail_anzeigen()
+            text = f"{len(uebernommen)} Ergebnis(se) aus der Lerntheken-App übernommen."
+            if uebernommen:
+                text += "\n\n" + "\n".join(uebernommen) + "\n\nNoch speichern nicht vergessen."
+            if leer:
+                text += "\n\nÜbersprungen:\n" + "\n".join(leer)
+            self._bericht(titel_fenster, text)
+            return
+
+        gesendet, fehler, leer = [], [], []
+        for u in unterschiede:
+            ziel = lzk_ergebnis_zum_server(u["hier"])
+            if ziel is None:
+                leer.append(f"{zeile(u)}: hier nicht bewertet – online bleibt {text_von(u['online'])}")
+                continue
+            status, pokale = ziel
+            try:
+                client.lzk_setzen(u["user_id"], u["lerntheke"], u["typ"], u["datum_server"], status, pokale)
+            except Exception as e:
+                fehler.append(f"{zeile(u)}: {e}")
+                continue
+            gesendet.append(f"{zeile(u)}: {text_von(u['online'])} → {text_von(u['hier'])}")
+            # Gemerkten Serverstand nachziehen - sonst schickte der Termin-Abgleich
+            # beim naechsten Mal das alte Ergebnis mit.
+            for konto in self._lt_konten or []:
+                if konto.get("id") != u["user_id"]:
+                    continue
+                eintraege = konto.get("lzk") or []
+                konto["lzk"] = eintraege
+                vorhanden = next((e for e in eintraege if e.get("lerntheke") == u["lerntheke"]
+                                  and e.get("typ") == u["typ"]), None)
+                if vorhanden is None:
+                    eintraege.append({"typ": u["typ"], "lerntheke": u["lerntheke"],
+                                      "datum": u["datum_server"], "status": status, "pokale": pokale})
+                else:
+                    vorhanden["status"], vorhanden["pokale"] = status, pokale
+
+        text = f"{len(gesendet)} von {len(unterschiede)} Ergebnis(sen) zum Server geschickt (Tandem {klasse})."
+        if gesendet:
+            text += "\n\n" + "\n".join(gesendet)
+        if leer:
+            text += "\n\nÜbersprungen:\n" + "\n".join(leer)
+        if fehler:
+            text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
+            messagebox.showwarning(titel_fenster, text)
+        else:
+            self._bericht(titel_fenster, text)
 
     def kursungen_abgleichen(self):
         """Mathe-Kursungen zwischen dieser Liste und der Lerntheken-App abgleichen.
