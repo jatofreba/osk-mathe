@@ -4877,7 +4877,10 @@ async function loadCalendar() {
 // aus dem eigenen Fach. Ohne gesetztes Standard-Fach bleiben es die eigenen.
 // Schueler:innen: gebuchte UND solche, zu denen sie eingeladen oder angefragt sind -
 // dort wird geantwortet, das darf nicht verschwinden.
-function calMeinTermin(s) {
+// ACHTUNG beim Benennen: es gibt weiter unten ein calMeinTermin(it) mit anderer
+// Bedeutung ("gehoert mir persoenlich"). Gleiche Namen ueberschreiben sich in
+// dieser einen grossen Datei stillschweigend - deshalb hier ein eigener Name.
+function calImKalenderZeigen(s) {
   if (!me) return true;
   if (me.role === 'admin') {
     const meiner = s.teacherId == null || s.teacherId === me.userId;
@@ -4890,7 +4893,7 @@ function calMeinTermin(s) {
 function calItemsByDay() {
   const map = {};
   // Deadlines bleiben fuer alle sichtbar: sie gehoeren dem ganzen Tandem.
-  (calData.slots || []).filter(calMeinTermin).forEach(s => { (map[s.datum] = map[s.datum] || []).push({ kind: 'slot', ...s }); });
+  (calData.slots || []).filter(calImKalenderZeigen).forEach(s => { (map[s.datum] = map[s.datum] || []).push({ kind: 'slot', ...s }); });
   (calData.deadlines || []).forEach(d => { (map[d.datum] = map[d.datum] || []).push({ kind: 'deadline', ...d }); });
   return map;
 }
