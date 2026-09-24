@@ -1734,11 +1734,36 @@ textarea.form-input{
 </div>
 
 <!-- ══ MODAL: Fach-Einstellungen (Admin) ═══════════════════════════════════════ -->
+<div class="overlay" id="modal-lzk-eintrag">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title" id="lzke-title">📝 LZK-Termin</div>
+    <div class="form-group" id="lzke-person-gruppe"><label class="form-label" for="lzke-person">Schüler:in</label><select class="form-input" id="lzke-person"></select></div>
+    <div class="form-group" id="lzke-fach-gruppe"><label class="form-label" for="lzke-fach">Fach</label><select class="form-input" id="lzke-fach" onchange="lzkeFachGewechselt()"></select></div>
+    <div class="form-group"><label class="form-label" for="lzke-datum" id="lzke-datum-lbl">Datum</label><input class="form-input" id="lzke-datum" type="date"></div>
+    <div class="form-group" id="lzke-thema-gruppe"><label class="form-label" for="lzke-thema">Thema</label><input class="form-input" id="lzke-thema" maxlength="200" placeholder="z.B. Erörterung, Vokabeln Unit 3"></div>
+    <label id="lzke-anfrage-gruppe" style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:10px;cursor:pointer;">
+      <input type="checkbox" id="lzke-anfrage" onchange="lzkeAnfrageGewechselt()">
+      <span>Nur anfragen – die Lernbegleitung legt den Termin fest</span>
+    </label>
+    <div id="lzke-hinweis" style="font-size:12px;color:var(--md-on-surface-variant);margin-bottom:10px;line-height:1.4;"></div>
+    <div id="lzke-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-lzk-eintrag')">Abbrechen</button>
+      <button class="btn-act btn-blue" id="lzke-ok" onclick="submitLzkEintrag()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-subject-settings">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="ssettings-title">Fach-Einstellungen</div>
     <div class="form-group"><label class="form-label" for="ssettings-ort">Standard-Ort</label><input class="form-input" id="ssettings-ort" placeholder="z.B. Mathe-Fachbüro"></div>
     <div class="form-group"><label class="form-label" for="ssettings-dauer">Standard-Dauer (Minuten)</label><input class="form-input" id="ssettings-dauer" type="number" min="5" max="600"></div>
+    <div class="form-group"><label class="form-label" for="ssettings-lzk">LZK-Termine: Schüler:innen …</label>
+      <select class="form-input" id="ssettings-lzk">
+        <option value="direkt">tragen ihren Termin selbst ein</option>
+        <option value="anfrage">fragen an – die Lernbegleitung bestätigt</option>
+      </select></div>
     <div style="font-size:12px;font-weight:700;color:var(--md-on-surface-variant);margin:4px 0 8px;">Vorgaben</div>
     <div class="form-group">
       <label class="form-label" for="ssettings-hj">Gilt für</label>
@@ -3354,6 +3379,26 @@ async function mwBuchen(slotId) {
 }
 // Springt in den Kalender UND schlaegt den Tag des Termins auf - sonst landet man
 // im laufenden Monat und muss die Einladung erst suchen.
+// LZK-Kachel in "Meine Woche": zeigt Fach, Ergebnis und Thema; antippen oeffnet den Tag.
+function mwLzkChip(l) {
+  const subj = subjectById(l.subjectId);
+  const titel = `${subj.name}-LZK · ${lzkTitel(l)}`;
+  return `<div class="lw-chip mw-lzk" style="border-left-color:${subj.color};border-left-style:dashed;" title="${escHtml(titel)}" aria-label="${escHtml(titel)}"
+    role="button" tabindex="0" onclick="mwLzkZumKalender('${l.datumIso}')"
+    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwLzkZumKalender('${l.datumIso}');}">
+    <div class="lw-chip-time" style="color:${subj.color};">📝 ${escHtml(subj.name)}-LZK</div>
+    <div class="lw-chip-meta">${lzkErgebnisPill(l)} ${escHtml(lzkTitel(l))}</div>
+  </div>`;
+}
+async function mwLzkZumKalender(datum) {
+  showView('calendar');
+  await loadCalendar();
+  const d = new Date(datum + 'T00:00:00');
+  if (isNaN(d)) return;
+  calYear = d.getFullYear(); calMonth = d.getMonth();
+  calSelectDay(datum);
+}
+
 async function mwZumKalender(slotId) {
   const s = _mwSlots.find(x => x.id === slotId);
   showView('calendar');
@@ -3434,6 +3479,8 @@ async function loadMyWeek() {
   const dayStrs = dayDates.map(lwDateStr);
 
   const weekSlots = (data.slots || []).filter(s => dayStrs.indexOf(s.datum) !== -1);
+  // Eigene LZK dieser Woche (der Server liefert Schueler:innen nur die eigenen).
+  const weekLzk = (data.lzk || []).filter(l => l.datumIso && dayStrs.includes(l.datumIso) && l.anfrage !== 'abgelehnt');
 
   // Termine, die sich mit einer eigenen Buchung ueberschneiden, werden NICHT mehr
   // ausgeblendet, sondern ausgegraut angezeigt: so sieht man, dass es das Angebot
@@ -3490,6 +3537,12 @@ async function loadMyWeek() {
       LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${mwZelleHtml(cells[bi][di])}</div>`).join('');
   }).join('');
 
+  // LZK sind ganztaegig: eine eigene Zeile ueber den Zeitbloecken, nur wenn es welche gibt.
+  const lzkZeile = weekLzk.length
+    ? `<div class="lw-blockhead">📝 LZK<span>ganztägig</span></div>`
+      + dayStrs.map(d => `<div class="lw-cell">${weekLzk.filter(l => l.datumIso === d).map(mwLzkChip).join('')}</div>`).join('')
+    : '';
+
   const extrasHtml = extras.length ? `<div class="lw-extra">
     <div class="lw-extra-title">Weitere Termine dieser Woche</div>
     ${extras.map(s => `<div style="margin-bottom:3px;">${mwChip(s)}</div>`).join('')}
@@ -3517,10 +3570,11 @@ async function loadMyWeek() {
           ${andereWoche ? '<button type="button" class="mw-serie-knopf" onclick="mwWocheHeute()">Heute</button>' : ''}
         </span>
         <button class="mw-serie-knopf" id="mw-serien-knopf" type="button" style="display:none;"></button>
+        <button class="mw-serie-knopf" type="button" onclick="openLzkEintragModal()">📝 LZK eintragen</button>
       </div>
     </div>
-    ${weekSlots.length
-      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>`
+    ${(weekSlots.length || weekLzk.length)
+      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${lzkZeile}${blockRows}</div></div>`
       : '<div class="lw-empty">In dieser Woche sind noch keine Termine angelegt.</div>'}
     <div class="mw-legend">
       <span>Buchstabe/Farbe = Fach</span>
@@ -3530,6 +3584,7 @@ async function loadMyWeek() {
       <span>frei = noch buchbar</span>
       <span>gebucht = schon vergeben – bei einem Fachbüro kannst du mitmachen anfragen</span>
       ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
+      ${weekLzk.length ? '<span>📝 LZK – ganztägig, antippen öffnet den Tag im Kalender</span>' : ''}
       <span>Termin antippen, dann erscheint unten, was damit geht.</span>
       <span>Kacheln wie „6 × 15 Min" fassen aufeinanderfolgende Termine zusammen – antippen zeigt sie einzeln.</span>
     </div>
@@ -4901,6 +4956,7 @@ function calItemsByDay() {
   // Deadlines bleiben fuer alle sichtbar: sie gehoeren dem ganzen Tandem.
   (calData.slots || []).filter(calImKalenderZeigen).forEach(s => { (map[s.datum] = map[s.datum] || []).push({ kind: 'slot', ...s }); });
   (calData.deadlines || []).forEach(d => { (map[d.datum] = map[d.datum] || []).push({ kind: 'deadline', ...d }); });
+  (calData.lzk || []).filter(calLzkZeigen).forEach(l => { (map[l.datumIso] = map[l.datumIso] || []).push({ kind: 'lzk', ...l }); });
   return map;
 }
 
@@ -4917,6 +4973,205 @@ function calItemsByDay() {
 // Lernbegleitung nachgetragen. Der Server lehnt beides ebenfalls ab.
 function slotVorbei(s) {
   return !!s.datum && s.datum < new Date().toISOString().slice(0, 10);
+}
+
+// ── LZK im Kalender ─────────────────────────────────────────────────────────
+// LZK sind ganztaegige, personengebundene Termine. Der Server liefert Schueler:innen
+// nur die eigenen; Lernbegleitungen sehen die ihres Standard-Fachs (ohne Standard-
+// Fach alle). Abgelehnte Anfragen sind erledigt, ohne Datum steht nichts im Kalender.
+function calLzkZeigen(l) {
+  if (!l || !l.datumIso || l.anfrage === 'abgelehnt') return false;
+  if (me && me.role === 'admin' && me.defaultSubjectId != null) return l.subjectId === me.defaultSubjectId;
+  return true;
+}
+// Lerntheken-LZK tragen Typ + Lerntheke, freie LZK ihr Thema.
+function lzkTitel(l) {
+  if (l.lerntheke) return `${l.typ}-LZK · ${hjLtTitle(l.lerntheke)}`;
+  return l.thema || 'LZK';
+}
+function lzkErgebnisPill(l) {
+  if (l.anfrage === 'offen') return '<span class="pill pill-yellow" style="font-size:10px;">⏳ angefragt</span>';
+  if (l.status === 'bestanden')
+    return `<span class="pill pill-green" style="font-size:10px;">${l.pokale ? '🔥'.repeat(l.pokale) + ' ' : ''}bestanden</span>`;
+  if (l.status === 'nicht_bestanden') return '<span class="pill pill-red" style="font-size:10px;">✗ nicht bestanden</span>';
+  return '<span class="pill pill-blue" style="font-size:10px;">📝 steht an</span>';
+}
+// Kachel im Monatsraster. Mehrere LZK an einem Tag werden zu EINER Kachel - sonst
+// schoeben fuenf LZK die eigenen Termine der Lernbegleitung ins "+ mehr".
+function calLzkChip(lzks, isAdminView) {
+  const faecher = [...new Set(lzks.map(l => l.subjectId))];
+  const subj = faecher.length === 1 ? subjectById(faecher[0]) : null;
+  const farbe = subj ? subj.color : 'var(--md-on-surface-variant)';
+  const text = lzks.length > 1 ? `${lzks.length} LZK`
+    : (isAdminView ? (lzks[0].username || 'LZK') : `${subj ? subj.name : ''}-LZK`);
+  const titel = lzks.map(l => (isAdminView ? (l.username || '') + ': ' : '')
+    + subjectById(l.subjectId).name + '-LZK · ' + lzkTitel(l)).join(' | ');
+  return `<div class="cal-ev" style="background:#fff;color:${farbe};border-color:${farbe};border-style:dashed;" title="${escHtml(titel)}">📝 ${escHtml(text)}</div>`;
+}
+// Bewerten: auf dem Server steht nur das Ergebnis - Flammen heissen bestanden.
+// Ein Klick auf das schon gesetzte Ergebnis nimmt es wieder zurueck.
+function lzkBewertenKnoepfe(l) {
+  const an = n => n === -1 ? l.status === 'nicht_bestanden' : (l.status === 'bestanden' && l.pokale === n);
+  const k = (n, text, titel) => `<button type="button" class="lzk-pokal-btn${an(n) ? ' active' : ''}" title="${titel}" aria-label="${titel}" onclick="lzkBewerten(${l.id}, ${n})">${text}</button>`;
+  return k(-1, '✗', 'nicht bestanden') + k(1, '🔥', 'bestanden – 1 Flamme')
+    + k(2, '🔥🔥', 'bestanden – 2 Flammen') + k(3, '🔥🔥🔥', 'bestanden – 3 Flammen');
+}
+function calLzkZeile(l, isAdmin) {
+  const subj = subjectById(l.subjectId);
+  const heute = calDateStr(new Date());
+  const wer = isAdmin ? `<strong>${escHtml(l.username || '')}</strong> · ` : '';
+  let knoepfe = '';
+  if (isAdmin) {
+    if (l.anfrage === 'offen') {
+      knoepfe = `<button class="btn-act btn-green" onclick="openLzkEintragModal(null, ${l.id}, 'annehmen')">Annehmen</button>
+                 <button class="btn-cancel" onclick="lzkAnfrage(${l.id}, 'ablehnen')">Ablehnen</button>`;
+    } else if (l.datumIso <= heute) {
+      // Wie bei der Anwesenheit: bewertet wird ab dem Termintag.
+      knoepfe = lzkBewertenKnoepfe(l);
+    }
+    if (!l.lerntheke) knoepfe += ` <button class="btn-icon" onclick="openLzkEintragModal(null, ${l.id})" title="Datum/Thema ändern" aria-label="Datum/Thema ändern">✎</button>`;
+    knoepfe += ` <button class="btn-icon red" onclick="lzkLoeschen(${l.id})" title="LZK löschen" aria-label="LZK löschen">🗑</button>`;
+  } else if (!l.lerntheke && l.herkunft === 'selbst' && l.status === 'ausstehend') {
+    knoepfe = `<button class="btn-cancel" onclick="lzkZurueck(${l.id})">${l.anfrage === 'offen' ? 'Anfrage zurückziehen' : 'Termin zurücknehmen'}</button>`;
+  }
+  const zusatz = (!isAdmin && l.herkunft === 'lernbegleitung') ? ' · von der Lernbegleitung eingetragen' : '';
+  return `<div class="stat-card" style="margin-bottom:8px;border-left:3px dashed ${subj.color};">
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
+      <div>
+        <div>📝 ${wer}<strong>${escHtml(subj.name)}-LZK</strong> ${lzkErgebnisPill(l)}</div>
+        <div style="color:var(--md-on-surface-variant);font-size:12px;">${escHtml(lzkTitel(l))}${zusatz} · ganztägig</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${knoepfe}</div>
+    </div></div>`;
+}
+
+// Aktionen. Nach jeder Aenderung frischt die gerade sichtbare Ansicht auf.
+async function lzkPatch(id, body) {
+  const r = await fetch(`/api/admin/lzk/${id}`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Fehler.'); return false; }
+  calReload();
+  return true;
+}
+function lzkBewerten(id, n) {
+  const l = (calData.lzk || []).find(x => x.id === id);
+  const schonSo = l && (n === -1 ? l.status === 'nicht_bestanden' : (l.status === 'bestanden' && l.pokale === n));
+  return lzkPatch(id, schonSo ? { status: 'ausstehend' }
+    : (n === -1 ? { status: 'nicht_bestanden' } : { pokale: n }));
+}
+function lzkAnfrage(id, entscheidung) {
+  return lzkPatch(id, { anfrage: entscheidung });
+}
+async function lzkLoeschen(id) {
+  if (!confirm('Diese LZK wirklich löschen?')) return;
+  const r = await fetch(`/api/admin/lzk/${id}`, { method: 'DELETE' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Löschen.'); return; }
+  calReload();
+}
+async function lzkZurueck(id) {
+  if (!confirm('Diesen LZK-Termin zurücknehmen?')) return;
+  const r = await fetch(`/api/lzk/${id}`, { method: 'DELETE' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler.'); return; }
+  calReload();
+}
+
+// Dialog zum Eintragen/Aendern/Annehmen einer LZK - fuer beide Rollen.
+//   'neu'      - Schueler:in (direkt oder als Anfrage) bzw. Lernbegleitung fuer eine Person
+//   'aendern'  - Lernbegleitung: Datum/Thema einer freien LZK
+//   'annehmen' - Lernbegleitung: Anfrage annehmen, Datum festlegen
+let _lzkeModus = 'neu', _lzkeId = null;
+function lzkFaecher() { return (subjectsMeta || []).filter(x => !x.nurZugewiesen); }
+function openLzkEintragModal(datum, id, modus) {
+  const isAdmin = !!(me && me.role === 'admin');
+  const l = id ? (calData.lzk || []).find(x => x.id === id) : null;
+  _lzkeModus = modus || (id ? 'aendern' : 'neu');
+  _lzkeId = id || null;
+  const neu = _lzkeModus === 'neu';
+  const zeige = (elId, an) => { const e = document.getElementById(elId); if (e) e.style.display = an ? '' : 'none'; };
+  document.getElementById('lzke-title').textContent = neu ? '📝 LZK-Termin eintragen'
+    : _lzkeModus === 'annehmen' ? `📝 LZK-Anfrage von ${l ? l.username || '' : ''} annehmen` : '📝 LZK ändern';
+  zeige('lzke-person-gruppe', isAdmin && neu);
+  if (isAdmin && neu) document.getElementById('lzke-person').innerHTML =
+    (calClassmates || []).map(c => `<option value="${c.id}">${escHtml(c.username)}</option>`).join('');
+  zeige('lzke-fach-gruppe', neu);
+  if (neu) {
+    const faecher = lzkFaecher();
+    const sel = document.getElementById('lzke-fach');
+    sel.innerHTML = faecher.map(x => `<option value="${x.id}">${escHtml(x.name)}</option>`).join('');
+    // Mathe-LZK zu einer Lerntheke laufen ueber die Lerntheke - vorgewaehlt ist deshalb
+    // das Standard-Fach der Lernbegleitung bzw. das erste Fach ohne Lerntheken.
+    const vorwahl = (isAdmin && me.defaultSubjectId) || (faecher.find(x => x.key !== 'mathe') || faecher[0] || {}).id;
+    if (vorwahl) sel.value = String(vorwahl);
+  }
+  const datumEl = document.getElementById('lzke-datum');
+  datumEl.value = (l && l.datumIso) || datum || '';
+  datumEl.min = isAdmin ? '' : calDateStr(new Date());
+  zeige('lzke-thema-gruppe', _lzkeModus !== 'annehmen' && !(l && l.lerntheke));
+  document.getElementById('lzke-thema').value = l ? (l.thema || '') : '';
+  zeige('lzke-anfrage-gruppe', !isAdmin && neu);
+  const box = document.getElementById('lzke-anfrage');
+  box.checked = false; box.disabled = false;
+  document.getElementById('lzke-error').style.display = 'none';
+  lzkeFachGewechselt();
+  openModal('modal-lzk-eintrag');
+}
+// Fach-Modus "anfrage": Schueler:innen koennen dort nur anfragen.
+function lzkeFachGewechselt() {
+  const isAdmin = !!(me && me.role === 'admin');
+  const hinweis = document.getElementById('lzke-hinweis');
+  const box = document.getElementById('lzke-anfrage');
+  const subj = subjectById(parseInt(document.getElementById('lzke-fach').value));
+  const texte = [];
+  if (!isAdmin && _lzkeModus === 'neu') {
+    const nurAnfrage = subj && subj.lzkModus === 'anfrage';
+    if (nurAnfrage) { box.checked = true; box.disabled = true;
+      texte.push(`In ${escHtml(subj.name)} werden LZK-Termine angefragt – die Lernbegleitung bestätigt sie.`); }
+    else box.disabled = false;
+    if (subj && subj.key === 'mathe')
+      texte.push('Eine Mathe-LZK zu einer Lerntheke trägst du in der Lerntheke ein – hier nur LZK ohne Lerntheke.');
+  }
+  if (_lzkeModus === 'annehmen') texte.push('Mit dem Annehmen steht die LZK an diesem Tag fest.');
+  hinweis.innerHTML = texte.join('<br>');
+  lzkeAnfrageGewechselt();
+}
+function lzkeAnfrageGewechselt() {
+  const anfrage = document.getElementById('lzke-anfrage').checked && _lzkeModus === 'neu' && !(me && me.role === 'admin');
+  document.getElementById('lzke-datum-lbl').textContent = anfrage ? 'Wunschtermin (optional)' : 'Datum';
+  document.getElementById('lzke-ok').textContent = anfrage ? 'Anfragen' : (_lzkeModus === 'annehmen' ? 'Annehmen' : 'Speichern');
+}
+async function submitLzkEintrag() {
+  const errEl = document.getElementById('lzke-error');
+  errEl.style.display = 'none';
+  const fehler = t => { errEl.textContent = t; errEl.style.display = 'block'; };
+  const isAdmin = !!(me && me.role === 'admin');
+  const datum = document.getElementById('lzke-datum').value;
+  const thema = document.getElementById('lzke-thema').value.trim();
+  let url, methode = 'POST', body;
+  if (_lzkeModus === 'neu' && !isAdmin) {
+    const anfragen = document.getElementById('lzke-anfrage').checked;
+    if (!anfragen && !datum) return fehler('Bitte ein Datum wählen.');
+    url = '/api/lzk';
+    body = { subjectId: parseInt(document.getElementById('lzke-fach').value), datum: datum || null, thema, anfragen };
+  } else if (_lzkeModus === 'neu') {
+    if (!datum) return fehler('Bitte ein Datum wählen.');
+    url = '/api/admin/lzk/eintrag';
+    body = { userId: parseInt(document.getElementById('lzke-person').value),
+             subjectId: parseInt(document.getElementById('lzke-fach').value), datum, thema };
+  } else if (_lzkeModus === 'annehmen') {
+    if (!datum) return fehler('Zum Annehmen bitte ein Datum festlegen.');
+    url = `/api/admin/lzk/${_lzkeId}`; methode = 'PATCH'; body = { anfrage: 'annehmen', datum };
+  } else {
+    const l = (calData.lzk || []).find(x => x.id === _lzkeId);
+    url = `/api/admin/lzk/${_lzkeId}`; methode = 'PATCH';
+    body = l && l.lerntheke ? { datum } : { datum, thema };
+  }
+  const r = await fetch(url, { method: methode, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return fehler(d.error || 'Fehler beim Speichern.');
+  closeModal('modal-lzk-eintrag');
+  calReload();
 }
 
 function calSlotState(it) {
@@ -4998,7 +5253,11 @@ function renderCalendar() {
   grid.innerHTML = cells.map(c => {
     const ds = calDateStr(c.date);
     const items = (byDay[ds] || []).slice().sort((a,b) => (a.uhrzeit||'z').localeCompare(b.uhrzeit||'z'));
-    const evs = items.slice(0, 3).map(it => {
+    // LZK sind ganztaegig und stehen oben, zusammengefasst in einer Kachel.
+    const lzks = items.filter(it => it.kind === 'lzk');
+    const rest = items.filter(it => it.kind !== 'lzk');
+    const platz = lzks.length ? 2 : 3;
+    const evs = (lzks.length ? calLzkChip(lzks, isAdminView) : '') + rest.slice(0, platz).map(it => {
       if (it.kind === 'deadline') return `<div class="cal-ev cal-ev-deadline" title="${escHtml(it.titel)}">⏰ ${escHtml(it.titel)}</div>`;
       const subj = subjectById(it.subjectId);
       // Piktogramm als SVG statt Emoji: 📘/🎤 sind immer gleich eingefaerbt, egal zu
@@ -5024,7 +5283,7 @@ function renderCalendar() {
       }[zustand];
       return `<div class="cal-ev" style="${style}" title="${escHtml(subj.name + ' ' + (it.uhrzeit||'') + ' ' + (it.typ==='input'?'Fachbüro':'Talk') + ' · ' + st)}">${lwIcon(it.typ)}${escHtml(it.uhrzeit || (it.typ==='input'?'FaBü':'Talk'))}</div>`;
     }).join('');
-    const more = items.length > 3 ? `<div class="cal-more">+${items.length - 3} mehr</div>` : '';
+    const more = rest.length > platz ? `<div class="cal-more">+${rest.length - platz} mehr</div>` : '';
     const cls = ['cal-cell'];
     if (c.other) cls.push('cal-other');
     if (ds === todayStr) cls.push('cal-today');
@@ -5044,6 +5303,7 @@ function renderCalDetail() {
   const isAdmin = me && me.role === 'admin';
 
   const rows = items.map(it => {
+    if (it.kind === 'lzk') return calLzkZeile(it, isAdmin);
     if (it.kind === 'deadline') {
       return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid #1d4ed8;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -5154,7 +5414,10 @@ function renderCalDetail() {
     ${isAdmin ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn-sm" onclick="openInputSlotModal('${calSelected}')">+ FaBü-Termin an diesem Tag</button>
       <button class="btn-sm" onclick="openDeadlineModal('${calSelected}')">+ Deadline an diesem Tag</button>
-    </div>` : ''}`;
+      <button class="btn-sm" onclick="openLzkEintragModal('${calSelected}')">+ LZK an diesem Tag</button>
+    </div>` : (calSelected >= calDateStr(new Date())
+      ? `<div style="margin-top:10px;"><button class="btn-sm" onclick="openLzkEintragModal('${calSelected}')">+ LZK-Termin an diesem Tag</button></div>`
+      : '')}`;
 }
 
 // Fachbuero fuer weitere Anmeldungen schliessen bzw. wieder oeffnen (nur Lernbegleitung).
@@ -5405,6 +5668,8 @@ function openSubjectSettingsModal() {
   document.getElementById('ssettings-title').textContent = `⚙ ${subj.name}-Einstellungen`;
   document.getElementById('ssettings-ort').value = subj.defaultOrt || '';
   document.getElementById('ssettings-dauer').value = subj.defaultDauer || 45;
+  const lzkSel = document.getElementById('ssettings-lzk');
+  if (lzkSel) lzkSel.value = subj.lzkModus || 'direkt';
   // Auswahl "Gilt für": Fach-Standard + alle Halbjahre, die in den Terminen dieses Fachs
   // vorkommen, plus das laufende Halbjahr und bereits gepflegte Abweichungen.
   const hjSel = document.getElementById('ssettings-hj');
@@ -5472,15 +5737,16 @@ async function submitSubjectSettings() {
   const optionalPraesentieren = parseInt(document.getElementById('ssettings-op').value);
   const optionalZuhoeren = parseInt(document.getElementById('ssettings-oz').value);
   const halbjahr = document.getElementById('ssettings-hj').value;
+  const lzkModus = (document.getElementById('ssettings-lzk') || {}).value || subj.lzkModus || 'direkt';
   const r = await fetch(`/api/admin/subjects/${subj.id}`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
-                           optionalPraesentieren, optionalZuhoeren, halbjahr })
+                           optionalPraesentieren, optionalZuhoeren, halbjahr, lzkModus })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Speichern.'; errEl.style.display = 'block'; return; }
   // Ort/Dauer gelten immer fach-weit; die Vorgaben je nach Auswahl als Standard oder Halbjahr.
-  Object.assign(subj, { defaultOrt, defaultDauer });
+  Object.assign(subj, { defaultOrt, defaultDauer, lzkModus });
   if (halbjahr) {
     subj.halbjahrTargets = subj.halbjahrTargets || {};
     subj.halbjahrTargets[halbjahr] = { pflichtPraesentieren, pflichtZuhoeren, optionalPraesentieren, optionalZuhoeren };
@@ -5588,6 +5854,37 @@ function awMeinTermin(s) {
 }
 
 function adminAnfragenHtml() {
+  return adminLzkAnfragenHtml() + adminSlotAnfragenHtml();
+}
+
+// LZK-Anfragen des eigenen Fachs (ohne Standard-Fach: alle). Annehmen oeffnet den
+// Dialog, weil ein Termin feststehen muss - ein Wunschtermin ist vorbelegt.
+function adminLzkAnfragenHtml() {
+  const offen = (calData.lzk || []).filter(l => l.anfrage === 'offen'
+    && (me.defaultSubjectId == null || l.subjectId === me.defaultSubjectId))
+    .sort((a, b) => (a.datumIso || '9999').localeCompare(b.datumIso || '9999'));
+  if (!offen.length) return '';
+  return `<div style="background:#fef9c3;border:1px solid #ca8a04;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-weight:800;color:#854d0e;margin-bottom:8px;">📝 Offene LZK-Anfragen (${offen.length})</div>
+    ${offen.map(l => {
+      const subj = subjectById(l.subjectId);
+      const wunsch = l.datumIso
+        ? 'Wunsch: ' + new Date(l.datumIso + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' })
+        : 'ohne Wunschtermin';
+      return `<div class="stat-card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div><strong>${escHtml(l.username || '')}</strong> möchte eine ${escHtml(subj.name)}-LZK schreiben<br>
+            <span style="color:var(--md-on-surface-variant);font-size:12px;">📝 ${escHtml(lzkTitel(l))} · ${wunsch}</span></div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-act btn-green" onclick="openLzkEintragModal(null, ${l.id}, 'annehmen')">Annehmen</button>
+            <button class="btn-cancel" onclick="lzkAnfrage(${l.id}, 'ablehnen')">Ablehnen</button>
+          </div>
+        </div></div>`;
+    }).join('')}
+  </div>`;
+}
+
+function adminSlotAnfragenHtml() {
   const offen = [];
   (calData.slots || []).forEach(s => {
     if (!awMeinTermin(s) || slotVorbei(s) || s.presentedStatus !== 'ausstehend') return;
@@ -5641,15 +5938,40 @@ function eingeladenHtml(nachDatum) {
   </div>`;
 }
 
+// Eigene LZK-Anfragen: eine Anfrage ohne Wunschtermin steht sonst nirgends. Abgelehnte
+// bleiben stehen, bis man sie ausblendet - sonst erfaehrt man es nicht.
+function eigeneLzkAnfragenHtml() {
+  const liste = (calData.lzk || []).filter(l => l.anfrage === 'offen' || l.anfrage === 'abgelehnt');
+  if (!liste.length) return '';
+  return `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:14px;">
+    <div style="font-weight:800;color:#854d0e;margin-bottom:8px;">📝 Deine LZK-Anfragen (${liste.length})</div>
+    ${liste.map(l => {
+      const subj = subjectById(l.subjectId);
+      const wunsch = l.datumIso
+        ? new Date(l.datumIso + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' })
+        : 'ohne Wunschtermin';
+      const abgelehnt = l.anfrage === 'abgelehnt';
+      return `<div class="stat-card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div>${abgelehnt ? '<span class="pill pill-red" style="font-size:10px;">✗ abgelehnt</span>' : '<span class="pill pill-yellow" style="font-size:10px;">⏳ wartet auf die Lernbegleitung</span>'}
+            <strong>${escHtml(subj.name)}-LZK</strong><br>
+            <span style="color:var(--md-on-surface-variant);font-size:12px;">${escHtml(lzkTitel(l))} · ${wunsch}</span></div>
+          <button class="btn-cancel" onclick="lzkZurueck(${l.id})">${abgelehnt ? 'Ausblenden' : 'Zurückziehen'}</button>
+        </div></div>`;
+    }).join('')}
+  </div>`;
+}
+
 function renderCalInvites() {
   const el = document.getElementById('cal-invites');
   if (!el) return;
   if (me && me.role === 'admin') { el.innerHTML = adminAnfragenHtml(); return; }
+  const lzkAnfragen = eigeneLzkAnfragenHtml();
   const nachDatum = (a,b) => ((a.datum||'') + (a.uhrzeit||'')).localeCompare((b.datum||'') + (b.uhrzeit||''));
   const pending = (calData.slots || [])
     .filter(s => s.mineAsListener && s.myInvitationStatus === 'eingeladen' && s.presentedStatus === 'ausstehend')
     .sort(nachDatum);
-  const vonLb = eingeladenHtml(nachDatum);
+  const vonLb = lzkAnfragen + eingeladenHtml(nachDatum);
   if (!pending.length) { el.innerHTML = vonLb; return; }
   el.innerHTML = vonLb + `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
     <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">📬 Einladungen von Mitschüler:innen – bitte antworten (${pending.length})</div>
@@ -6170,8 +6492,12 @@ function renderHalbjahr() {
   const dash = '<span style="color:var(--md-on-surface-variant);">–</span>';
   const sub = (d) => d ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">${hjFmtDate(d)}</div>` : '';
   const lastRole = (details, role) => { const f = (details||[]).filter(x => x.role === role); return f.length ? f[0].datum : null; };
-  const isSubjNothing = (sd, isMathe, b) => !sd.talksPresented && !sd.talksListened && !sd.inputParticipated
-    && !(isMathe && (b.stationsCompleted || (b.lzk||[]).filter(l=>l.status==='bestanden').length));
+  // LZK gibt es seit 2026-09-24 in jedem Fach. Eintraege von vorher tragen kein Fach
+  // und sind Mathe (Lerntheken-LZK).
+  const lzkDesFachs = (b, subj) => (b.lzk || []).filter(l => l.subjectId == null ? subj.key === 'mathe' : l.subjectId === subj.id);
+  const lzkBestanden = (b, subj) => lzkDesFachs(b, subj).filter(l => l.status === 'bestanden');
+  const isSubjNothing = (sd, subj, b) => !sd.talksPresented && !sd.talksListened && !sd.inputParticipated
+    && !lzkBestanden(b, subj).length && !(subj.key === 'mathe' && b.stationsCompleted);
 
   // Nur Accounts zeigen, die es im gewählten Halbjahr auch gab: vor der Erstellung würde sonst
   // "Inaktivität" gewertet, die niemand haben konnte - und nach dem Passiv-Setzen wäre es
@@ -6187,7 +6513,7 @@ function renderHalbjahr() {
     if (spalte === 'gehalten') return sd.talksPresented || 0;
     if (spalte === 'zugehoert') return sd.talksListened || 0;
     if (spalte === 'fabue') return sd.inputParticipated || 0;
-    if (spalte === 'lzk') return (b.lzk || []).filter(l => l.status === 'bestanden').length;
+    if (spalte === 'lzk') return lzkBestanden(b, subj).length;
     if (spalte === 'stationen') return b.stationsCompleted || 0;
     return 0;
   };
@@ -6205,12 +6531,14 @@ function renderHalbjahr() {
     const rows = sortiert.map(s => {
       const b = bucketOf(s);
       const sd = b.bySubject[subj.key] || emptySubj;
-      const nothing = isSubjNothing(sd, isMathe, b);
+      const nothing = isSubjNothing(sd, subj, b);
       if (nothing) nothingCount++;
-      const lzkBestandenCount = isMathe ? (b.lzk||[]).filter(l => l.status==='bestanden').length : 0;
-      const extraCols = isMathe ? `
-        <td>${lzkBestandenCount ? '🔥 ' + lzkBestandenCount + sub(b.lastLzk) : dash}</td>
-        <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '';
+      const fachLzk = lzkBestanden(b, subj);
+      // b.lzk ist nach Datum absteigend sortiert - der erste ist der juengste.
+      const lzkZelle = subj.nurZugewiesen ? '' : `
+        <td>${fachLzk.length ? '🔥 ' + fachLzk.length + sub(fachLzk[0].datum) : dash}</td>`;
+      const extraCols = lzkZelle + (isMathe ? `
+        <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '');
       return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id},'${subj.key}')" title="Details anzeigen">
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
         <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
@@ -6229,7 +6557,7 @@ function renderHalbjahr() {
     // stellt die Standardreihenfolge wieder her. Der Pfeil zeigt, was gerade gilt.
     const th = (spalte, text) => `<th onclick="hjSortieren('${spalte}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`
       + ` title="Nach ${escHtml(text)} sortieren">${text}${hjSort === spalte ? (hjSortAb ? ' ▾' : ' ▴') : ''}</th>`;
-    const headCols = isMathe ? th('lzk', '🔥 LZK') + th('stationen', '📚 Stationen') : '';
+    const headCols = (subj.nurZugewiesen ? '' : th('lzk', '🔥 LZK')) + (isMathe ? th('stationen', '📚 Stationen') : '');
     return `
       <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px;">
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
@@ -6269,7 +6597,9 @@ function hjDetailHtml(s, subjectKey) {
     : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
   const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> ${fabuePill(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
-  const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🔥 <strong>${escHtml(l.typ)}-LZK</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🔥'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(hjLtTitle(l.lerntheke))} · ${hjFmtDate(l.datum)}</span></div>`;
+  // Lerntheken-LZK: "Basis-LZK · Kreise und Zylinder"; freie LZK: ihr Thema.
+  const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🔥 <strong>${l.lerntheke ? escHtml(l.typ) + '-LZK' : 'LZK'}</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🔥'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(l.lerntheke ? hjLtTitle(l.lerntheke) : (l.thema || '–'))} · ${hjFmtDate(l.datum)}</span></div>`;
+  const lzkDesFachs = subj => (b.lzk || []).filter(l => l.subjectId == null ? subj.key === 'mathe' : l.subjectId === subj.id);
   const stationRow = st => `<div class="stat-card" style="margin-bottom:6px;">📚 ${escHtml(hjLtTitle(st.progress_key))} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${hjFmtDate(st.datum)}</span></div>`;
 
   const subjList = subjectKey ? orderedSubjects().filter(x => x.key === subjectKey) : orderedSubjects();
@@ -6308,8 +6638,8 @@ function hjDetailHtml(s, subjectKey) {
       </div>
       ${rubrik('🎤👂 Talks', sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
       ${rubrik('📘 FaBü-Teilnahmen', sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
-      ${isMathe ? rubrik('🔥 LZK', b.lzk, lzkRow, 'Keine LZK-Einträge mit Datum.')
-        + rubrik('📚 Stationen', b.stationDetails, stationRow,
+      ${subj.nurZugewiesen ? '' : rubrik('🔥 LZK', lzkDesFachs(subj), lzkRow, 'Keine LZK-Einträge mit Datum.')}
+      ${isMathe ? rubrik('📚 Stationen', b.stationDetails, stationRow,
                  'Keine erfassten Stationsabschlüsse in diesem Halbjahr.', b.stationsCompleted || 0)
         : ''}`;
   }).join('');
