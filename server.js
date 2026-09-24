@@ -1169,8 +1169,10 @@ app.get('/api/admin/students', requireAdmin, async (req, res) => {
          ORDER BY updated_at DESC LIMIT 1) AS last_active_info,
         (SELECT json_agg(json_build_object('gruppe',gruppe,'status',status,'notiz',notiz,'lerntheke',lerntheke))
          FROM korrektur WHERE user_id=u.id) AS korrektur,
-        (SELECT json_agg(json_build_object('typ',typ,'lerntheke',lerntheke,'datum',datum,'status',status,'pokale',pokale))
-         FROM lzk WHERE user_id=u.id) AS lzk,
+        (SELECT json_agg(json_build_object('id',l.id,'typ',l.typ,'lerntheke',l.lerntheke,'datum',l.datum,
+                                           'status',l.status,'pokale',l.pokale,'thema',l.thema,
+                                           'anfrage',l.anfrage,'fach',sj.key))
+         FROM lzk l LEFT JOIN subjects sj ON sj.id = l.subject_id WHERE l.user_id=u.id) AS lzk,
         (SELECT json_agg(json_build_object('lerntheke',lerntheke,'gesperrt',gesperrt,'kurs',kurs))
          FROM lerntheke_access WHERE user_id=u.id) AS access,
         (SELECT lerntheke FROM active_lerntheke WHERE user_id=u.id) AS active_lerntheke,
@@ -1683,6 +1685,10 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
 // 'nicht_bestanden' und 'ausstehend' tragen keine Flammen. Liefert NUR die Felder,
 // die tatsaechlich gesetzt werden - nicht mitgeschickte bleiben unangetastet.
 const LZK_STATUS = ['ausstehend', 'bestanden', 'nicht_bestanden'];
+// Typ einer FREIEN LZK: 'LZK' allgemein; in Mathe auch 'Basis'/'Aufbau' - daran
+// erkennt das Python-Tool, in welchen LZK-Platz eines Bausteins sie gehoert.
+const LZK_TYPEN = ['LZK', 'Basis', 'Aufbau'];
+const lzkTyp = t => (LZK_TYPEN.includes(t) ? t : 'LZK');
 function lzkErgebnis(body) {
   const hat = k => Object.prototype.hasOwnProperty.call(body, k) && body[k] !== undefined;
   const out = {};
@@ -1733,9 +1739,9 @@ app.post('/api/lzk', requireLogin, async (req, res) => {
       return res.status(409).json({ error: 'Der Termin liegt in der Vergangenheit.' });
     const r = await pool.query(`
       INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, updated_at)
-      VALUES ($1, NULL, 'LZK', $2, 'ausstehend', 0, $3, $4, $5, 'selbst', NOW())
+      VALUES ($1, NULL, $6, $2, 'ausstehend', 0, $3, $4, $5, 'selbst', NOW())
       RETURNING id
-    `, [req.session.userId, datum, subjectId, thema, anfragen ? 'offen' : null]);
+    `, [req.session.userId, datum, subjectId, thema, anfragen ? 'offen' : null, lzkTyp(req.body.typ)]);
     res.json({ ok: true, id: r.rows[0].id, anfrage: anfragen ? 'offen' : null });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
@@ -1842,10 +1848,10 @@ app.post('/api/admin/lzk/eintrag', requireAdmin, async (req, res) => {
     // EIN Befehl fuer alle: Postgres legt entweder alle Zeilen an oder keine.
     const r = await pool.query(`
       INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, admin_id, updated_at)
-      SELECT u, NULL, 'LZK', $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW()
+      SELECT u, NULL, $6, $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW()
       FROM unnest($1::int[]) AS u
       RETURNING id
-    `, [userIds, datum, subjectId, thema, req.session.userId]);
+    `, [userIds, datum, subjectId, thema, req.session.userId, lzkTyp(req.body.typ)]);
     const ids = r.rows.map(x => x.id);
     res.json({ ok: true, id: ids[0], ids });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -1874,6 +1880,11 @@ app.patch('/api/admin/lzk/:id', requireAdmin, async (req, res) => {
     if (b.thema !== undefined) {
       if (cur.rows[0].lerntheke) return res.status(409).json({ error: 'Das Thema einer Lerntheken-LZK ist die Lerntheke.' });
       setze('thema', String(b.thema || '').trim().slice(0, 200));
+    }
+    if (b.typ !== undefined) {
+      if (cur.rows[0].lerntheke) return res.status(409).json({ error: 'Basis/Aufbau einer Lerntheken-LZK steht fest.' });
+      if (!LZK_TYPEN.includes(b.typ)) return res.status(400).json({ error: 'Ungültiger Typ' });
+      setze('typ', b.typ);
     }
     if (b.anfrage !== undefined) {
       if (cur.rows[0].anfrage !== 'offen') return res.status(409).json({ error: 'Hier ist keine Anfrage offen.' });

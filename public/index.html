@@ -1746,7 +1746,14 @@ textarea.form-input{
     </div>
     <div class="form-group" id="lzke-fach-gruppe"><label class="form-label" for="lzke-fach">Fach</label><select class="form-input" id="lzke-fach" onchange="lzkeFachGewechselt()"></select></div>
     <div class="form-group"><label class="form-label" for="lzke-datum" id="lzke-datum-lbl">Datum</label><input class="form-input" id="lzke-datum" type="date"></div>
-    <div class="form-group" id="lzke-thema-gruppe"><label class="form-label" for="lzke-thema">Thema</label><input class="form-input" id="lzke-thema" maxlength="200" placeholder="z.B. Erörterung, Vokabeln Unit 3"></div>
+    <div class="form-group" id="lzke-typ-gruppe">
+      <label class="form-label" for="lzke-typ">Welche LZK?</label>
+      <select class="form-input" id="lzke-typ">
+        <option value="Basis">LZK 1 – Basis</option>
+        <option value="Aufbau">LZK 2 – Aufbau</option>
+      </select>
+    </div>
+    <div class="form-group" id="lzke-thema-gruppe"><label class="form-label" for="lzke-thema">Thema</label><input class="form-input" id="lzke-thema" maxlength="200" list="lzke-themen" placeholder="z.B. Erörterung, Vokabeln Unit 3"><datalist id="lzke-themen"></datalist></div>
     <label id="lzke-anfrage-gruppe" style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:10px;cursor:pointer;">
       <input type="checkbox" id="lzke-anfrage" onchange="lzkeAnfrageGewechselt()">
       <span>Nur anfragen – die Lernbegleitung legt den Termin fest</span>
@@ -4994,7 +5001,10 @@ function calLzkZeigen(l) {
 // Lerntheken-LZK tragen Typ + Lerntheke, freie LZK ihr Thema.
 function lzkTitel(l) {
   if (l.lerntheke) return `${l.typ}-LZK · ${hjLtTitle(l.lerntheke)}`;
-  return l.thema || 'LZK';
+  // Freie Mathe-LZK tragen Basis/Aufbau - daran haengt die Zuordnung im Python-Tool.
+  const teil = (l.typ === 'Basis' || l.typ === 'Aufbau') ? l.typ + '-LZK' : '';
+  if (!l.thema) return teil || 'LZK';
+  return teil ? `${teil} · ${l.thema}` : l.thema;
 }
 function lzkErgebnisPill(l) {
   if (l.anfrage === 'offen') return '<span class="pill pill-yellow" style="font-size:10px;">⏳ angefragt</span>';
@@ -5036,7 +5046,9 @@ function calLzkZeile(l, isAdmin) {
       // Wie bei der Anwesenheit: bewertet wird ab dem Termintag.
       knoepfe = lzkBewertenKnoepfe(l);
     }
-    if (!l.lerntheke) knoepfe += ` <button class="btn-icon" onclick="openLzkEintragModal(null, ${l.id})" title="Datum/Thema ändern" aria-label="Datum/Thema ändern">✎</button>`;
+    // Verschieben geht bei jeder LZK - bei einer Lerntheken-LZK nur das Datum,
+    // bei einer freien auch Thema und (Mathe) Basis/Aufbau.
+    knoepfe += ` <button class="btn-cancel" onclick="openLzkEintragModal(null, ${l.id})">Verschieben</button>`;
     knoepfe += ` <button class="btn-icon red" onclick="lzkLoeschen(${l.id})" title="LZK löschen" aria-label="LZK löschen">🗑</button>`;
   } else if (!l.lerntheke && l.herkunft === 'selbst' && l.status === 'ausstehend') {
     knoepfe = `<button class="btn-cancel" onclick="lzkZurueck(${l.id})">${l.anfrage === 'offen' ? 'Anfrage zurückziehen' : 'Termin zurücknehmen'}</button>`;
@@ -5117,7 +5129,7 @@ function openLzkEintragModal(datum, id, modus) {
   const neu = _lzkeModus === 'neu';
   const zeige = (elId, an) => { const e = document.getElementById(elId); if (e) e.style.display = an ? '' : 'none'; };
   document.getElementById('lzke-title').textContent = neu ? '📝 LZK-Termin eintragen'
-    : _lzkeModus === 'annehmen' ? `📝 LZK-Anfrage von ${l ? l.username || '' : ''} annehmen` : '📝 LZK ändern';
+    : _lzkeModus === 'annehmen' ? `📝 LZK-Anfrage von ${l ? l.username || '' : ''} annehmen` : '📝 LZK verschieben';
   zeige('lzke-person-gruppe', isAdmin && neu);
   _lzkePersonen = new Set();
   if (isAdmin && neu) {
@@ -5144,6 +5156,7 @@ function openLzkEintragModal(datum, id, modus) {
   datumEl.min = isAdmin ? '' : calDateStr(new Date());
   zeige('lzke-thema-gruppe', _lzkeModus !== 'annehmen' && !(l && l.lerntheke));
   document.getElementById('lzke-thema').value = l ? (l.thema || '') : '';
+  document.getElementById('lzke-typ').value = (l && l.typ === 'Aufbau') ? 'Aufbau' : 'Basis';
   zeige('lzke-anfrage-gruppe', !isAdmin && neu);
   const box = document.getElementById('lzke-anfrage');
   box.checked = false; box.disabled = false;
@@ -5152,12 +5165,35 @@ function openLzkEintragModal(datum, id, modus) {
   openModal('modal-lzk-eintrag');
 }
 // Fach-Modus "anfrage": Schueler:innen koennen dort nur anfragen.
+// Fach der LZK im Dialog: beim Anlegen die Auswahl, sonst das der LZK selbst.
+function lzkeFach() {
+  if (_lzkeModus === 'neu') return subjectById(parseInt(document.getElementById('lzke-fach').value));
+  const l = (calData.lzk || []).find(x => x.id === _lzkeId);
+  return l ? subjectById(l.subjectId) : null;
+}
 function lzkeFachGewechselt() {
   const isAdmin = !!(me && me.role === 'admin');
   const hinweis = document.getElementById('lzke-hinweis');
   const box = document.getElementById('lzke-anfrage');
-  const subj = subjectById(parseInt(document.getElementById('lzke-fach').value));
+  const subj = lzkeFach();
+  const l = _lzkeId ? (calData.lzk || []).find(x => x.id === _lzkeId) : null;
+  const istMathe = !!(subj && subj.key === 'mathe');
+  // Basis/Aufbau gibt es nur in Mathe - und nur bei freien LZK (bei einer Lerntheken-
+  // LZK steht es fest). Daran erkennt das Python-Tool den LZK-Platz im Baustein.
+  const typGruppe = document.getElementById('lzke-typ-gruppe');
+  if (typGruppe) typGruppe.style.display = (istMathe && _lzkeModus !== 'annehmen' && !(l && l.lerntheke)) ? '' : 'none';
+  // Themen-Vorschlaege: was in diesem Fach schon benutzt wurde - so bleiben die Titel
+  // einheitlich (wichtig fuer die Zuordnung zu Bausteinen im Python-Tool).
+  const liste = document.getElementById('lzke-themen');
+  if (liste) {
+    const themen = [...new Set((calData.lzk || [])
+      .filter(x => subj && x.subjectId === subj.id && !x.lerntheke && x.thema)
+      .map(x => x.thema.trim()))].sort((a, b) => a.localeCompare(b, 'de'));
+    liste.innerHTML = themen.map(t => `<option value="${escHtml(t)}"></option>`).join('');
+  }
   const texte = [];
+  if (isAdmin && istMathe && _lzkeModus !== 'annehmen' && !(l && l.lerntheke))
+    texte.push('Tipp: Heißt das Thema wie der Baustein im Python-Tool, ordnet das Tool die LZK dort zu (LZK 1 oder 2).');
   if (!isAdmin && _lzkeModus === 'neu') {
     const nurAnfrage = subj && subj.lzkModus === 'anfrage';
     if (nurAnfrage) { box.checked = true; box.disabled = true;
@@ -5178,6 +5214,11 @@ function lzkeAnfrageGewechselt() {
     : _lzkeModus === 'annehmen' ? 'Annehmen'
     : viele ? `${_lzkePersonen.size} LZK anlegen` : 'Speichern';
 }
+// Typ fuer den Server: Basis/Aufbau nur in Mathe, sonst die allgemeine "LZK".
+function lzkeTyp() {
+  const subj = lzkeFach();
+  return (subj && subj.key === 'mathe') ? (document.getElementById('lzke-typ').value || 'Basis') : 'LZK';
+}
 async function submitLzkEintrag() {
   const errEl = document.getElementById('lzke-error');
   errEl.style.display = 'none';
@@ -5190,20 +5231,21 @@ async function submitLzkEintrag() {
     const anfragen = document.getElementById('lzke-anfrage').checked;
     if (!anfragen && !datum) return fehler('Bitte ein Datum wählen.');
     url = '/api/lzk';
-    body = { subjectId: parseInt(document.getElementById('lzke-fach').value), datum: datum || null, thema, anfragen };
+    body = { subjectId: parseInt(document.getElementById('lzke-fach').value), datum: datum || null, thema, anfragen,
+             typ: lzkeTyp() };
   } else if (_lzkeModus === 'neu') {
     const userIds = [..._lzkePersonen];
     if (!userIds.length) return fehler('Bitte mindestens eine Person auswählen.');
     if (!datum) return fehler('Bitte ein Datum wählen.');
     url = '/api/admin/lzk/eintrag';
-    body = { userIds, subjectId: parseInt(document.getElementById('lzke-fach').value), datum, thema };
+    body = { userIds, subjectId: parseInt(document.getElementById('lzke-fach').value), datum, thema, typ: lzkeTyp() };
   } else if (_lzkeModus === 'annehmen') {
     if (!datum) return fehler('Zum Annehmen bitte ein Datum festlegen.');
     url = `/api/admin/lzk/${_lzkeId}`; methode = 'PATCH'; body = { anfrage: 'annehmen', datum };
   } else {
     const l = (calData.lzk || []).find(x => x.id === _lzkeId);
     url = `/api/admin/lzk/${_lzkeId}`; methode = 'PATCH';
-    body = l && l.lerntheke ? { datum } : { datum, thema };
+    body = l && l.lerntheke ? { datum } : { datum, thema, typ: lzkeTyp() };
   }
   const r = await fetch(url, { method: methode, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
