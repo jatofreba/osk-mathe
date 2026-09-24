@@ -6598,10 +6598,26 @@ function renderHalbjahr() {
     return 0;
   };
 
+  // Lernberatung (nurZugewiesen) kennt weder Talks noch Fachbüros, nur Termine, zu
+  // denen jemand eingeteilt war - und die betreffen nur wenige. Deshalb stehen dort nur
+  // die Eingeteilten, und "ohne Aktivität" wird nicht angekreidet.
+  const hatTeilnahmeTermin = sd => !!(sd.inputParticipated || sd.inputMissed || sd.inputOpen || sd.inputUpcoming);
+  const teilnahmeZelle = (sd, symbol) => hatTeilnahmeTermin(sd)
+    ? symbol + (sd.inputParticipated || 0)
+      + (sd.inputMissed ? ' <span style="color:var(--md-error);">✗' + sd.inputMissed + '</span>' : '')
+      + (sd.inputOpen ? ' <span style="color:#a16207;">⏳' + sd.inputOpen + '</span>' : '')
+      + (sd.inputUpcoming ? ' <span style="color:var(--md-on-surface-variant);">📅' + sd.inputUpcoming + '</span>' : '')
+      + sub(sd.lastInput)
+    : dash;
+
   const sections = orderedSubjects().map(subj => {
     const isMathe = subj.key === 'mathe';
+    const nurTeilnahme = !!subj.nurZugewiesen;
     let nothingCount = 0;
-    const sortiert = !hjSort ? studentsInHj : [...studentsInHj].sort((a, b) => {
+    const personen = nurTeilnahme
+      ? studentsInHj.filter(s => hatTeilnahmeTermin(bucketOf(s).bySubject[subj.key] || emptySubj))
+      : studentsInHj;
+    const sortiert = !hjSort ? personen : [...personen].sort((a, b) => {
       const va = sortWert(a, subj, hjSort), vb = sortWert(b, subj, hjSort);
       const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
       // Bei Gleichstand alphabetisch - sonst springen die Zeilen bei jedem Neuzeichnen.
@@ -6611,8 +6627,14 @@ function renderHalbjahr() {
     const rows = sortiert.map(s => {
       const b = bucketOf(s);
       const sd = b.bySubject[subj.key] || emptySubj;
-      const nothing = isSubjNothing(sd, subj, b);
+      const nothing = !nurTeilnahme && isSubjNothing(sd, subj, b);
       if (nothing) nothingCount++;
+      if (nurTeilnahme) {
+        return `<tr style="cursor:pointer;" onclick="openHjDetail(${s.id},'${subj.key}')" title="Details anzeigen">
+        <td><strong>${escHtml(s.username)}</strong></td>
+        <td>${teilnahmeZelle(sd, '✓ ')}</td>
+      </tr>`;
+      }
       const fachLzk = lzkBestanden(b, subj);
       // b.lzk ist nach Datum absteigend sortiert - der erste ist der juengste.
       const lzkZelle = subj.nurZugewiesen ? '' : `
@@ -6623,13 +6645,7 @@ function renderHalbjahr() {
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
         <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
         <td>${sd.talksListened ? '👂 ' + sd.talksListened + sub(lastRole(sd.talkDetails,'zugehört')) : dash}</td>
-        <td>${(sd.inputParticipated || sd.inputMissed || sd.inputOpen || sd.inputUpcoming)
-          ? '📘 ' + (sd.inputParticipated || 0)
-            + (sd.inputMissed ? ' <span style="color:var(--md-error);">✗' + sd.inputMissed + '</span>' : '')
-            + (sd.inputOpen ? ' <span style="color:#a16207;">⏳' + sd.inputOpen + '</span>' : '')
-            + (sd.inputUpcoming ? ' <span style="color:var(--md-on-surface-variant);">📅' + sd.inputUpcoming + '</span>' : '')
-            + sub(sd.lastInput)
-          : dash}</td>${extraCols}
+        <td>${teilnahmeZelle(sd, '📘 ')}</td>${extraCols}
       </tr>`;
     }).join('');
 
@@ -6645,8 +6661,10 @@ function renderHalbjahr() {
         ${nothingCount ? `<span style="color:var(--md-error);font-weight:600;font-size:12px;">– ${nothingCount} ohne Aktivität</span>` : ''}
       </div>
       <div class="tbl-wrap"><table>
-        <thead><tr>${th('name', 'Name')}${th('gehalten', '🎤 Gehalten')}${th('zugehoert', '👂 Zugehört')}${th('fabue', '📘 FaBü')}${headCols}</tr></thead>
-        <tbody>${rows}</tbody>
+        <thead><tr>${nurTeilnahme
+          ? th('name', 'Name') + th('fabue', '✓ Teilgenommen')
+          : th('name', 'Name') + th('gehalten', '🎤 Gehalten') + th('zugehoert', '👂 Zugehört') + th('fabue', '📘 FaBü') + headCols}</tr></thead>
+        <tbody>${rows || `<tr><td colspan="2" style="color:var(--md-on-surface-variant);font-style:italic;">Niemand war in diesem Halbjahr eingeteilt.</td></tr>`}</tbody>
       </table></div>`;
   }).join('');
 
@@ -6676,6 +6694,9 @@ function hjDetailHtml(s, subjectKey) {
     : t.status === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ gefehlt</span>'
     : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
+  // Lernberatung: kein Fachbüro, einfach ein Termin, an dem man teilgenommen hat (oder nicht).
+  const teilnahmePill = t => t.status === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ teilgenommen</span>' : fabuePill(t);
+  const teilnahmeRow = t => `<div class="stat-card" style="margin-bottom:6px;"><strong>${escHtml(t.thema||'Termin')}</strong> ${teilnahmePill(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.presenter?'bei '+escHtml(t.presenter)+' · ':''}${hjFmtDate(t.datum)}</span></div>`;
   const inputRow = t => `<div class="stat-card" style="margin-bottom:6px;">📘 <strong>${escHtml(t.thema||'')}</strong> ${fabuePill(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
   // Lerntheken-LZK: "Basis-LZK · Kreise und Zylinder"; freie LZK: ihr Thema.
   const lzkRow = l => `<div class="stat-card" style="margin-bottom:6px;">🔥 <strong>${l.lerntheke ? escHtml(l.typ) + '-LZK' : 'LZK'}</strong> <span class="pill ${l.status==='bestanden'?'pill-green':l.status==='nicht_bestanden'?'pill-red':'pill-blue'}" style="font-size:10px;">${escHtml(l.status)}</span> ${l.pokale?'🔥'.repeat(l.pokale):''} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(l.lerntheke ? hjLtTitle(l.lerntheke) : (l.thema || '–'))} · ${hjFmtDate(l.datum)}</span></div>`;
@@ -6710,14 +6731,19 @@ function hjDetailHtml(s, subjectKey) {
   const subjSections = subjList.map(subj => {
     const sd = (b.bySubject || {})[subj.key] || { talkDetails: [], inputDetails: [] };
     const isMathe = subj.key === 'mathe';
+    // In der Gesamtübersicht der Schüler:innen taucht die Lernberatung nur auf, wenn
+    // man dort auch eingeteilt war.
+    if (subj.nurZugewiesen && !subjectKey && !(sd.inputDetails || []).length) return '';
     return `
       <div style="display:flex;align-items:center;gap:6px;margin:16px 0 4px;">
         <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${subj.color};flex-shrink:0;"></span>
         <span class="admin-title" style="font-size:14px;">${escHtml(subj.name)}</span>
         ${kursMarke(subj)}
       </div>
-      ${rubrik('🎤👂 Talks', sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')}
-      ${rubrik('📘 FaBü-Teilnahmen', sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
+      ${subj.nurZugewiesen
+        ? rubrik('✓ Teilnahmen', sd.inputDetails, teilnahmeRow, 'Keine Termine in diesem Halbjahr.')
+        : rubrik('🎤👂 Talks', sd.talkDetails, talkRow, 'Keine Talks in diesem Halbjahr.')
+          + rubrik('📘 FaBü-Teilnahmen', sd.inputDetails, inputRow, 'Keine FaBü-Teilnahmen.')}
       ${subj.nurZugewiesen ? '' : rubrik('🔥 LZK', lzkDesFachs(subj), lzkRow, 'Keine LZK-Einträge mit Datum.')}
       ${isMathe ? rubrik('📚 Stationen', b.stationDetails, stationRow,
                  'Keine erfassten Stationsabschlüsse in diesem Halbjahr.', b.stationsCompleted || 0)
