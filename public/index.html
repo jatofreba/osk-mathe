@@ -1267,7 +1267,6 @@ textarea.form-input{
       </div>
       <div id="cal-wuensche"></div>
       <div id="cal-adminweek"></div>
-      <div id="cal-myhj"></div>
       <div id="cal-invites"></div>
       <div id="cal-leer-hinweis" style="display:none;margin:10px 0;padding:12px 14px;border-radius:12px;
         background:var(--md-surface-container-low);border:1px solid var(--md-outline-variant);
@@ -4848,14 +4847,12 @@ async function loadCalendar() {
   const grid = document.getElementById('cal-grid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
-    const [cr, cmr, hr] = await Promise.all([
+    const [cr, cmr] = await Promise.all([
       fetch('/api/calendar'),
       fetch('/api/classmates'), // funktioniert auch für Admins (nur role='student'+klasse-Filter) - Roster fürs Fachbüro-Zuweisen
-      (me && me.role !== 'admin') ? fetch('/api/my-halbjahr') : Promise.resolve(null)
     ]);
     calData = cr.ok ? await cr.json() : { slots: [], deadlines: [] };
     calClassmates = (cmr && cmr.ok) ? await cmr.json() : [];
-    myHjData = (hr && hr.ok) ? await hr.json() : { halbjahre: [], byHalbjahr: {} };
   } catch(e) { calData = { slots: [], deadlines: [] }; }
   const adminActions = document.getElementById('cal-admin-actions');
   if (adminActions) adminActions.style.display = (me && me.role === 'admin') ? 'flex' : 'none';
@@ -4868,7 +4865,7 @@ async function loadCalendar() {
         ? 'Deine Termine und die aus deinem Fach – hier legst du Fachbüro-Termine und Deadlines an.'
         : 'Deine eigenen Termine – hier legst du Fachbüro-Termine und Deadlines an. (Setz oben ein Standard-Fach, dann siehst du auch die Termine dieses Fachs.)')
     : 'Deine gebuchten Termine und offene Einladungen. Neue Termine buchst du unter „Start" in deiner Woche.';
-  renderAdminWeek(); renderMyHalbjahr(); renderCalendar(); renderCalDetail(); renderCalInvites();
+  renderAdminWeek(); renderCalendar(); renderCalDetail(); renderCalInvites();
 }
 
 // Der Kalender zeigt nur, was einen selbst angeht. Gebucht wird seit der
@@ -5724,8 +5721,6 @@ async function calRemoveInvitee(invitationId) {
   loadCalendar();
 }
 
-// Kompakte "Mein Halbjahr"-Karte für Schüler:innen im Kalender (laufendes Halbjahr).
-let myHjData = { halbjahre: [], byHalbjahr: {} };
 // ── "Meine Woche" für Admins (Kalender-Landingpage) ──────────────────────────
 // Gleiches Blockraster wie bei den Schüler:innen, aber mit der für die Lernbegleitung
 // entscheidenden Info: WER nimmt an welchem Termin teil. Quelle ist calData
@@ -6083,31 +6078,6 @@ function renderAdminWeek() {
   loadWuensche();
 }
 
-function renderMyHalbjahr() {
-  const el = document.getElementById('cal-myhj');
-  if (!el) return;
-  if (me && me.role === 'admin') { el.innerHTML = ''; return; }
-  const hj = currentHalbjahrGuess();
-  const b = (myHjData.byHalbjahr || {})[hj] || { bySubject:{}, lzk:[], stationsCompleted:0 };
-  // Talks/Fachbüro sind seit dem Fächer-System nach Fach getrennt (bySubject) - die kompakte Karte
-  // zeigt weiterhin nur eine Gesamtzahl, daher hier über alle Fächer aufsummiert.
-  const subjVals = Object.values(b.bySubject || {});
-  const talksPresented = subjVals.reduce((sum, s) => sum + (s.talksPresented || 0), 0);
-  const talksListened = subjVals.reduce((sum, s) => sum + (s.talksListened || 0), 0);
-  const inputParticipated = subjVals.reduce((sum, s) => sum + (s.inputParticipated || 0), 0);
-  const lzkB = (b.lzk||[]).filter(l => l.status==='bestanden').map(l => `<span class="pill pill-green">🔥 ${escHtml(l.typ)}-LZK</span>`).join(' ');
-  el.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px;margin-bottom:14px;">
-    <div style="font-weight:800;color:#1d4ed8;margin-bottom:8px;">🎓 Mein Halbjahr ${escHtml(hj)}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <span class="pill pill-blue">🎤 ${talksPresented} gehalten</span>
-      <span class="pill pill-blue">👂 ${talksListened} zugehört</span>
-      <span class="pill pill-blue">📘 ${inputParticipated} FaBü-Teilnahmen</span>
-      <span class="pill pill-blue">📚 ${b.stationsCompleted} Stationen</span>
-      ${lzkB}
-    </div>
-    <button class="btn-sm" style="margin-top:10px;" onclick="showView('halbjahr')">→ Alles ansehen (auch ältere Halbjahre)</button>
-  </div>`;
-}
 
 // ── Schüler:innen-Übersicht nach Halbjahr (Admin) ─────────────────────────────
 let hjData = { halbjahre: [], students: [] };
