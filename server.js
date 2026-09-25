@@ -399,8 +399,9 @@ async function initDB() {
       END IF;
     END $$;
     CREATE INDEX IF NOT EXISTS idx_lzk_subject ON lzk(subject_id);
-    -- Je Fach: duerfen Schueler:innen LZK-Termine selbst setzen ('direkt') oder nur
-    -- anfragen ('anfrage')? Mathe bleibt wie bisher direkt.
+    -- lzk_modus ist seit 2026-09-24 OHNE Wirkung: Schueler:innen fragen LZK-Termine
+    -- immer an und legen sie nie selbst fest (Nutzervorgabe). Die Spalte bleibt stehen,
+    -- weil sie schon angelegt ist - geloescht wird im Schema nichts.
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='lzk_modus') THEN
         ALTER TABLE subjects ADD COLUMN lzk_modus TEXT NOT NULL DEFAULT 'direkt';
@@ -1469,7 +1470,7 @@ app.get('/api/subjects', requireLogin, async (req, res) => {
     const [r, ov] = await Promise.all([
       pool.query(`
         SELECT id, key, name, color, color_bg AS "colorBg", default_ort AS "defaultOrt",
-               nur_zugewiesen AS "nurZugewiesen", lzk_modus AS "lzkModus",
+               nur_zugewiesen AS "nurZugewiesen",
                default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
                pflicht_zuhoeren AS "pflichtZuhoeren",
                optional_praesentieren AS "optionalPraesentieren",
@@ -1522,12 +1523,6 @@ app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
 
     await pool.query(`UPDATE subjects SET default_ort=$1, default_dauer=$2 WHERE id=$3`,
       [defaultOrt || '', dauer, req.params.id]);
-    // LZK-Modus nur aendern, wenn er mitgeschickt wird - aeltere Aufrufer kennen ihn nicht.
-    if (req.body.lzkModus !== undefined) {
-      if (!['direkt', 'anfrage'].includes(req.body.lzkModus))
-        return res.status(400).json({ error: 'Ungültiger LZK-Modus' });
-      await pool.query('UPDATE subjects SET lzk_modus=$1 WHERE id=$2', [req.body.lzkModus, req.params.id]);
-    }
 
     if (!hj) {
       await pool.query(
@@ -1717,8 +1712,9 @@ app.get('/api/lzk', requireLogin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Schueler:in legt eine freie LZK an (ohne Lerntheke) - je nach Fach-Einstellung als
-// fester Termin oder als Anfrage. Eine Anfrage darf auch ohne Wunschdatum kommen.
+// Schueler:in fragt eine freie LZK an (ohne Lerntheke). Schueler:innen legen LZK-Termine
+// NIE selbst fest (Nutzervorgabe 2026-09-24) - es entsteht immer eine offene Anfrage,
+// die die Lernbegleitung annimmt oder ablehnt. Ein Wunschtermin ist freiwillig.
 app.post('/api/lzk', requireLogin, async (req, res) => {
   try {
     if (req.session.role !== 'student')
@@ -1727,54 +1723,66 @@ app.post('/api/lzk', requireLogin, async (req, res) => {
     const thema = String(req.body.thema || '').trim().slice(0, 200);
     const datum = String(req.body.datum || '').trim() || null;
     const subj = await pool.query(
-      'SELECT id, nur_zugewiesen AS "nurZugewiesen", lzk_modus AS "lzkModus" FROM subjects WHERE id=$1',
-      [subjectId]);
+      'SELECT id, nur_zugewiesen AS "nurZugewiesen" FROM subjects WHERE id=$1', [subjectId]);
     if (!subj.rows.length) return res.status(400).json({ error: 'Unbekanntes Fach.' });
     if (subj.rows[0].nurZugewiesen)
       return res.status(403).json({ error: 'In diesem Bereich vergibt die Lernbegleitung die Termine.' });
-    const anfragen = subj.rows[0].lzkModus === 'anfrage' || req.body.anfragen === true;
     if (datum && !istIsoDatum(datum)) return res.status(400).json({ error: 'Ungültiges Datum.' });
-    if (!anfragen && !datum) return res.status(400).json({ error: 'Bitte ein Datum wählen.' });
     if (datum && datum < heuteIsoLzk())
       return res.status(409).json({ error: 'Der Termin liegt in der Vergangenheit.' });
     const r = await pool.query(`
       INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, updated_at)
       VALUES ($1, NULL, $6, $2, 'ausstehend', 0, $3, $4, $5, 'selbst', NOW())
       RETURNING id
-    `, [req.session.userId, datum, subjectId, thema, anfragen ? 'offen' : null, lzkTyp(req.body.typ)]);
-    res.json({ ok: true, id: r.rows[0].id, anfrage: anfragen ? 'offen' : null });
+    `, [req.session.userId, datum, subjectId, thema, 'offen', lzkTyp(req.body.typ)]);
+    res.json({ ok: true, id: r.rows[0].id, anfrage: 'offen' });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Schueler:in nimmt eine eigene freie LZK wieder zurueck (Anfrage oder selbst gesetzter
-// Termin) - solange nichts bewertet ist und die Lernbegleitung sie nicht angelegt hat.
+// Schueler:in zieht eine eigene Anfrage zurueck bzw. blendet eine abgelehnte aus. Ein
+// bestaetigter Termin gehoert nicht mehr der Schueler:in allein - den verlegt oder
+// streicht die Lernbegleitung (wie das Festlegen, siehe POST /api/lzk).
 app.delete('/api/lzk/:id', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, lerntheke, herkunft, status FROM lzk WHERE id=$1 AND user_id=$2`,
+      `SELECT id, lerntheke, herkunft, status, anfrage FROM lzk WHERE id=$1 AND user_id=$2`,
       [req.params.id, req.session.userId]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden.' });
     const l = r.rows[0];
     if (l.lerntheke) return res.status(409).json({ error: 'LZK einer Lerntheke änderst du in der Lerntheke.' });
     if (l.herkunft !== 'selbst') return res.status(409).json({ error: 'Diesen Termin hat die Lernbegleitung angelegt.' });
     if (l.status !== 'ausstehend') return res.status(409).json({ error: 'Die LZK ist schon bewertet.' });
+    if (!l.anfrage) return res.status(409).json({ error: 'Der Termin ist bestätigt – sprich die Lernbegleitung an.' });
     await pool.query('DELETE FROM lzk WHERE id=$1', [l.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
 // Student: set LZK datum (only if prerequisites met – server trusts client check, admin can always set)
+// Lerntheke: Wunschtermin fuer die Basis-/Aufbau-LZK. Schueler:innen legen den Termin
+// nie selbst fest (Nutzervorgabe 2026-09-24) - ein neuer oder geaenderter Wunsch ist
+// immer eine offene Anfrage, auch wenn vorher schon ein Termin bestaetigt war. Eine
+// bewertete LZK bleibt unangetastet.
 app.post('/api/lzk/termin', requireLogin, async (req, res) => {
   try {
-    const { lerntheke, typ, datum } = req.body;
+    const { lerntheke, typ } = req.body;
+    const datum = String(req.body.datum || '').slice(0, 10);
     if (!lerntheke || !typ || !datum) return res.status(400).json({ error: 'Fehlende Angaben' });
-    await pool.query(`
-      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, updated_at, subject_id)
-      VALUES ($1,$2,$3,$4,'ausstehend',0,NOW(),(SELECT id FROM subjects WHERE key='mathe'))
+    if (!istIsoDatum(datum)) return res.status(400).json({ error: 'Ungültiges Datum.' });
+    const schueli = req.session.role === 'student';
+    if (schueli && datum < heuteIsoLzk())
+      return res.status(409).json({ error: 'Der Termin liegt in der Vergangenheit.' });
+    const anfrage = schueli ? 'offen' : null;
+    const r = await pool.query(`
+      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, updated_at, subject_id, anfrage)
+      VALUES ($1,$2,$3,$4,'ausstehend',0,NOW(),(SELECT id FROM subjects WHERE key='mathe'),$5)
       ON CONFLICT (user_id, lerntheke, typ) DO UPDATE
-      SET datum=$4, updated_at=NOW()
-    `, [req.session.userId, lerntheke, typ, datum]);
-    res.json({ ok: true });
+      SET datum=$4, anfrage=$5, updated_at=NOW()
+      WHERE lzk.status = 'ausstehend'
+      RETURNING id
+    `, [req.session.userId, lerntheke, typ, datum, anfrage]);
+    if (!r.rows.length) return res.status(409).json({ error: 'Diese LZK ist schon bewertet.' });
+    res.json({ ok: true, anfrage });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 

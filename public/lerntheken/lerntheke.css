@@ -224,6 +224,7 @@ button,input,textarea,select{font-family:inherit;}
   white-space:nowrap;
 }
 .lzk-geplant{background:#EEF2FF;color:#3730A3;}
+.lzk-angefragt{background:#FEF9C3;color:#854D0E;}
 .lzk-bestanden{background:var(--success-bg);color:var(--success);}
 .lzk-nicht_bestanden{background:#FFEBEE;color:#B71C1C;}
 .lzk-locked{background:#F3F4F6;color:#6B7280;}

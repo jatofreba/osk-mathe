@@ -297,8 +297,12 @@ function buildGrid(stats){
         <span class="lzk-badge lzk-bestanden">🏅 ${g}-LZK bestanden${d?' · '+d:''}</span>${pokalHtml}</div>`;
       if(lzkInfo&&lzkInfo.status==='nicht_bestanden') return`<div class="lzk-row">
         <span class="lzk-badge lzk-nicht_bestanden">✗ ${g}-LZK nicht bestanden${d?' · '+d:''}</span></div>`;
-      if(lzkInfo&&lzkInfo.datum) return`<div class="lzk-row">
+      // Bestaetigter Termin. Schueler:innen legen ihn nie selbst fest - sie fragen an,
+      // die Lernbegleitung bestaetigt (Nutzervorgabe 2026-09-24).
+      if(lzkInfo&&lzkInfo.datum&&!lzkInfo.anfrage) return`<div class="lzk-row">
         <span class="lzk-badge lzk-geplant">📅 ${g}-LZK am ${d}</span></div>`;
+      if(lzkInfo&&lzkInfo.anfrage==='offen') return`<div class="lzk-row">
+        <span class="lzk-badge lzk-angefragt">⏳ ${g}-LZK angefragt${d?' für '+d:''} – wartet auf die Lernbegleitung</span></div>`;
       // Kein Termin gesetzt – Termin-Picker anzeigen wenn Voraussetzungen erfüllt
       const bereit=st.korOk&&st.abgabeOk&&st.stationsOk;
       if(!bereit){
@@ -308,10 +312,13 @@ function buildGrid(stats){
         if(!st.korOk) gründe.push('Korrektur bestehen');
         return`<div class="lzk-row"><span class="lzk-badge lzk-locked">🔒 ${g}-LZK – erst ${gründe.join(' und ')}</span></div>`;
       }
+      // Noch kein Termin oder die Anfrage wurde abgelehnt: Wunschtermin anfragen.
+      const abgelehnt=lzkInfo&&lzkInfo.anfrage==='abgelehnt';
+      const heute=new Date().toISOString().slice(0,10);
       return`<div class="lzk-row lzk-ready">
-        <span class="lzk-badge lzk-ready-badge">✅ Bereit für ${g}-LZK!</span>
-        <label class="lzk-termin-label">Termin eintragen:
-          <input type="date" class="lzk-date-inp" value="${isoD}"
+        <span class="lzk-badge ${abgelehnt?'lzk-nicht_bestanden':'lzk-ready-badge'}">${abgelehnt?`✗ Anfrage für ${d} abgelehnt`:`✅ Bereit für ${g}-LZK!`}</span>
+        <label class="lzk-termin-label">${abgelehnt?'Neuen Termin anfragen:':'Termin anfragen:'}
+          <input type="date" class="lzk-date-inp" min="${heute}" value="${abgelehnt?'':isoD}"
             onchange="setLzkTermin('${g}',this.value)">
         </label>
       </div>`;
@@ -382,13 +389,17 @@ function buildOverview(){
     const hasAufbau=!!GROUPS['Aufbau']; // manche Lerntheken (z.B. Wahrscheinlichkeit und Zufall) haben strukturell kein Aufbau
     const basisAbgabeOk=!!(stats['Basis']&&stats['Basis'].abgabeOk);
     const basisKorOk=!!(stats['Basis']&&stats['Basis'].korOk);
-    const basisTermin=!!(stats['Basis']&&stats['Basis'].lzk&&stats['Basis'].lzk.datum);
+    // Als Termin zaehlt nur ein bestaetigter - eine Anfrage wartet noch.
+    const basisLzk=stats['Basis']&&stats['Basis'].lzk;
+    const basisTermin=!!(basisLzk&&basisLzk.datum&&!basisLzk.anfrage);
+    const basisAngefragt=!!(basisLzk&&basisLzk.anfrage==='offen');
     const basisBereit=basisOk&&pflichtOk&&basisAbgabeOk&&basisKorOk&&basisTermin;
-    const basisMissing=()=>{const m=[];if(!basisAbgabeOk)m.push('Aufgabe abgeben');else if(!basisKorOk)m.push('Korrektur bestehen');if(!basisTermin)m.push('Termin vereinbaren');return m.join(' · ');};
+    const basisMissing=()=>{const m=[];if(!basisAbgabeOk)m.push('Aufgabe abgeben');else if(!basisKorOk)m.push('Korrektur bestehen');if(!basisTermin)m.push(basisAngefragt?'Termin wird noch bestätigt':'Termin anfragen');return m.join(' · ');};
     // Wenn schon ein Termin vereinbart (aber noch nicht bestanden) ist, das statt der Aufforderung zeigen
     const terminHint=(typ,lzk)=>{
-      if(!lzk||!lzk.datum||lzk.status==='bestanden')return null;
+      if(!lzk||!lzk.datum||lzk.status==='bestanden'||lzk.anfrage==='abgelehnt')return null;
       const d=new Date(lzk.datum).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+      if(lzk.anfrage==='offen')return 'Eure Anfrage für die '+typ+'-LZK am '+d+' wartet auf die Lernbegleitung.';
       return 'Euer Termin für die '+typ+'-LZK ist am '+d+'.';
     };
     if(KURS==='G'||!hasAufbau){
@@ -1144,7 +1155,9 @@ function lzkVoraussetzungErfuellt(g){
 }
 async function setLzkTermin(g,datum){
   if(!datum)return;
-  await fetch('/api/lzk/termin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lerntheke:KEY,typ:g,datum})});
+  // Das ist eine Anfrage: die Lernbegleitung bestaetigt den Termin.
+  const r=await fetch('/api/lzk/termin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lerntheke:KEY,typ:g,datum})});
+  if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.error||'Die Anfrage hat nicht geklappt.');}
   await loadLzk();
   buildOverview();
 }
