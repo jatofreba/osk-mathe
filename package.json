@@ -4,7 +4,8 @@
   "description": "Lerntheke Kreise & Zylinder – Multi-User Server",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/run.js"
   },
   "engines": {
     "node": "18.x"

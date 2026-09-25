@@ -1,0 +1,8 @@
+{
+  "name": "osklar-tests",
+  "private": true,
+  "description": "Nur fuer die Tests - absichtlich nicht in der package.json im Projekt: deploy.sh macht dort npm install, und pglite gehoert nicht auf den Server.",
+  "devDependencies": {
+    "@electric-sql/pglite": "0.2.17"
+  }
+}

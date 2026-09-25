@@ -53,6 +53,15 @@ Dann:
 node server.js
 ```
 
+### Tests
+
+```bash
+npm install --prefix tests   # einmalig
+npm test
+```
+
+Prüft Oberfläche, Server-Routen (gegen ein Postgres im Prozess) und das Python-Tool – ohne laufenden Server. Mehr in [tests/README.md](tests/README.md).
+
 ---
 
 ## Lerntheken
