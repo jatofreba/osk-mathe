@@ -5260,8 +5260,19 @@ async function submitLzkEintrag() {
     url = `/api/admin/lzk/${_lzkeId}`; methode = 'PATCH';
     body = l && l.lerntheke ? { datum } : { datum, thema, typ: lzkeTyp() };
   }
-  const r = await fetch(url, { method: methode, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  const d = await r.json().catch(() => ({}));
+  // Solange die Anfrage laeuft, geht kein zweiter Klick hinaus. Der Server faengt eine
+  // doppelte LZK zwar ab (lzkUnterSperre), so bleibt es aber bei einer Rueckmeldung.
+  const ok = document.getElementById('lzke-ok');
+  if (ok) ok.disabled = true;
+  let r, d;
+  try {
+    r = await fetch(url, { method: methode, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    d = await r.json().catch(() => ({}));
+  } catch (e) {
+    if (ok) ok.disabled = false;
+    return fehler('Keine Verbindung – bitte noch einmal versuchen.');
+  }
+  if (ok) ok.disabled = false;
   if (!r.ok) return fehler(d.error || 'Fehler beim Speichern.');
   closeModal('modal-lzk-eintrag');
   calReload();

@@ -1702,6 +1702,28 @@ const LZK_FELDER = `l.id, l.user_id AS "userId", l.typ, l.lerntheke, l.datum,
   to_char(l.datum,'YYYY-MM-DD') AS "datumIso", l.status, l.pokale,
   l.subject_id AS "subjectId", l.thema, l.anfrage, l.herkunft`;
 
+// Dieselbe freie LZK nicht zweimal anlegen (Doppelklick, erneutes Senden nach einem
+// Verbindungsabbruch): gibt es fuer die Person schon eine gleiche - gleiches Fach, gleicher
+// Typ, gleicher Tag, gleiches Thema (Gross/klein und Leerzeichen egal) -, wird sie
+// wiederverwendet. Pruefen und Anlegen laufen unter einer Sperre in EINER Transaktion,
+// sonst kaemen zwei fast gleichzeitige Klicks beide an der Pruefung vorbei.
+const LZK_ANLEGEN_SPERRE = 7412001;
+async function lzkUnterSperre(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [LZK_ANLEGEN_SPERRE]);
+    const ergebnis = await fn(client);
+    await client.query('COMMIT');
+    return ergebnis;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 app.get('/api/lzk', requireLogin, async (req, res) => {
   try {
     const r = await pool.query(
@@ -1730,12 +1752,24 @@ app.post('/api/lzk', requireLogin, async (req, res) => {
     if (datum && !istIsoDatum(datum)) return res.status(400).json({ error: 'Ungültiges Datum.' });
     if (datum && datum < heuteIsoLzk())
       return res.status(409).json({ error: 'Der Termin liegt in der Vergangenheit.' });
-    const r = await pool.query(`
-      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, updated_at)
-      VALUES ($1, NULL, $6, $2, 'ausstehend', 0, $3, $4, $5, 'selbst', NOW())
-      RETURNING id
-    `, [req.session.userId, datum, subjectId, thema, 'offen', lzkTyp(req.body.typ)]);
-    res.json({ ok: true, id: r.rows[0].id, anfrage: 'offen' });
+    const typ = lzkTyp(req.body.typ);
+    const neu = await lzkUnterSperre(async client => {
+      // Dieselbe Anfrage (auch ohne Wunschtermin) steht schon offen: die gilt.
+      const da = await client.query(`
+        SELECT id FROM lzk
+        WHERE user_id=$1 AND lerntheke IS NULL AND anfrage='offen' AND subject_id=$2 AND typ=$3
+          AND datum IS NOT DISTINCT FROM $4::date AND lower(btrim(thema)) = lower(btrim($5))
+        ORDER BY id LIMIT 1
+      `, [req.session.userId, subjectId, typ, datum, thema]);
+      if (da.rows.length) return { id: da.rows[0].id, vorhanden: true };
+      const r = await client.query(`
+        INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, updated_at)
+        VALUES ($1, NULL, $6, $2, 'ausstehend', 0, $3, $4, $5, 'selbst', NOW())
+        RETURNING id
+      `, [req.session.userId, datum, subjectId, thema, 'offen', typ]);
+      return { id: r.rows[0].id, vorhanden: false };
+    });
+    res.json({ ok: true, id: neu.id, anfrage: 'offen', vorhanden: neu.vorhanden });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -1853,15 +1887,31 @@ app.post('/api/admin/lzk/eintrag', requireAdmin, async (req, res) => {
     if (personen.rows.length !== userIds.length)
       return res.status(404).json({ error: 'Mindestens eine Person gehört nicht zu dieser Lerngruppe – nichts angelegt.' });
     if (!subj.rows.length) return res.status(400).json({ error: 'Unbekanntes Fach' });
-    // EIN Befehl fuer alle: Postgres legt entweder alle Zeilen an oder keine.
-    const r = await pool.query(`
-      INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, admin_id, updated_at)
-      SELECT u, NULL, $6, $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW()
-      FROM unnest($1::int[]) AS u
-      RETURNING id
-    `, [userIds, datum, subjectId, thema, req.session.userId, lzkTyp(req.body.typ)]);
-    const ids = r.rows.map(x => x.id);
-    res.json({ ok: true, id: ids[0], ids });
+    const typ = lzkTyp(req.body.typ);
+    // Alles in EINER Transaktion: entweder stehen danach alle LZK da oder keine.
+    const { je: idJe, vorhanden } = await lzkUnterSperre(async client => {
+      // Wer die gleiche feste LZK schon hat, behaelt sie - auch eine schon bewertete.
+      const da = await client.query(`
+        SELECT DISTINCT ON (user_id) user_id, id FROM lzk
+        WHERE user_id = ANY($1::int[]) AND lerntheke IS NULL AND anfrage IS NULL
+          AND subject_id=$2 AND typ=$3 AND datum=$4::date AND lower(btrim(thema)) = lower(btrim($5))
+        ORDER BY user_id, id
+      `, [userIds, subjectId, typ, datum, thema]);
+      const je = new Map(da.rows.map(x => [x.user_id, x.id]));
+      const fehlen = userIds.filter(u => !je.has(u));
+      if (fehlen.length) {
+        const r = await client.query(`
+          INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage, herkunft, admin_id, updated_at)
+          SELECT u, NULL, $6, $2, 'ausstehend', 0, $3, $4, NULL, 'lernbegleitung', $5, NOW()
+          FROM unnest($1::int[]) AS u
+          RETURNING id, user_id
+        `, [fehlen, datum, subjectId, thema, req.session.userId, typ]);
+        r.rows.forEach(x => je.set(x.user_id, x.id));
+      }
+      return { je, vorhanden: da.rows.length };
+    });
+    const ids = userIds.map(u => idJe.get(u));
+    res.json({ ok: true, id: ids[0], ids, vorhanden });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
