@@ -18,12 +18,13 @@ from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
     halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren, ist_json_pfad,
     lt_lzk_aenderungen, lt_lzk_ergebnis_unterschiede, lzk_ergebnis_zum_server,
-    lt_freie_lzk_abgleich,
+    lt_freie_lzk_abgleich, lt_freie_lzk_senden, lzk_verknuepfung, FREIE_LZK_FACH,
     LZK_ERGEBNIS_TEXT, LZK_ERGEBNIS_SYMBOL,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
-# geschrieben wird ausschliesslich der LZK-Termin (siehe app_lzk_senden).
+# geschrieben werden LZK (Termine, Ergebnisse), Kursung und Kontonamen -- und
+# jeweils nur, was hier geaendert wurde (siehe app_lzk_senden).
 # Liegt bewusst im selben Ordner, damit die Anwendung ohne Installation läuft.
 import osk_sync
 
@@ -136,6 +137,10 @@ class BausteinDialog(tk.Toplevel):
         self.grab_set()
 
         b = baustein or Baustein(halbjahr=halbjahr_fuer_datum())
+        # Nicht im Formular, aber Teil des Bausteins: die Verknuepfung mit der
+        # LZK online. Ginge sie beim Bearbeiten verloren, erkennte das Senden
+        # nicht mehr, auf welcher Seite ein Termin geaendert wurde.
+        self._verknuepfung = (b.lzk_online_1, b.lzk_online_2)
         felder = [
             ("Baustein", "name", "entry_or_combo", vorlage_namen),
             ("Status", "status", "combo", STATUS_OPTIONEN),
@@ -229,6 +234,7 @@ class BausteinDialog(tk.Toplevel):
                 werte[feld] = wert_je_text.get(werte.get(feld, ""), "")
             if not werte["status"]:
                 werte["status"] = "Ausstehend"
+            werte["lzk_online_1"], werte["lzk_online_2"] = self._verknuepfung
 
             self.result = Baustein(**werte)
             self.destroy()
@@ -295,12 +301,13 @@ class SchuelerDialog(tk.Toplevel):
 
 
 class LzkSendenDialog(tk.Toplevel):
-    """Zeigt vor dem Schreiben genau, was sich auf dem Server aendern wuerde.
+    """Zeigt vor dem Schreiben genau, was sich auf dem Server aendern wuerde --
+    jede Zeile einzeln, statt nur eine Anzahl.
 
-    Der einzige Weg, auf dem dieses Werkzeug ueberhaupt etwas auf dem Server
-    veraendert -- deshalb steht hier jede Zeile einzeln, statt nur eine Anzahl."""
+    `aenderungen` mischt beide Arten: Termine von App-Zeilen (Lerntheken-LZK, nur
+    das Datum) und Auftraege aus lt_freie_lzk_senden ("art" anlegen/aendern)."""
 
-    def __init__(self, parent, aenderungen, uebersprungen, klasse):
+    def __init__(self, parent, aenderungen, uebersprungen, klasse, vergangen_text=""):
         super().__init__(parent)
         self.title("LZK-Termine zum Server schicken")
         self.result = None
@@ -316,15 +323,30 @@ class LzkSendenDialog(tk.Toplevel):
         spalten = ("lerntheke", "typ", "alt", "neu")
         tabelle = ttk.Treeview(rahmen, columns=spalten, show="tree headings", height=14)
         tabelle.heading("#0", text="Person")
-        for key, text, breite in (("lerntheke", "Lerntheke", 200), ("typ", "LZK", 70),
-                                  ("alt", "auf dem Server", 120), ("neu", "neu", 120)):
+        for key, text, breite in (("lerntheke", "Lerntheke / Baustein", 220), ("typ", "LZK", 70),
+                                  ("alt", "auf dem Server", 170), ("neu", "neu", 170)):
             tabelle.heading(key, text=text)
             tabelle.column(key, width=breite)
         tabelle.column("#0", width=160)
+
+        def zelle(datum, erg=None):
+            teile = [fmt_datum(datum) or "—"]
+            if erg is not None:
+                teile.append(LZK_ERGEBNIS_TEXT.get(erg, erg) if erg else "nicht bewertet")
+            return " · ".join(teile)
+
         for i, a in enumerate(aenderungen):
-            tabelle.insert("", "end", iid=str(i), text=a["person"],
-                           values=(a["titel"], a["typ"],
-                                   fmt_datum(a["alt"]) or "—", fmt_datum(a["neu"])))
+            art = a.get("art")
+            if art == "anlegen":
+                werte = (f"{a['titel']} (neu)", a["typ"], "— neu anlegen —",
+                         zelle(a["neu"], a["neu_erg"] or None))
+            elif art == "aendern":
+                mit_erg = "status" in a["felder"]
+                werte = (a["titel"], a["typ"], zelle(a["alt"], a["alt_erg"] if mit_erg else None),
+                         zelle(a["neu"], a["neu_erg"] if mit_erg else None))
+            else:
+                werte = (a["titel"], a["typ"], fmt_datum(a["alt"]) or "—", fmt_datum(a["neu"]))
+            tabelle.insert("", "end", iid=str(i), text=a["person"], values=werte)
         sb = ttk.Scrollbar(rahmen, command=tabelle.yview)
         tabelle.config(yscrollcommand=sb.set)
         tabelle.pack(side="left", fill="both", expand=True)
@@ -339,9 +361,13 @@ class LzkSendenDialog(tk.Toplevel):
             hinweis.pack(fill="x", padx=10, pady=(8, 0))
             ttk.Label(hinweis, text=text, justify="left", foreground="#555").pack(anchor="w")
 
-        ttk.Label(self, text="Bestandene LZK behalten ihren Status und ihre "
-                             "Flammen — es wird nur das Datum gesetzt.",
-                  foreground="#555").pack(anchor="w", padx=10, pady=(8, 0))
+        erklaerung = ("Lerntheken-LZK: nur das Datum – Status und Flammen bleiben.\n"
+                      "Eigene Bausteine werden zu freien Mathe-LZK (Titel = Baustein, LZK 1 = Basis,\n"
+                      "LZK 2 = Aufbau). Was online geändert wurde, wird nicht überschrieben.")
+        if vergangen_text:
+            erklaerung += "\n" + vergangen_text
+        ttk.Label(self, text=erklaerung, foreground="#555", justify="left",
+                  wraplength=640).pack(anchor="w", padx=10, pady=(8, 0))
 
         btns = ttk.Frame(self)
         btns.pack(pady=10)
@@ -446,9 +472,10 @@ class FreieLzkDialog(tk.Toplevel):
         gleich = len(paare) - len(unterschiede)
 
         ttk.Label(self,
-                  text=f"Tandem {klasse} · Mathe-LZK, die online ohne Lerntheke angelegt wurden.\n"
-                       "Zugeordnet wird über den Titel: Thema der LZK = Name des Bausteins.\n"
-                       "LZK 2 bekommt eine Aufbau-LZK, alle anderen LZK 1.",
+                  text=f"Tandem {klasse} · Mathe-LZK ohne Lerntheke (online oder aus dieser Liste angelegt).\n"
+                       "Zugeordnet wird über die Verknüpfung, die beim Senden entsteht, sonst über\n"
+                       "den Titel: Thema der LZK = Name des Bausteins. LZK 2 bekommt eine\n"
+                       "Aufbau-LZK, alle anderen LZK 1.",
                   justify="left", wraplength=600).pack(padx=12, pady=(12, 8), anchor="w")
         kopf = f"Zuordnungen mit Unterschied ({len(unterschiede)})"
         if gleich:
@@ -469,10 +496,14 @@ class FreieLzkDialog(tk.Toplevel):
                 teile.append(LZK_ERGEBNIS_TEXT.get(erg, erg))
             return " / ".join(teile)
 
+        # Seit dem letzten Abgleich geaendert -- hilft bei der Wahl der Richtung.
+        seite_text = {"hier": "hier geändert", "online": "online geändert",
+                      "beide": "auf beiden Seiten geändert"}
         for x in unterschiede:
+            zusatz = f"   ({seite_text[x['seite']]})" if x.get("seite") else ""
             self.liste.insert("end", f"{x['person']} · {x['baustein'].name} (LZK {x['nummer']}):"
                                      f"   hier {wert(x['hier_datum'], x['hier_erg'])}"
-                                     f"   ·   online {wert(x['online_datum'], x['online_erg'])}")
+                                     f"   ·   online {wert(x['online_datum'], x['online_erg'])}{zusatz}")
         if offen:
             self.liste.insert("end", "")
             self.liste.insert("end", f"Nicht zugeordnet – bleiben unverändert ({len(offen)}):")
@@ -1922,8 +1953,11 @@ class App(tk.Tk):
                     geaendert.append(f"{zeile(x)}: " + ", ".join(teile))
                 else:
                     leer.append(f"{zeile(x)}: online leer – hier bleibt alles")
-            if geaendert:
+            # Ab jetzt gilt der Stand online als gemeinsamer Ausgangspunkt.
+            verknuepft = self._lzk_frei_verknuepfen(paare)
+            if geaendert or verknuepft:
                 self._markiere_ungespeichert()
+            if geaendert:
                 self._detail_anzeigen()
             text = f"{len(geaendert)} LZK in die Bausteine übernommen."
             if geaendert:
@@ -1934,6 +1968,7 @@ class App(tk.Tk):
             return
 
         gesendet, fehler, leer = [], [], []
+        fehlgeschlagen = set()
         for x in unterschiede:
             felder, teile = {}, []
             if x["hier_datum"] and x["hier_datum"] != x["online_datum"]:
@@ -1950,6 +1985,7 @@ class App(tk.Tk):
                 client.lzk_aendern(x["id"], **felder)
             except Exception as e:
                 fehler.append(f"{zeile(x)}: {e}")
+                fehlgeschlagen.add(x["id"])
                 continue
             gesendet.append(f"{zeile(x)}: " + ", ".join(teile))
             # Gemerkten Serverstand nachziehen.
@@ -1959,6 +1995,8 @@ class App(tk.Tk):
             if "status" in felder:
                 eintrag["status"], eintrag["pokale"] = felder["status"], felder["pokale"]
 
+        if self._lzk_frei_verknuepfen(paare, ausser=fehlgeschlagen):
+            self._markiere_ungespeichert()
         text = f"{len(gesendet)} LZK auf dem Server geändert (Tandem {klasse})."
         if gesendet:
             text += "\n\n" + "\n".join(gesendet)
@@ -2455,7 +2493,8 @@ class App(tk.Tk):
             # Freie Mathe-LZK ordnet der Abruf bewusst NICHT selbst zu (Ziel sind von
             # Hand gepflegte Bausteine) - er zaehlt nur, was darauf wartet.
             p_frei, o_frei = lt_freie_lzk_abgleich(student, konto)
-            frei_abweichend += sum(1 for x in p_frei if not x["gleich"])
+            # Nur hier Geaendertes wartet aufs Senden, nicht aufs Uebernehmen.
+            frei_abweichend += sum(1 for x in p_frei if not x["gleich"] and x["seite"] != "hier")
             frei_offen += len(o_frei)
         self._detail_anzeigen()
         # Neue FB-Besuche aendern den Farbindikator in der Liste (🟢/🟡/🔴) und
@@ -2566,6 +2605,120 @@ class App(tk.Tk):
             self.after_cancel(self._lzk_auto_job)
         self._lzk_auto_job = self.after(1200, self._lzk_auto_senden)
 
+    def _lzk_frei_plan(self, konten, titel):
+        """(auftraege, uebersprungen, vergangen) fuer die LZK-Termine der von Hand
+        gepflegten Bausteine aller Personen -- siehe lt_freie_lzk_senden."""
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+        heute = date.today()
+        auftraege, uebersprungen, vergangen = [], [], 0
+        for student in self.az.students:
+            alias = student.alias.strip().lower()
+            konto = je_konto.get(alias) if alias else None
+            if not konto:
+                continue
+            a, u, v = lt_freie_lzk_senden(student, konto, heute, titel)
+            auftraege += a
+            uebersprungen += u
+            vergangen += v
+        return auftraege, uebersprungen, vergangen
+
+    def _lzk_cache_setzen(self, user_id, eintrag, neu=False):
+        """Eine freie LZK im gemerkten Serverstand nachziehen (oder neu eintragen)."""
+        for konto in self._lt_konten or []:
+            if konto.get("id") != user_id:
+                continue
+            liste = konto.get("lzk") or []
+            konto["lzk"] = liste
+            vorhanden = next((e for e in liste if e.get("id") == eintrag.get("id")), None)
+            if vorhanden is not None:
+                vorhanden.update(eintrag)
+            elif neu:
+                liste.append(eintrag)
+
+    def _lzk_cache_frei_auffrischen(self, frisch):
+        """Die freien LZK im gemerkten Serverstand durch den frischen Stand ersetzen.
+        Die Lerntheken-LZK bleiben unberuehrt -- fuer sie aendert sich nichts."""
+        je_id = {k.get("id"): k for k in frisch or []}
+        for konto in self._lt_konten or []:
+            neu = je_id.get(konto.get("id"))
+            if neu is None:
+                continue
+            konto["lzk"] = ([e for e in (konto.get("lzk") or []) if e.get("lerntheke")]
+                            + [e for e in (neu.get("lzk") or []) if not e.get("lerntheke")])
+
+    @staticmethod
+    def _lzk_frei_verknuepfen(paare, ausser=()):
+        """Nach "Freie Mathe-LZK zuordnen…": jeder zugeordnete Platz merkt sich den
+        Stand online als gemeinsamen Ausgangspunkt. True, wenn sich etwas aenderte."""
+        geaendert = False
+        for x in paare:
+            if x["id"] in ausser:
+                continue
+            feld = f"lzk_online_{x['nummer']}"
+            link = lzk_verknuepfung(x["eintrag"])
+            if getattr(x["baustein"], feld, None) != link:
+                setattr(x["baustein"], feld, link)
+                geaendert = True
+        return geaendert
+
+    def _lzk_frei_uebertragen(self, client, auftraege):
+        """Fuehrt die Auftraege aus lt_freie_lzk_senden aus.
+
+        Die Verknuepfung am Baustein wird erst nachgezogen, wenn der Server den
+        Schritt bestaetigt hat. Scheitert etwas, bleibt hier alles, wie es war, und
+        der naechste Versuch findet dieselbe Luecke wieder.
+        Rueckgabe (gesendet, fehler, lokal_geaendert, angelegt).
+        """
+        gesendet, fehler, lokal, angelegt = 0, [], False, 0
+        fach_id = None
+        for a in auftraege:
+            b, feld = a["baustein"], f"lzk_online_{a['nummer']}"
+            name = f"{a['person']} · {a['titel']} (LZK {a['nummer']})"
+            if a["art"] == "verknuepfen":
+                setattr(b, feld, a["link"])
+                lokal = True
+                continue
+            try:
+                if a["art"] == "anlegen":
+                    if fach_id is None:
+                        fach_id = client.fach_id(FREIE_LZK_FACH)
+                    neu_id = client.lzk_anlegen(a["user_id"], a["neu"], a["titel"], a["typ"], fach_id)
+                else:
+                    client.lzk_aendern(a["id"], **a["felder"])
+            except Exception as e:
+                fehler.append(f"{name}: {e}")
+                continue
+            gesendet += 1
+            lokal = True
+            if a["art"] == "aendern":
+                setattr(b, feld, a["link"])
+                felder = dict(a["felder"])
+                if "datum" in felder:
+                    felder["datum"] = felder["datum"].isoformat()
+                self._lzk_cache_setzen(a["user_id"], {"id": a["id"], **felder})
+                continue
+            # Neu angelegt: sofort merken -- die LZK steht jetzt online, auch wenn
+            # gleich das Ergebnis scheitert (das geht dann beim naechsten Mal nach).
+            angelegt += 1
+            datum = a["neu"].isoformat()
+            setattr(b, feld, {"id": neu_id, "datum": datum, "ergebnis": ""})
+            self._lzk_cache_setzen(a["user_id"], {
+                "id": neu_id, "typ": a["typ"], "lerntheke": None, "datum": datum,
+                "status": "ausstehend", "pokale": 0, "thema": a["titel"],
+                "anfrage": None, "fach": FREIE_LZK_FACH}, neu=True)
+            ziel = lzk_ergebnis_zum_server(a["neu_erg"])
+            if not ziel:
+                continue
+            try:
+                client.lzk_aendern(neu_id, status=ziel[0], pokale=ziel[1])
+            except Exception as e:
+                fehler.append(f"{name}: angelegt, das Ergebnis aber nicht -- {e}")
+                continue
+            setattr(b, feld, {"id": neu_id, "datum": datum, "ergebnis": a["neu_erg"]})
+            self._lzk_cache_setzen(a["user_id"], {"id": neu_id, "status": ziel[0], "pokale": ziel[1]})
+        return gesendet, fehler, lokal, angelegt
+
     def _lzk_auto_senden(self):
         """Automatischer Abgleich: meldet sich hoechstens einmal pro Sitzung an
         und meldet Ergebnisse nur in der Statuszeile -- ein misslungener Versuch
@@ -2588,13 +2741,28 @@ class App(tk.Tk):
             return
 
         aenderungen, uebersprungen, _ = self._lzk_offene_aenderungen(konten, titel)
-        if not aenderungen:
+        frei, frei_uebersprungen, _ = self._lzk_frei_plan(konten, titel)
+        if any(a["art"] != "verknuepfen" for a in frei):
+            # Freie LZK nur auf frischem Stand anlegen oder aendern: sonst entstuende
+            # eine LZK doppelt, die inzwischen anderswo angelegt wurde, und ein online
+            # verschobener Termin saehe unveraendert aus.
+            try:
+                frisch = client.studierende()
+            except Exception as e:
+                self.status_leiste.config(text=f"⚠ LZK-Abgleich nicht möglich: {e}")
+                return
+            self._lzk_cache_frei_auffrischen(frisch)
+            frei, frei_uebersprungen, _ = self._lzk_frei_plan(frisch, titel)
+        schreiben = aenderungen + [a for a in frei if a["art"] != "verknuepfen"]
+        if not schreiben:
+            if self._lzk_frei_uebertragen(client, frei)[2]:
+                self._markiere_ungespeichert()
             return
-        if len(aenderungen) > self.LZK_AUTO_GRENZE:
+        if len(schreiben) > self.LZK_AUTO_GRENZE:
             # Beim ersten Abgleich nach einem Import koennen auf einen Schlag
             # viele alte Termine abweichen. So etwas geht nicht stillschweigend
             # hinaus -- dann lieber einmal hinschauen und bestaetigen.
-            dlg = LzkSendenDialog(self, aenderungen, uebersprungen, klasse)
+            dlg = LzkSendenDialog(self, schreiben, uebersprungen + frei_uebersprungen, klasse)
             self.wait_window(dlg)
             if not dlg.result:
                 self.lzk_auto_var.set(False)
@@ -2604,24 +2772,32 @@ class App(tk.Tk):
                          "im Menü „Lerntheken-App“ wieder einschaltbar.")
                 return
         gesendet, fehler = self._lzk_uebertragen(client, aenderungen)
+        g_frei, f_frei, lokal, angelegt = self._lzk_frei_uebertragen(client, frei)
+        gesendet += g_frei
+        fehler += f_frei
+        if lokal:
+            self._markiere_ungespeichert()
         if fehler:
             self.status_leiste.config(
-                text=f"⚠ {gesendet} von {len(aenderungen)} LZK-Terminen gesendet, "
+                text=f"⚠ {gesendet} von {len(schreiben)} LZK-Terminen gesendet, "
                      f"{len(fehler)} nicht -- über „LZK-Termine zum Server "
                      f"schicken…“ erneut versuchen.")
         elif gesendet:
             zeit = datetime.now().strftime("%H:%M")
+            neu = f", davon {angelegt} neu angelegt" if angelegt else ""
             self.status_leiste.config(
-                text=f"{gesendet} LZK-Termin(e) um {zeit} Uhr an die "
+                text=f"{gesendet} LZK-Termin(e){neu} um {zeit} Uhr an die "
                      f"Lerntheken-App gesendet (Tandem {klasse}).")
 
     def app_lzk_senden(self):
         """Traegt hier geaenderte LZK-Termine in der Lerntheken-App ein.
 
-        Der einzige Schreibzugriff des Werkzeugs -- und er passiert nur nach
-        ausdruecklicher Bestaetigung der vollstaendigen Aenderungsliste.
-        Angefasst werden ausschliesslich Zeilen, die aus der App stammen; von
-        Hand angelegte Bausteine haben auf dem Server keine Entsprechung.
+        Zwei Wege: Termine der App-Zeilen gehen an ihre Lerntheken-LZK (nur das
+        Datum). Termine von Hand gepflegter Bausteine werden zu freien Mathe-LZK
+        (Titel = Baustein-Name, LZK 1 = Basis, LZK 2 = Aufbau) -- neu angelegt, wenn
+        online keine passende steht, sonst mit Datum und Ergebnis nachgezogen,
+        sofern sie HIER geaendert wurden. Online Geaendertes bleibt, geloescht wird
+        nichts, und geschrieben wird erst nach Bestaetigung der vollstaendigen Liste.
         """
         if not self.az.students:
             messagebox.showinfo("LZK-Termine senden", "Keine Personen vorhanden.")
@@ -2647,16 +2823,30 @@ class App(tk.Tk):
             return
 
         aenderungen, uebersprungen, ohne_konto = self._lzk_offene_aenderungen(konten, titel)
+        frei, frei_uebersprungen, vergangen = self._lzk_frei_plan(konten, titel)
+        uebersprungen = uebersprungen + frei_uebersprungen
+        frei_schreiben = [a for a in frei if a["art"] != "verknuepfen"]
+        vergangen_text = (f"{vergangen} vergangene Termin(e) dieses Halbjahres stehen nur hier "
+                          f"und haben kein Ergebnis – die werden nicht nachträglich angelegt "
+                          f"(mit Ergebnis schon)." if vergangen else "")
 
-        if not aenderungen:
+        if not aenderungen and not frei_schreiben:
+            if self._lzk_frei_uebertragen(client, frei)[2]:
+                self._markiere_ungespeichert()
             text = "Alle LZK-Termine stimmen bereits mit dem Server überein."
             if uebersprungen:
-                text += (f"\n\n{len(uebersprungen)} Termin(e) stehen nur auf dem "
-                         f"Server und wurden hier nicht angefasst.")
+                text += (f"\n\nNicht gesendet ({len(uebersprungen)}):\n"
+                         + "\n".join(f"• {u['person']}: {u['titel']} ({u['typ']}) – {u['grund']}"
+                                     for u in uebersprungen[:15]))
+                if len(uebersprungen) > 15:
+                    text += f"\n… und {len(uebersprungen) - 15} weitere"
+            if vergangen_text:
+                text += "\n\n" + vergangen_text
             self._bericht("LZK-Termine senden", text)
             return
 
-        dlg = LzkSendenDialog(self, aenderungen, uebersprungen, klasse)
+        schreiben = aenderungen + frei_schreiben
+        dlg = LzkSendenDialog(self, schreiben, uebersprungen, klasse, vergangen_text)
         self.wait_window(dlg)
         if not dlg.result:
             self.status_leiste.config(text="LZK-Termine senden: abgebrochen, "
@@ -2664,8 +2854,17 @@ class App(tk.Tk):
             return
 
         gesendet, fehler = self._lzk_uebertragen(client, aenderungen)
+        g_frei, f_frei, lokal, angelegt = self._lzk_frei_uebertragen(client, frei)
+        gesendet += g_frei
+        fehler += f_frei
+        if lokal:
+            self._markiere_ungespeichert()
 
-        text = f"{gesendet} von {len(aenderungen)} Termin(en) eingetragen (Tandem {klasse})."
+        text = f"{gesendet} von {len(schreiben)} Termin(en) eingetragen (Tandem {klasse})."
+        if angelegt:
+            text += f"\nDavon {angelegt} als freie Mathe-LZK neu angelegt."
+        if lokal:
+            text += "\n\nNoch speichern nicht vergessen: die Liste merkt sich, welche LZK online dazugehört."
         if fehler:
             text += ("\n\nNicht übernommen (" + str(len(fehler)) + "):\n"
                      + "\n".join(fehler[:8]))
@@ -2677,7 +2876,7 @@ class App(tk.Tk):
         (messagebox.showwarning if fehler else messagebox.showinfo)(
             "LZK-Termine senden", text)
         self.status_leiste.config(
-            text=f"LZK-Termine gesendet: {gesendet} von {len(aenderungen)}")
+            text=f"LZK-Termine gesendet: {gesendet} von {len(schreiben)}")
 
     # ------------------------------------------------------------------
     # Baustein-Aktionen

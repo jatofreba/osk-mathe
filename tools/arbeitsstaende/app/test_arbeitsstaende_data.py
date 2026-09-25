@@ -11,7 +11,7 @@ import tempfile
 from datetime import date
 
 from arbeitsstaende_data import (
-    Arbeitsstaende, Baustein, Student, lt_fb_besuche, lt_lzk_aenderungen,
+    Arbeitsstaende, Baustein, Student, lt_fb_besuche, lt_freie_lzk_senden, lt_lzk_aenderungen,
     lt_talk_zeile, lt_zeilen_aktualisieren, LT_MARKER)
 
 TMP = tempfile.mkdtemp(prefix="arbeitsstaende_test_")
@@ -367,7 +367,8 @@ def test_lzk_abgleich_mit_dem_server():
     person.bausteine = [
         app_zeile("Kreise und Zylinder", date(2026, 11, 12), date(2027, 1, 15)),
         app_zeile("Lineare Funktionen", date(2027, 3, 2)),
-        # von Hand angelegt -- hat auf dem Server keine Entsprechung
+        # von Hand angelegt -- keine Lerntheke; geht als freie Mathe-LZK
+        # hinaus (test_lzk_termine_eigener_bausteine)
         Baustein(name="Referat Statistik", status="In Bearbeitung",
                  lzk_datum_1=date(2026, 12, 1)),
     ]
@@ -405,6 +406,57 @@ def test_lzk_abgleich_mit_dem_server():
     konto["lzk"] = [konto["lzk"][0]]
     assert lt_lzk_aenderungen(person, konto, titel) == ([], [])
     print("OK: test_lzk_abgleich_mit_dem_server")
+
+
+def test_lzk_termine_eigener_bausteine():
+    """Termine von Hand gepflegter Bausteine werden freie Mathe-LZK in OSKlar.
+
+    Angelegt wird, was ansteht (oder hier schon ein Ergebnis hat). Danach merkt
+    sich der Platz die LZK online: hier Verschobenes geht hinaus, online
+    Verschobenes wird nie mit dem alten Datum ueberschrieben.
+    """
+    heute = date(2026, 9, 25)
+    kreise = Baustein(name="Kreise", status="In Bearbeitung", lzk_datum_1=date(2026, 9, 30))
+    pyth = Baustein(name="Satz des Pythagoras", lzk_datum_2=date(2026, 10, 12))
+    alt = Baustein(name="Geometrie", lzk_datum_1=date(2026, 9, 10))
+    bewertet = Baustein(name="Terme", lzk_datum_1=date(2026, 9, 10), lzk_ergebnis_1="2")
+    app = Baustein(name="Kreise und Zylinder", lzk_datum_1=date(2026, 10, 1),
+                   bemerkung=f"{LT_MARKER} 5 von 20 Stationen erledigt")
+    person = Student(vorname="Anton", nachname="Berger", alias="an.be",
+                     bausteine=[kreise, pyth, alt, bewertet, app])
+    auftraege, uebersprungen, vergangen = lt_freie_lzk_senden(person, {"id": 7, "lzk": []}, heute)
+    neu = {(a["titel"], a["typ"]): a for a in auftraege}
+    assert all(a["art"] == "anlegen" for a in auftraege), auftraege
+    assert set(neu) == {("Kreise", "Basis"), ("Satz des Pythagoras", "Aufbau"), ("Terme", "Basis")}, neu
+    assert neu[("Terme", "Basis")]["neu_erg"] == "2"
+    assert vergangen == 1                   # Geometrie: vorbei, ohne Ergebnis
+    assert uebersprungen == []
+
+    # Angelegt und verknuepft; hier verschoben -> das neue Datum geht hinaus
+    kreise.lzk_online_1 = {"id": 70, "datum": "2026-09-30", "ergebnis": ""}
+    person.bausteine = [kreise]
+    kreise.lzk_datum_1 = date(2026, 10, 2)
+    online = {"id": 70, "typ": "Basis", "lerntheke": None, "datum": "2026-09-30",
+              "status": "ausstehend", "pokale": 0, "thema": "Kreise", "anfrage": None, "fach": "mathe"}
+    auftraege, _, _ = lt_freie_lzk_senden(person, {"id": 7, "lzk": [online]}, heute)
+    assert [(a["art"], a["id"], a["felder"]) for a in auftraege] == [("aendern", 70, {"datum": date(2026, 10, 2)})]
+
+    # Online verschoben, hier unveraendert: nichts senden, nur melden
+    kreise.lzk_datum_1 = date(2026, 9, 30)
+    online["datum"] = "2026-10-05"
+    auftraege, uebersprungen, _ = lt_freie_lzk_senden(person, {"id": 7, "lzk": [online]}, heute)
+    assert auftraege == [] and "verschoben" in uebersprungen[0]["grund"], (auftraege, uebersprungen)
+
+    # Die Verknuepfung ueberlebt Speichern und Laden
+    az = Arbeitsstaende()
+    az.neu([])
+    az.students = [person]
+    js = _pfad("verknuepfung.json")
+    az.speichern(js)
+    geladen = Arbeitsstaende()
+    assert geladen.laden(js) == []
+    assert geladen.students[0].bausteine[0].lzk_online_1 == {"id": 70, "datum": "2026-09-30", "ergebnis": ""}
+    print("OK: test_lzk_termine_eigener_bausteine")
 
 
 def test_fabue_anwesenheit_im_bericht():
@@ -493,6 +545,7 @@ if __name__ == "__main__":
     test_json_ist_lesbar_und_stabil()
     test_json_fremde_datei_warnt_statt_abzustuerzen()
     test_lzk_abgleich_mit_dem_server()
+    test_lzk_termine_eigener_bausteine()
     test_fabue_anwesenheit_im_bericht()
     test_fabue_teilnahmen_werden_zu_besuchen()
     print("\nAlle Tests erfolgreich.")

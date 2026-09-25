@@ -310,27 +310,116 @@ def lt_freie_lzk(konto: dict) -> list:
             and not e.get("anfrage") and e.get("datum")]
 
 
-def lt_freie_lzk_abgleich(student, konto: dict):
-    """Ordnet die freien Mathe-LZK einer Person ihren Bausteinen zu - ueber den Titel.
+def _lzk_online_sauber(wert) -> Optional[dict]:
+    """Die gemerkte Verknuepfung eines LZK-Platzes mit einer freien LZK online, geprueft.
 
-    Thema der LZK == Baustein-Name (Gross/klein und Leerzeichen egal); eine
-    "Aufbau"-LZK kommt in LZK-Platz 2, alle anderen in Platz 1. Ziel sind nur VON
-    HAND gepflegte Bausteine: die App-Zeilen gehoeren den Lerntheken-LZK, sonst
-    stritten sich zwei LZK um denselben Platz.
+    {"id", "datum" ("JJJJ-MM-TT" oder None), "ergebnis"}: der Stand, auf den sich
+    Liste und Server beim letzten Abgleich geeinigt haben. Ohne gueltige ID gibt es
+    keine Verknuepfung -- dann ordnet wieder der Titel zu.
+    """
+    if not isinstance(wert, dict):
+        return None
+    try:
+        lzk_id = int(wert.get("id"))
+    except (TypeError, ValueError):
+        return None
+    if lzk_id <= 0:
+        return None
+    erg = str(wert.get("ergebnis") or "")
+    return {"id": lzk_id, "datum": _iso(wert.get("datum")),
+            "ergebnis": erg if erg in LZK_ERGEBNIS_WERTE else ""}
+
+
+def lzk_verknuepfung(eintrag: dict) -> dict:
+    """Die Verknuepfung, die sich ein Platz nach einem Abgleich merkt: der Stand online."""
+    return {"id": eintrag.get("id"), "datum": _iso(eintrag.get("datum")),
+            "ergebnis": lzk_ergebnis_von_server(eintrag)}
+
+
+def _lzk_seite(link, hier, online):
+    """Was seit dem letzten Abgleich geaendert wurde: "hier", "online", "beide" oder
+    None. `hier` und `online` sind je (datum, ergebnis)."""
+    if not link:
+        return None
+    basis = (_to_date(link.get("datum")), link.get("ergebnis") or "")
+    h, o = hier != basis, online != basis
+    return "beide" if h and o else "hier" if h else "online" if o else None
+
+
+def _lzk_online_titel(eintrag, titel_je_key=None) -> str:
+    """Wie eine LZK online heisst: Lerntheke oder Thema."""
+    if eintrag.get("lerntheke"):
+        return (titel_je_key or {}).get(eintrag["lerntheke"]) or eintrag["lerntheke"]
+    return (eintrag.get("thema") or "").strip() or "ohne Titel"
+
+
+def _freie_lzk_paar(student, e, b, nummer, thema, teil, verknuepft=False) -> dict:
+    datum = _to_date(e.get("datum"))
+    hier_datum = getattr(b, f"lzk_datum_{nummer}")
+    hier_erg = getattr(b, f"lzk_ergebnis_{nummer}") or ""
+    online_erg = lzk_ergebnis_von_server(e)
+    link = getattr(b, f"lzk_online_{nummer}", None) if verknuepft else None
+    return {
+        "person": student.voller_name, "alias": student.alias.strip().lower(), "eintrag": e, "id": e.get("id"),
+        "baustein": b, "nummer": nummer, "thema": thema, "teil": teil,
+        "hier_datum": hier_datum, "online_datum": datum,
+        "hier_erg": hier_erg, "online_erg": online_erg,
+        "gleich": hier_datum == datum and hier_erg == online_erg,
+        "link": link,
+        "seite": _lzk_seite(link, (_to_date(hier_datum), hier_erg), (datum, online_erg)),
+    }
+
+
+def lt_freie_lzk_abgleich(student, konto: dict):
+    """Ordnet die freien Mathe-LZK einer Person ihren Bausteinen zu.
+
+    Zuerst gilt die Verknuepfung, die sich ein LZK-Platz gemerkt hat (lzk_online_N --
+    entsteht, wenn das Tool die LZK anlegt oder abgleicht): die ID entscheidet, auch
+    wenn online das Thema oder hier der Name geaendert wurde. Sonst der Titel: Thema
+    der LZK == Baustein-Name (Gross/klein und Leerzeichen egal); eine "Aufbau"-LZK
+    kommt in LZK-Platz 2, alle anderen in Platz 1. Ziel sind nur VON HAND gepflegte
+    Bausteine: die App-Zeilen gehoeren den Lerntheken-LZK, sonst stritten sich zwei
+    LZK um denselben Platz.
 
     Rueckgabe (paare, offen): je zugeordneter LZK ein dict mit Baustein, Platz,
-    Datum/Ergebnis hier und online und 'gleich'; `offen` beschreibt jede LZK, die
-    sich nicht eindeutig zuordnen liess. Hier wird nichts veraendert.
+    Datum/Ergebnis hier und online, 'gleich', 'link' (die gemerkte Verknuepfung,
+    wenn sie zu genau dieser LZK gehoert) und 'seite' (was seit dem letzten
+    Abgleich geaendert wurde); `offen` beschreibt jede LZK, die sich nicht eindeutig
+    zuordnen liess. Hier wird nichts veraendert.
     """
     person = student.voller_name
     paare, offen = [], []
+    eintraege = lt_freie_lzk(konto)
+    online_ids = {e.get("id") for e in eintraege}
+
+    # Verknuepfte Plaetze: welche ID gehoert zu welchem Platz?
+    verknuepft, belegt = {}, set()
+    for b in student.bausteine:
+        if _ist_app_zeile(b):
+            continue
+        for nummer in (1, 2):
+            link = getattr(b, f"lzk_online_{nummer}", None)
+            if link and link.get("id") in online_ids:
+                verknuepft.setdefault(link["id"], []).append((b, nummer))
+                belegt.add((id(b), nummer))
+
     je_platz = {}
-    for e in lt_freie_lzk(konto):
+    for e in eintraege:
         datum = _to_date(e.get("datum"))
         typ = e.get("typ") or "LZK"
         wann = _fmt_kurz(datum)
         thema = (e.get("thema") or "").strip()
         teil = f"{typ}-LZK" if typ in ("Basis", "Aufbau") else "LZK"
+        plaetze = verknuepft.get(e.get("id"))
+        if plaetze:
+            if len(plaetze) > 1:
+                # Dieselbe ID an zwei Plaetzen (etwa ein kopierter Baustein): nicht raten.
+                offen.append(f"{person}: „{thema or 'ohne Titel'}“ ({teil}, {wann}) – "
+                             f"mit mehreren Bausteinen verknüpft")
+                continue
+            b, nummer = plaetze[0]
+            paare.append(_freie_lzk_paar(student, e, b, nummer, thema, teil, verknuepft=True))
+            continue
         if not thema:
             offen.append(f"{person}: {teil} am {wann} ohne Titel – online ein Thema eintragen")
             continue
@@ -355,6 +444,10 @@ def lt_freie_lzk_abgleich(student, konto: dict):
         b = kandidaten[0]
         nummer = 2 if typ == "Aufbau" else 1
         schluessel = (id(b), nummer)
+        if schluessel in belegt:
+            offen.append(f"{person}: „{thema}“ ({teil}, {wann}) – LZK {nummer} dieses Bausteins "
+                         f"gehört schon zu einer anderen LZK")
+            continue
         # Zwei LZK fuer denselben Platz (z.B. nachgeschrieben): die juengste gilt.
         vorher = je_platz.get(schluessel)
         if vorher is not None:
@@ -365,25 +458,161 @@ def lt_freie_lzk_abgleich(student, konto: dict):
                 continue
             paare[:] = [x for x in paare if x["eintrag"] is not vorher]
         je_platz[schluessel] = e
-        hier_datum = getattr(b, f"lzk_datum_{nummer}")
-        hier_erg = getattr(b, f"lzk_ergebnis_{nummer}") or ""
-        online_erg = lzk_ergebnis_von_server(e)
-        paare.append({
-            "person": person, "alias": student.alias.strip().lower(), "eintrag": e, "id": e.get("id"),
-            "baustein": b, "nummer": nummer, "thema": thema, "teil": teil,
-            "hier_datum": hier_datum, "online_datum": datum,
-            "hier_erg": hier_erg, "online_erg": online_erg,
-            "gleich": hier_datum == datum and hier_erg == online_erg,
-        })
+        paare.append(_freie_lzk_paar(student, e, b, nummer, thema, teil))
     return paare, offen
+
+
+def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, titel_je_key=None):
+    """LZK-Termine aus VON HAND gepflegten Bausteinen, die online fehlen oder hier
+    geaendert wurden -- als freie Mathe-LZK: Thema = Baustein-Name, LZK 1 = Basis,
+    LZK 2 = Aufbau.
+
+    Nur die Richtung Liste -> Server, und nur, was HIER geaendert wurde: jeder Platz
+    merkt sich den zuletzt abgeglichenen Stand (lzk_online_N). Hat sich seither nur
+    online etwas getan (verschoben, bewertet), bleibt es unangetastet und wird
+    gemeldet; haben sich beide Seiten verschieden geaendert, entscheidet der Mensch
+    ("Freie Mathe-LZK zuordnen…"). Online geloescht wird nie etwas, und ein leeres
+    Feld hier ueberschreibt nichts.
+
+    Neu angelegt wird, was ansteht (ab heute) oder hier schon ein Ergebnis hat --
+    vergangene Termine ohne Ergebnis nicht, sonst stuenden online auf einen Schlag
+    lauter alte LZK "zu bewerten" da. Ebenso wenig, wenn online zu diesem Baustein
+    eine Anfrage offen ist oder am selben Tag schon eine Mathe-LZK steht (etwa die
+    Lerntheken-LZK): dieselbe LZK stuende sonst zweimal im Kalender.
+
+    Rueckgabe (auftraege, uebersprungen, vergangen):
+      auftraege -- dicts mit "art": "anlegen" | "aendern" | "verknuepfen" (nur hier:
+        die gemerkte Verknuepfung setzen, nachziehen oder loesen) und "link" (so
+        soll sie nach Erfolg lauten)
+      uebersprungen -- {"person", "titel", "typ", "grund"} wie bei lt_lzk_aenderungen
+      vergangen -- vergangene Termine DIESES Halbjahres ohne Ergebnis, die online
+        fehlen und deshalb nicht angelegt werden
+    """
+    heute = heute or date.today()
+    hj_heute = halbjahr_fuer_datum(heute)
+    person, alias, user_id = student.voller_name, student.alias.strip().lower(), konto.get("id")
+    paare, _offen = lt_freie_lzk_abgleich(student, konto)
+    je_platz = {(id(p["baustein"]), p["nummer"]): p for p in paare}
+    mathe = [e for e in (konto.get("lzk") or [])
+             if (e.get("fach") or FREIE_LZK_FACH) == FREIE_LZK_FACH and e.get("anfrage") != "abgelehnt"]
+    # LZK, die schon zu einem Platz dieser Person gehoeren, sind keine Dubletten.
+    eigene = {p["id"] for p in paare}
+    for b in student.bausteine:
+        if not _ist_app_zeile(b):
+            eigene |= {l["id"] for l in (b.lzk_online_1, b.lzk_online_2) if l}
+    txt = lambda w: LZK_ERGEBNIS_TEXT.get(w, w) if w else "nicht bewertet"
+    zuordnen = "über „Freie Mathe-LZK zuordnen…“"
+    auftraege, uebersprungen, vergangen = [], [], 0
+
+    for b in student.bausteine:
+        if _ist_app_zeile(b) or not (b.name or "").strip():
+            continue
+        for nummer, typ in LZK_TYP_JE_NUMMER.items():
+            lok_d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
+            lok_e = getattr(b, f"lzk_ergebnis_{nummer}") or ""
+            link = getattr(b, f"lzk_online_{nummer}", None)
+            kopf = {"person": person, "alias": alias, "user_id": user_id, "baustein": b,
+                    "nummer": nummer, "titel": b.name.strip(), "typ": typ}
+
+            def melde(grund):
+                uebersprungen.append({"person": person, "titel": b.name, "typ": typ, "grund": grund})
+
+            p = je_platz.get((id(b), nummer))
+            if p is not None:
+                e, on_d, on_e = p["eintrag"], p["online_datum"], p["online_erg"]
+                if p["link"] is None:
+                    # Ueber den Titel gefunden, noch nicht verknuepft.
+                    if lok_d is None:
+                        continue      # hier kein Termin -- uebernehmen geht ueber "zuordnen"
+                    if lok_d != on_d:
+                        melde(f"online am {_fmt_kurz(on_d)}, hier {_fmt_kurz(lok_d)} – {zuordnen} klären")
+                        continue
+                    # Derselbe Tag: dieselbe LZK. "Nicht bewertet" ist der gemeinsame Ausgangsstand.
+                    link = {"id": e.get("id"), "datum": _iso(lok_d), "ergebnis": ""}
+                basis_d, basis_e = _to_date(link.get("datum")), link.get("ergebnis") or ""
+                danach, felder = dict(link), {}
+                # Datum
+                if lok_d != basis_d and on_d == basis_d:
+                    if lok_d is None:
+                        melde(f"hier kein Termin mehr, online {_fmt_kurz(on_d)} – streichen nur in OSKlar")
+                    else:
+                        felder["datum"] = lok_d
+                        danach["datum"] = _iso(lok_d)
+                elif lok_d == basis_d and on_d != basis_d:
+                    melde(f"online auf {_fmt_kurz(on_d)} verschoben – {zuordnen} übernehmen")
+                elif lok_d != basis_d:
+                    if lok_d == on_d:
+                        danach["datum"] = _iso(lok_d)
+                    else:
+                        melde(f"hier {_fmt_kurz(lok_d) or 'kein Termin'}, online {_fmt_kurz(on_d)} – "
+                              f"beide geändert, {zuordnen} klären")
+                # Ergebnis
+                if lok_e != basis_e and on_e == basis_e:
+                    ziel = lzk_ergebnis_zum_server(lok_e)
+                    if ziel is None:
+                        melde(f"hier nicht mehr bewertet, online {txt(on_e)} – bleibt")
+                    else:
+                        felder["status"], felder["pokale"] = ziel
+                        danach["ergebnis"] = lok_e
+                elif lok_e == basis_e and on_e != basis_e:
+                    melde(f"online bewertet ({txt(on_e)}) – {zuordnen} übernehmen")
+                elif lok_e != basis_e:
+                    if lok_e == on_e:
+                        danach["ergebnis"] = lok_e
+                    else:
+                        melde(f"Ergebnis hier {txt(lok_e)}, online {txt(on_e)} – beide geändert, {zuordnen} klären")
+                if felder:
+                    auftraege.append({**kopf, "art": "aendern", "id": e.get("id"), "felder": felder,
+                                      "alt": on_d, "neu": felder.get("datum", on_d),
+                                      "alt_erg": on_e, "neu_erg": danach["ergebnis"], "link": danach})
+                elif danach != getattr(b, f"lzk_online_{nummer}", None):
+                    auftraege.append({**kopf, "art": "verknuepfen", "link": danach})
+                continue
+
+            # Online (noch) keine LZK fuer diesen Platz.
+            if link:
+                if lok_d is None:
+                    # Online weg und hier kein Termin: die Verknuepfung hat ausgedient.
+                    auftraege.append({**kopf, "art": "verknuepfen", "link": None})
+                    continue
+                if lok_d == _to_date(link.get("datum")):
+                    melde(f"online gelöscht – hier steht noch {_fmt_kurz(lok_d)}")
+                    continue
+                # Hier neu terminiert: das ist eine neue LZK.
+            if lok_d is None:
+                if lok_e:
+                    melde("Ergebnis ohne LZK-Datum – ohne Datum lässt sich online nichts anlegen")
+                continue
+            if lok_d < heute and not lok_e:
+                if halbjahr_fuer_datum(lok_d) == hj_heute:
+                    vergangen += 1
+                continue
+            anfrage = next((e for e in mathe if not e.get("lerntheke") and e.get("anfrage") == "offen"
+                            and _titel_norm(e.get("thema")) == _titel_norm(b.name)
+                            and (2 if e.get("typ") == "Aufbau" else 1) == nummer), None)
+            if anfrage:
+                melde(f"online angefragt ({_fmt_kurz(anfrage.get('datum')) or 'ohne Datum'}) – "
+                      f"erst in OSKlar entscheiden")
+                continue
+            gleicher_tag = next((e for e in mathe if e.get("id") not in eigene
+                                 and _to_date(e.get("datum")) == lok_d), None)
+            if gleicher_tag:
+                wie = ", angefragt" if gleicher_tag.get("anfrage") else ""
+                melde(f"am {_fmt_kurz(lok_d)} steht online schon eine Mathe-LZK "
+                      f"(„{_lzk_online_titel(gleicher_tag, titel_je_key)}“{wie}) – nicht doppelt angelegt")
+                continue
+            auftraege.append({**kopf, "art": "anlegen", "alt": None, "neu": lok_d,
+                              "alt_erg": "", "neu_erg": lok_e})
+    return auftraege, uebersprungen, vergangen
 
 
 def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
     """Vergleicht die LZK-Termine einer Person mit dem Stand auf dem Server.
 
     Betrachtet werden nur Bausteinzeilen, die aus der Lerntheken-App stammen
-    (Marker in der Bemerkung) und deren Name zu einer Lerntheke gehoert -- von
-    Hand angelegte Zeilen haben keine Entsprechung auf dem Server.
+    (Marker in der Bemerkung) und deren Name zu einer Lerntheke gehoert. Die
+    Termine von Hand gepflegter Zeilen gehen als freie Mathe-LZK hinaus, siehe
+    lt_freie_lzk_senden().
 
     Rueckgabe: (aenderungen, uebersprungen). Jede Aenderung enthaelt alles,
     was der Server zum Speichern braucht -- inklusive `status` und `pokale`
@@ -614,6 +843,12 @@ class Baustein:
     # LZK_ERGEBNIS_WERTE). Die "LZK-Note" daneben ist Freitext und bleibt lokal.
     lzk_ergebnis_1: str = ""
     lzk_ergebnis_2: str = ""
+    # Verknuepfung mit der freien Mathe-LZK online (nur von Hand gepflegte
+    # Bausteine): {"id", "datum", "ergebnis"} -- der Stand, auf den sich Liste und
+    # Server beim letzten Abgleich geeinigt haben. Daran erkennt das Senden, WELCHE
+    # Seite seither geaendert wurde (siehe lt_freie_lzk_senden).
+    lzk_online_1: Optional[dict] = None
+    lzk_online_2: Optional[dict] = None
 
 
 @dataclass
@@ -665,10 +900,11 @@ def baustein_als_dict(b: Baustein) -> dict:
         "halbjahr": b.halbjahr,
         "bemerkung": b.bemerkung,
     }
-    for nr, (datum, note, bem, erg) in enumerate(
-            ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1, b.lzk_ergebnis_1),
-             (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2, b.lzk_ergebnis_2)), start=1):
-        lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem, "ergebnis": erg})
+    for nr, (datum, note, bem, erg, online) in enumerate(
+            ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1, b.lzk_ergebnis_1, b.lzk_online_1),
+             (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2, b.lzk_ergebnis_2, b.lzk_online_2)), start=1):
+        lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem, "ergebnis": erg,
+                           "online": _lzk_online_sauber(online)})
         if lzk:
             daten[f"lzk_{nr}"] = lzk
     return _ohne_leere(daten)
@@ -692,6 +928,7 @@ def baustein_aus_dict(d: dict) -> Baustein:
         # geraten, sondern bleibt leer ("nicht bewertet").
         erg = str(lzk.get("ergebnis") or "")
         setattr(b, felder[3], erg if erg in LZK_ERGEBNIS_WERTE else "")
+        setattr(b, f"lzk_online_{nr}", _lzk_online_sauber(lzk.get("online")))
     return b
 
 

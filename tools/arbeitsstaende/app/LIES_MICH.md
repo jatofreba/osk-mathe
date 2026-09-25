@@ -176,25 +176,45 @@ gemeldet statt zu stören.
 
 ## LZK-Termine zurück in die Lerntheken-App
 
-Termine, die du hier änderst, können in die Lerntheken-App zurückgeschrieben
-werden -- damit die Schüler:innen denselben Termin sehen wie du.
+Termine, die du hier einträgst oder änderst, gehen an OSKlar -- damit die
+Schüler:innen denselben Termin sehen wie du und die Lernbegleitungen im
+Kalender, wer wann eine LZK schreibt.
 
+- **Zeilen aus der App** (Lerntheken-Zeilen): das Datum geht an die
+  Lerntheken-LZK. Status und Flammen bleiben, wie sie sind.
+- **Eigene Bausteine** (z.B. "Kreise", "Terme 1"): der Termin wird in OSKlar
+  als **freie Mathe-LZK** angelegt -- Titel = Name des Bausteins, LZK 1 =
+  Basis, LZK 2 = Aufbau. Angelegt wird, was ansteht (ab heute) oder hier schon
+  ein Ergebnis hat; vergangene Termine ohne Ergebnis nicht, sonst stünden
+  lauter alte LZK "zu bewerten" im Kalender. Ebenso wenig, wenn online zu
+  diesem Baustein eine Anfrage offen ist oder am selben Tag schon eine
+  Mathe-LZK steht (etwa die Lerntheken-LZK) -- dann würde sie doppelt stehen.
+- Danach **merkt sich der Baustein, welche LZK online dazugehört** (steht in
+  der Arbeitsdatei -- also speichern). Verschiebst du den Termin hier oder
+  trägst ein Ergebnis ein, zieht das Senden die LZK online nach. Wurde sie
+  **online** verschoben oder bewertet, wird das nie mit dem alten Stand
+  überschrieben; übernehmen geht über *Lerntheken-App → Freie Mathe-LZK
+  zuordnen…*.
 - **Automatisch**: sobald du in einem Baustein ein LZK-Datum änderst, geht es
   kurz darauf an die App. Rückmeldung nur in der Statuszeile, nie als Fenster;
   klappt es nicht, bleibt die Änderung hier stehen und geht beim nächsten
-  Versuch mit. Abschaltbar unter *Lerntheken-App → Neue LZK-Termine
+  Versuch mit. Sind es mehr als fünf Termine auf einmal, zeigt die Anwendung
+  vorher die Liste. Abschaltbar unter *Lerntheken-App → Neue LZK-Termine
   automatisch senden*.
 - **Von Hand**: *Lerntheken-App → LZK-Termine zum Server schicken…* zeigt
-  vorher eine Liste mit **Person, Lerntheke, LZK, altem und neuem Datum** und
-  schickt erst nach Bestätigung.
-- **Was nicht passiert**: Status und Kleeblätter einer LZK bleiben, wie sie
-  sind -- es wird nur das Datum gesetzt. Termine zu **löschen** geht hier
-  nicht: steht bei dir kein Datum, auf dem Server aber schon, wird das nur
-  gemeldet. Und angefasst werden ausschließlich Bausteinzeilen, die aus der
-  App stammen; von Hand angelegte Zeilen haben dort keine Entsprechung.
+  vorher eine Liste mit **Person, Lerntheke/Baustein, LZK, altem und neuem
+  Stand** und schickt erst nach Bestätigung. Was nicht gesendet wird, steht
+  mit Grund dabei.
+- **Was nicht passiert**: **gelöscht** wird online nie etwas -- steht bei dir
+  kein Datum (mehr), auf dem Server aber schon, wird das nur gemeldet. Ein
+  leeres Ergebnis ("nicht bewertet") überschreibt kein Ergebnis online. Die
+  LZK-Note und die Bemerkungen bleiben immer nur hier.
 
-Das ist der **einzige** Schreibzugriff des Werkzeugs. Alles andere -- Abrufen
-der Ergebnisse, Aliasse, Halbjahresübersicht -- liest nur.
+Außer diesem Senden schreiben nur die Menüpunkte, die das ausdrücklich tun
+(*Kursungen abgleichen…*, *LZK-Ergebnisse abgleichen…*, *Freie Mathe-LZK
+zuordnen…* -- jeweils in der Richtung, die du wählst -- und *Aliasse auf dem
+Server umbenennen…*). Alles andere -- Abrufen der Ergebnisse, Aliasse,
+Halbjahresübersicht -- liest nur.
 
 ## Passwort und Offline-Arbeiten
 

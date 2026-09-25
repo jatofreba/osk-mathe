@@ -187,7 +187,51 @@ class AppClient:
             felder["pokale"] = int(pokale)
         if not lzk_id or not felder:
             raise ValueError("lzk_id und mindestens ein Feld sind Pflicht.")
-        return self._patch(f"/api/admin/lzk/{int(lzk_id)}", felder)
+        try:
+            return self._patch(f"/api/admin/lzk/{int(lzk_id)}", felder)
+        except error.HTTPError as e:
+            try:
+                grund = json.loads(e.read().decode("utf-8")).get("error", "")
+            except Exception:
+                grund = ""
+            raise ValueError(grund or f"LZK ändern fehlgeschlagen (HTTP {e.code}).")
+
+    def fach_id(self, key: str) -> int:
+        """ID eines Fachs (z.B. "mathe") -- eine neue freie LZK braucht sie."""
+        for fach in self._get("/api/subjects") or []:
+            if fach.get("key") == key:
+                return int(fach["id"])
+        raise ValueError(f"Das Fach '{key}' gibt es auf dem Server nicht.")
+
+    def lzk_anlegen(self, user_id, datum, thema: str, typ: str, fach_id) -> int:
+        """Legt EINE freie LZK an (ohne Lerntheke) und gibt ihre ID zurueck.
+
+        Wie "LZK eintragen" im OSKlar-Kalender: fester Termin (keine Anfrage), von
+        der Lernbegleitung, noch nicht bewertet. `typ` ist "Basis" oder "Aufbau".
+        """
+        thema = (thema or "").strip()
+        if isinstance(datum, (date, datetime)):
+            datum = datum.strftime("%Y-%m-%d")
+        if not user_id or not fach_id or not thema or not datum:
+            raise ValueError("Person, Fach, Thema und Datum sind Pflicht.")
+        try:
+            antwort = self._post("/api/admin/lzk/eintrag", {
+                "userIds": [int(user_id)],
+                "subjectId": int(fach_id),
+                "datum": datum,
+                "thema": thema,
+                "typ": typ,
+            })
+        except error.HTTPError as e:
+            try:
+                grund = json.loads(e.read().decode("utf-8")).get("error", "")
+            except Exception:
+                grund = ""
+            raise ValueError(grund or f"LZK anlegen fehlgeschlagen (HTTP {e.code}).")
+        lzk_id = (antwort or {}).get("id")
+        if not lzk_id:
+            raise ValueError("Der Server hat keine ID der neuen LZK zurückgegeben.")
+        return int(lzk_id)
 
     def kurs_setzen(self, user_id, kurs: str) -> None:
         """Setzt die MATHE-Kursung (E/G) eines Kontos auf dem Server.
