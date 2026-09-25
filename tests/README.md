@@ -18,6 +18,17 @@ sich auch einzeln starten, z. B. `node tests/web/t_lzk_ui.js`.
 
 Fehlt pglite oder Python, wird der Teil übersprungen und gemeldet (auf GitHub zählt das als Fehler).
 
+### Zwei Hilfen in `lib/`
+
+- `server_im_test.js` – lädt die **ganze** `server.js` gegen pglite (Express, Sessions, bcrypt
+  sind Attrappen; Dateischreiben wird nur gezählt). `srv.rufe('post', '/api/talking-sessions', { session, body })`
+  ruft die echte Route, `srv.rufeUrl` dasselbe mit einer fertigen URL.
+- `seite_im_test.js` – lädt die **ganze** `public/index.html` in eine Sandbox. Alle Funktionen
+  und Hilfen der Seite sind da, nichts muss herausgeschnitten werden:
+  `seite.lauf('me = __werte.me; renderCalDetail();', { me })`, danach `seite.element('cal-detail').innerHTML`.
+  Mit `seite.kontext.fetch = srv.fetchFuer(() => session)` schickt die Seite ihre Anfragen an
+  den Server im Test – so laufen ganze Klickwege (Beispiel: `db/t_talk_vortragende_seite.mjs`).
+
 ## Regeln
 
 - **Immer die echten Dateien lesen**: `lies()` aus `lib/quelle.js`, in Python `pfade.py`.

@@ -14,7 +14,21 @@ function lies(rel) {
 // Pool-Attrappe fuer ein pglite-Postgres: query() wie pg, connect() fuer Transaktionen
 // (pglite hat nur eine Sitzung - BEGIN/COMMIT laufen darin wie in einem echten Client).
 function poolAus(db) {
-  const query = (sql, p) => db.query(sql, p || []);
+  const query = async (sql, p) => {
+    let r;
+    try {
+      r = await db.query(sql, p || []);
+    } catch (e) {
+      // Mehrere Befehle ohne Parameter (der initDB-Stapel) gehen nur im einfachen Protokoll -
+      // node-postgres sendet ohne Parameter genauso. pglite.query nimmt immer das erweiterte.
+      if (!(e && e.code === '42601' && (!p || !p.length))) throw e;
+      const alle = await db.exec(sql);
+      r = alle[alle.length - 1] || { rows: [] };
+    }
+    // pg heisst es rowCount, pglite affectedRows.
+    if (r && r.rowCount === undefined) r.rowCount = r.affectedRows ?? (r.rows ? r.rows.length : 0);
+    return r;
+  };
   return { query, connect: async () => ({ query, release() {} }) };
 }
 
