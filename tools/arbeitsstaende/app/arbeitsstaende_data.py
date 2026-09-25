@@ -469,8 +469,9 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
 
     Nur die Richtung Liste -> Server, und nur, was HIER geaendert wurde: jeder Platz
     merkt sich den zuletzt abgeglichenen Stand (lzk_online_N). Hat sich seither nur
-    online etwas getan (verschoben, bewertet), bleibt es unangetastet und wird
-    gemeldet; haben sich beide Seiten verschieden geaendert, entscheidet der Mensch
+    online etwas getan (verschoben, bewertet), bleibt es online unangetastet und
+    wird gemeldet -- hereingeholt wird es beim Abruf (lt_freie_lzk_uebernehmen);
+    haben sich beide Seiten verschieden geaendert, entscheidet der Mensch
     ("Freie Mathe-LZK zuordnen…"). Online geloescht wird nie etwas, und ein leeres
     Feld hier ueberschreibt nichts.
 
@@ -502,6 +503,7 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
             eigene |= {l["id"] for l in (b.lzk_online_1, b.lzk_online_2) if l}
     txt = lambda w: LZK_ERGEBNIS_TEXT.get(w, w) if w else "nicht bewertet"
     zuordnen = "über „Freie Mathe-LZK zuordnen…“"
+    abruf = "„Ergebnisse abrufen…“ übernimmt das"
     auftraege, uebersprungen, vergangen = [], [], 0
 
     for b in student.bausteine:
@@ -539,7 +541,7 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
                         felder["datum"] = lok_d
                         danach["datum"] = _iso(lok_d)
                 elif lok_d == basis_d and on_d != basis_d:
-                    melde(f"online auf {_fmt_kurz(on_d)} verschoben – {zuordnen} übernehmen")
+                    melde(f"online auf {_fmt_kurz(on_d)} verschoben – {abruf}")
                 elif lok_d != basis_d:
                     if lok_d == on_d:
                         danach["datum"] = _iso(lok_d)
@@ -555,7 +557,8 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
                         felder["status"], felder["pokale"] = ziel
                         danach["ergebnis"] = lok_e
                 elif lok_e == basis_e and on_e != basis_e:
-                    melde(f"online bewertet ({txt(on_e)}) – {zuordnen} übernehmen")
+                    melde(f"online bewertet ({txt(on_e)}) – {abruf}" if on_e else
+                          f"online nicht mehr bewertet – hier bleibt {txt(lok_e)}")
                 elif lok_e != basis_e:
                     if lok_e == on_e:
                         danach["ergebnis"] = lok_e
@@ -604,6 +607,56 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
             auftraege.append({**kopf, "art": "anlegen", "alt": None, "neu": lok_d,
                               "alt_erg": "", "neu_erg": lok_e})
     return auftraege, uebersprungen, vergangen
+
+
+def lt_freie_lzk_uebernehmen(student, konto: dict):
+    """Beim Abruf: was an VERKNUEPFTEN freien Mathe-LZK nur online geaendert wurde
+    (verschoben, bewertet), kommt in den Baustein -- ohne Rueckfrage.
+
+    Je Feld nur, wenn es HIER seit dem letzten Abgleich unveraendert ist: dann ist
+    der Stand online der neuere. Wurde hier ebenfalls geaendert, bleibt beides
+    stehen ("Freie Mathe-LZK zuordnen…" entscheidet); nur hier Geaendertes schickt
+    das Senden hinaus. Leeres ueberschreibt nichts: nimmt jemand online die
+    Bewertung zurueck, bleibt sie hier stehen und wird gemeldet. Nicht verknuepfte
+    LZK ordnet der Abruf weiterhin NICHT selbst zu.
+
+    Rueckgabe (uebernommen, gemeldet): Zeilen fuer den Bericht.
+    """
+    txt = lambda w: LZK_ERGEBNIS_TEXT.get(w, w) if w else "nicht bewertet"
+    uebernommen, gemeldet = [], []
+    paare, _offen = lt_freie_lzk_abgleich(student, konto)
+    for p in paare:
+        link = p["link"]
+        if not link:
+            continue
+        b, nummer = p["baustein"], p["nummer"]
+        basis_d, basis_e = _to_date(link.get("datum")), link.get("ergebnis") or ""
+        lok_d, lok_e = _to_date(p["hier_datum"]), p["hier_erg"]
+        on_d, on_e = p["online_datum"], p["online_erg"]
+        wo = f"{p['person']} · {b.name} (LZK {nummer})"
+        danach, teile = dict(link), []
+        if on_d != lok_d:
+            if lok_d == basis_d and on_d is not None:
+                setattr(b, f"lzk_datum_{nummer}", on_d)
+                danach["datum"] = _iso(on_d)
+                teile.append(f"Datum {_fmt_kurz(lok_d) or '–'} → {_fmt_kurz(on_d)}")
+        elif on_d != basis_d:
+            danach["datum"] = _iso(on_d)          # beide Seiten gleich geaendert
+        if on_e != lok_e:
+            if lok_e == basis_e:
+                if on_e:
+                    setattr(b, f"lzk_ergebnis_{nummer}", on_e)
+                    danach["ergebnis"] = on_e
+                    teile.append(f"Ergebnis {txt(lok_e)} → {txt(on_e)}")
+                else:
+                    gemeldet.append(f"{wo}: online nicht mehr bewertet – hier bleibt {txt(lok_e)}")
+        elif on_e != basis_e:
+            danach["ergebnis"] = on_e
+        if danach != link:
+            setattr(b, f"lzk_online_{nummer}", danach)
+        if teile:
+            uebernommen.append(f"{wo}: " + ", ".join(teile))
+    return uebernommen, gemeldet
 
 
 def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):

@@ -11,7 +11,8 @@ import tempfile
 from datetime import date
 
 from arbeitsstaende_data import (
-    Arbeitsstaende, Baustein, Student, lt_fb_besuche, lt_freie_lzk_senden, lt_lzk_aenderungen,
+    Arbeitsstaende, Baustein, Student, lt_fb_besuche, lt_freie_lzk_senden,
+    lt_freie_lzk_uebernehmen, lt_lzk_aenderungen,
     lt_talk_zeile, lt_zeilen_aktualisieren, LT_MARKER)
 
 TMP = tempfile.mkdtemp(prefix="arbeitsstaende_test_")
@@ -459,6 +460,38 @@ def test_lzk_termine_eigener_bausteine():
     print("OK: test_lzk_termine_eigener_bausteine")
 
 
+def test_abruf_uebernimmt_online_geaendertes():
+    """Der Abruf holt, was an einer verknuepften LZK NUR online geaendert wurde --
+    nie etwas, das hier seither geaendert wurde, und nie Leeres."""
+    def online(datum="2026-09-30", status="ausstehend", pokale=0):
+        return {"lzk": [{"id": 70, "typ": "Basis", "lerntheke": None, "datum": datum, "status": status,
+                         "pokale": pokale, "thema": "Kreise", "anfrage": None, "fach": "mathe"}]}
+
+    def kreise(**felder):
+        b = Baustein(name="Kreise", lzk_datum_1=date(2026, 9, 30),
+                     lzk_online_1={"id": 70, "datum": "2026-09-30", "ergebnis": ""})
+        for k, v in felder.items():
+            setattr(b, k, v)
+        return b
+
+    b = kreise()
+    uebernommen, _ = lt_freie_lzk_uebernehmen(Student(vorname="A", nachname="B", bausteine=[b]),
+                                             online("2026-10-05", "bestanden", 2))
+    assert (b.lzk_datum_1, b.lzk_ergebnis_1) == (date(2026, 10, 5), "2") and len(uebernommen) == 1
+    assert b.lzk_online_1 == {"id": 70, "datum": "2026-10-05", "ergebnis": "2"}
+
+    # Hier verschoben: der Abruf holt das alte Datum nicht zurueck
+    b = kreise(lzk_datum_1=date(2026, 10, 2))
+    lt_freie_lzk_uebernehmen(Student(vorname="A", nachname="B", bausteine=[b]), online())
+    assert b.lzk_datum_1 == date(2026, 10, 2)
+
+    # Online die Bewertung zurueckgenommen: hier bleibt sie stehen
+    b = kreise(lzk_ergebnis_1="2", lzk_online_1={"id": 70, "datum": "2026-09-30", "ergebnis": "2"})
+    _, gemeldet = lt_freie_lzk_uebernehmen(Student(vorname="A", nachname="B", bausteine=[b]), online())
+    assert b.lzk_ergebnis_1 == "2" and len(gemeldet) == 1
+    print("OK: test_abruf_uebernimmt_online_geaendertes")
+
+
 def test_fabue_anwesenheit_im_bericht():
     """Die Bausteinzeile meldet nur noch, was KEIN Besuch ist.
 
@@ -546,6 +579,7 @@ if __name__ == "__main__":
     test_json_fremde_datei_warnt_statt_abzustuerzen()
     test_lzk_abgleich_mit_dem_server()
     test_lzk_termine_eigener_bausteine()
+    test_abruf_uebernimmt_online_geaendertes()
     test_fabue_anwesenheit_im_bericht()
     test_fabue_teilnahmen_werden_zu_besuchen()
     print("\nAlle Tests erfolgreich.")

@@ -107,9 +107,12 @@ Namen ändern sich.
 - **Lerntheken-App → Einstellungen…**: Adresse der App und Admin-Benutzername.
   Das Passwort wird nicht gespeichert, sondern einmal pro Programmstart
   abgefragt (siehe „Passwort und Offline-Arbeiten").
-- **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Fachbüro, Kleeblätter,
+- **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Fachbüro, Flammen,
   Stationen und LZK in die Bausteinlisten -- je Halbjahr eine Zeile pro
-  bearbeiteter Lerntheke und eine für Talks/Fachbüro. Arbeitest du gerade mit
+  bearbeiteter Lerntheke und eine für Talks/Fachbüro. Freie Mathe-LZK, die mit
+  einem eigenen Baustein verknüpft sind, bringt er auf den Stand von online
+  (verschoben, bewertet) -- aber nur, was du hier seitdem nicht geändert hast
+  (siehe „LZK-Termine zurück in die Lerntheken-App"). Arbeitest du gerade mit
   einer Excel-Mappe, entsteht zusätzlich das Rohdaten-Blatt **„App-Daten"**.
   Danach noch speichern.
 - **Beim Fachbüro zählt die Anwesenheit**, nicht die Zusage: für vergangene
@@ -193,8 +196,11 @@ Kalender, wer wann eine LZK schreibt.
   der Arbeitsdatei -- also speichern). Verschiebst du den Termin hier oder
   trägst ein Ergebnis ein, zieht das Senden die LZK online nach. Wurde sie
   **online** verschoben oder bewertet, wird das nie mit dem alten Stand
-  überschrieben; übernehmen geht über *Lerntheken-App → Freie Mathe-LZK
-  zuordnen…*.
+  überschrieben: *Ergebnisse abrufen…* übernimmt es in den Baustein, sofern du
+  die LZK hier seitdem nicht geändert hast. Haben sich beide Seiten
+  verschieden geändert, entscheidest du über *Lerntheken-App → Freie
+  Mathe-LZK zuordnen…*. Eine online zurückgenommene Bewertung löscht hier
+  nichts -- das wird nur gemeldet.
 - **Automatisch**: sobald du in einem Baustein ein LZK-Datum änderst, geht es
   kurz darauf an die App. Rückmeldung nur in der Statuszeile, nie als Fenster;
   klappt es nicht, bleibt die Änderung hier stehen und geht beim nächsten

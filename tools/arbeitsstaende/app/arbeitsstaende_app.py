@@ -18,7 +18,8 @@ from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
     halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren, ist_json_pfad,
     lt_lzk_aenderungen, lt_lzk_ergebnis_unterschiede, lzk_ergebnis_zum_server,
-    lt_freie_lzk_abgleich, lt_freie_lzk_senden, lzk_verknuepfung, FREIE_LZK_FACH,
+    lt_freie_lzk_abgleich, lt_freie_lzk_senden, lt_freie_lzk_uebernehmen, lzk_verknuepfung,
+    FREIE_LZK_FACH,
     LZK_ERGEBNIS_TEXT, LZK_ERGEBNIS_SYMBOL,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
@@ -2473,6 +2474,7 @@ class App(tk.Tk):
                       for st in self.az.students if st.alias.strip()}
         neu = akt = besuche = 0
         frei_abweichend = frei_offen = 0
+        frei_uebernommen, frei_gemeldet = [], []
         ohne_daten = []
         for _, _, _, alias in treffer:
             student = nach_alias.get(alias)
@@ -2490,16 +2492,22 @@ class App(tk.Tk):
             neu += n
             akt += a
             besuche += b
-            # Freie Mathe-LZK ordnet der Abruf bewusst NICHT selbst zu (Ziel sind von
-            # Hand gepflegte Bausteine) - er zaehlt nur, was darauf wartet.
+            # Freie Mathe-LZK: was an VERKNUEPFTEN nur online geaendert wurde, kommt
+            # herein (nur hier Unveraendertes, nie Leeres). Nicht verknuepfte ordnet
+            # der Abruf bewusst NICHT selbst zu (Ziel sind von Hand gepflegte
+            # Bausteine) - er zaehlt nur, was darauf wartet.
+            u_frei, g_frei = lt_freie_lzk_uebernehmen(student, konto)
+            frei_uebernommen += u_frei
+            frei_gemeldet += g_frei
             p_frei, o_frei = lt_freie_lzk_abgleich(student, konto)
             # Nur hier Geaendertes wartet aufs Senden, nicht aufs Uebernehmen.
             frei_abweichend += sum(1 for x in p_frei if not x["gleich"] and x["seite"] != "hier")
             frei_offen += len(o_frei)
         self._detail_anzeigen()
         # Neue FB-Besuche aendern den Farbindikator in der Liste (🟢/🟡/🔴) und
-        # das "Letzter Besuch"-Feld - ohne Neuaufbau bliebe die alte Farbe stehen.
-        if besuche:
+        # das "Letzter Besuch"-Feld, uebernommene LZK-Termine die Frist - ohne
+        # Neuaufbau bliebe der alte Stand stehen.
+        if besuche or frei_uebernommen:
             self._liste_aktualisieren()
 
         self._markiere_ungespeichert()
@@ -2515,9 +2523,12 @@ class App(tk.Tk):
                 f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n")
         if besuche:
             text += f"Fachbüro-Besuche übernommen: {besuche}.\n"
+        if frei_uebernommen:
+            text += f"Freie Mathe-LZK: {len(frei_uebernommen)} online geänderte LZK übernommen.\n"
         if frei_abweichend or frei_offen:
-            text += (f"Freie Mathe-LZK: {frei_abweichend} zum Übernehmen, {frei_offen} ohne passenden "
-                     f"Baustein – Menü „Lerntheken-App → Freie Mathe-LZK zuordnen…“.\n")
+            text += (f"Freie Mathe-LZK: {frei_abweichend} mit Unterschied (nicht von selbst übernommen), "
+                     f"{frei_offen} ohne passenden Baustein – "
+                     f"Menü „Lerntheken-App → Freie Mathe-LZK zuordnen…“.\n")
         if zeilen:
             text += f"Rohdaten im Blatt 'App-Daten': {zeilen} Zeilen.\n"
         text += "\nNoch speichern nicht vergessen."
@@ -2530,6 +2541,8 @@ class App(tk.Tk):
                 teil += f"\n... und {len(eintraege) - grenze} weitere"
             return teil
 
+        text += _liste("Freie Mathe-LZK von online übernommen", frei_uebernommen)
+        text += _liste("Freie Mathe-LZK -- hier unverändert gelassen", frei_gemeldet)
         text += _liste("Personen ohne passendes Konto -- ohne Zahlen", ohne)
         text += _liste("Konto passiv gesetzt -- uebersprungen", ohne_daten)
         text += _liste("App-Konten ohne Person in der Liste -- nicht ausgewertet",
