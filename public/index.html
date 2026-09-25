@@ -1902,6 +1902,11 @@ async function setMyDefaultSubject(value) {
   const barSubj = document.getElementById('bar-default-subject');
   if (barSubj) barSubj.value = subjectId != null ? String(subjectId) : '';
   renderHalbjahr();
+  // Der LZK-Reiter zieht mit: ist er offen, springt seine Fach-Auswahl gleich um,
+  // sonst beim naechsten Oeffnen (lzkUeOeffnen).
+  _lzkUeFach = null;
+  const lzkView = document.getElementById('view-lzk');
+  if (lzkView && lzkView.style.display !== 'none') { lzkUeFachAuswahl(); renderLzkUebersicht(); }
 }
 
 // Lerntheke metadata – loaded dynamically from /api/lerntheken-meta
@@ -3978,7 +3983,7 @@ function showView(v) {
   if (v === 'halbjahr') loadHalbjahr();
   if (v === 'klasse') loadKlasse();
   if (v === 'plenum') loadPlenum();
-  if (v === 'lzk') loadLzkUebersicht();
+  if (v === 'lzk') lzkUeOeffnen();
   if (v === 'changepw') {
     const forcedMsg = document.getElementById('cpw-forced-msg');
     const cancelBtn = document.getElementById('cpw-cancel-btn');
@@ -5299,8 +5304,24 @@ async function submitLzkEintrag() {
 // (/api/calendar liefert Lernbegleitungen alle LZK der aktiven Schueler:innen) und
 // dieselben Zeilen und Aktionen (calLzkZeile, lzkBewerten, openLzkEintragModal ...) -
 // die lesen calData.lzk, und calReload() frischt diese Ansicht auf, wenn sie offen ist.
-let _lzkUeFach = null;   // null = noch nicht gewaehlt -> Standard-Fach der Lernbegleitung
+// Fach-Auswahl: das Standard-Fach der Lernbegleitung - bei jedem Oeffnen des Reiters und
+// wenn sie es oben umstellt, wie bei Halbjahr-Uebersicht und Talks. Eine Auswahl von Hand
+// gilt, bis der Reiter wieder geoeffnet wird (Aktionen und "Laden" behalten sie).
+let _lzkUeFach = null;   // null = das Standard-Fach nehmen
 let _lzkUeSuche = '';
+function lzkUeOeffnen() {
+  _lzkUeFach = null;
+  loadLzkUebersicht();
+}
+function lzkUeFachAuswahl() {
+  const sel = document.getElementById('lzk-ue-fach');
+  if (!sel) return;
+  if (_lzkUeFach === null) _lzkUeFach = (me && me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
+  sel.innerHTML = '<option value="">Alle Fächer</option>'
+    + lzkFaecher().map(x => `<option value="${x.id}">${escHtml(x.name)}</option>`).join('');
+  sel.value = _lzkUeFach;
+  _lzkUeFach = sel.value;   // ein Standard-Fach ohne LZK (z.B. Lernberatung) -> alle
+}
 async function loadLzkUebersicht() {
   const ziel = document.getElementById('lzk-ue-liste');
   if (ziel) ziel.innerHTML = '<div class="lzk-ue-leer">Lade …</div>';
@@ -5310,14 +5331,7 @@ async function loadLzkUebersicht() {
     calData = cr.ok ? await cr.json() : { slots: [], deadlines: [] };
     calClassmates = (cmr && cmr.ok) ? await cmr.json() : [];
   } catch (e) { calData = { slots: [], deadlines: [] }; }
-  const sel = document.getElementById('lzk-ue-fach');
-  if (sel) {
-    if (_lzkUeFach === null) _lzkUeFach = (me && me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
-    sel.innerHTML = '<option value="">Alle Fächer</option>'
-      + lzkFaecher().map(x => `<option value="${x.id}">${escHtml(x.name)}</option>`).join('');
-    sel.value = _lzkUeFach;
-    _lzkUeFach = sel.value;   // ein Standard-Fach ohne LZK (z.B. Lernberatung) -> alle
-  }
+  lzkUeFachAuswahl();
   renderLzkUebersicht();
 }
 function lzkUeTag(iso) {
