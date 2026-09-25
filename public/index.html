@@ -1120,15 +1120,18 @@ textarea.form-input{
   </div>
 
   <nav class="tabs" id="app-tabs" aria-label="Bereiche">
+    <!-- Eine Reihenfolge fuer beide Rollen, ausgeblendet wird je Rolle:
+         Admin:   Kalender, Talks, LZK, Lerntheken-Uebersicht, Halbjahr, Plenum | rechts Tandem
+         Schueler:innen: Start, Kalender, Talks, Mathe-Lerntheken, Mein Halbjahr -->
     <button type="button" class="tab active" id="tab-home" onclick="showHome()">🏠 Start</button>
     <button type="button" class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</button>
-    <button type="button" class="tab" id="tab-lzk" style="display:none" onclick="showView('lzk')">📝 LZK</button>
-    <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
     <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(defaultSubjectKey())">🗣️ Talks</button>
+    <button type="button" class="tab" id="tab-lzk" style="display:none" onclick="showView('lzk')">📝 LZK</button>
     <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
     <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
-    <button type="button" class="tab" id="tab-klasse" style="display:none" onclick="showView('klasse')">👥 Tandem-Übersicht</button>
+    <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
     <button type="button" class="tab" id="tab-plenum" style="display:none" onclick="showView('plenum')">🖥️ Plenum</button>
+    <button type="button" class="tab" id="tab-klasse" style="display:none;margin-left:auto;" onclick="showView('klasse')">👥 Tandem-Übersicht</button>
   </nav>
 
   <div id="view-lerntheke" style="width:100%;">
