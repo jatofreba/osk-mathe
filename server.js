@@ -2219,7 +2219,8 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
 });
 
 // Bucht einen offenen Termin: legt Session + Einladungen in einer Transaktion an,
-// damit nie eine Session ohne eingeladene Personen übrig bleibt (einzige Transaktion im Projekt).
+// damit nie eine Session ohne eingeladene Personen übrig bleibt (die zweite Transaktion im Projekt
+// ist lzkUnterSperre - LZK anlegen ohne Doppelte).
 app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   const { slotId, thema, inviteeIds } = req.body;
   if (!slotId) return res.status(400).json({ error: 'Fehlende Angaben' });
