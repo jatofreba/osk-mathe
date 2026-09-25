@@ -3967,8 +3967,9 @@ async function autoMigrateLzk(students) {
       const correct = s.lzk.find(l => l.lerntheke === activeLt.key && l.typ === typ);
       // Only migrate records whose lerntheke key doesn't match ANY known lerntheke (true legacy/orphaned data).
       // A record belonging to a different, still-existing lerntheke is NOT an orphan - migrating it would
-      // wrongly copy that lerntheke's LZK result onto this one.
-      const orphan = !correct ? s.lzk.find(l => l.typ === typ && !ltMeta.some(lt => lt.key === l.lerntheke)) : null;
+      // wrongly copy that lerntheke's LZK result onto this one. Freie LZK (lerntheke NULL) sind ebenso
+      // KEINE Altlast: sie tragen seit c7e5b18 auch Basis/Aufbau und wurden sonst als Lerntheken-LZK kopiert.
+      const orphan = !correct ? s.lzk.find(l => l.typ === typ && l.lerntheke && !ltMeta.some(lt => lt.key === l.lerntheke)) : null;
       if (orphan) {
         await fetch('/api/admin/lzk', {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -4586,7 +4587,8 @@ function lzkCellHtml(studentLzk, s, lt) {
     // Fallback: only for truly orphaned records (lerntheke key matches no current lerntheke).
     // A record belonging to a different, still-existing lerntheke must NOT be shown here -
     // that would just recreate the cross-lerntheke mixup autoMigrateLzk() was fixed to avoid.
-    const fallback = !entry ? (studentLzk||[]).find(l => l.typ === typ && !ltMeta.some(m => m.key === l.lerntheke)) : null;
+    // Freie LZK (ohne Lerntheke) gehoeren nie in diese Zelle.
+    const fallback = !entry ? (studentLzk||[]).find(l => l.typ === typ && l.lerntheke && !ltMeta.some(m => m.key === l.lerntheke)) : null;
     if (!entry && !fallback) {
       return `<div class="lzk-admin-row">
         <span class="lzk-admin-typ">${typ}</span>
@@ -4619,9 +4621,12 @@ let _lzkModal = {};
 function openLzkModal(userId, username, lerntheke, typ) {
   _lzkModal = { userId, username, lerntheke, typ };
   const s = allStudents.find(s => s.id === userId);
+  // Rueckfall nur auf verwaiste Eintraege (unbekannter Lerntheken-Schluessel), wie in
+  // lzkCellHtml. Eine freie LZK oder die einer anderen Lerntheke vorzubelegen hiesse, sie
+  // beim Speichern als diese Lerntheken-LZK zu kopieren - oder ihre Anfrage anzunehmen.
   const existing = s && s.lzk ? (
     s.lzk.find(l => l.lerntheke===lerntheke && l.typ===typ) ||
-    s.lzk.find(l => l.typ===typ) || {}
+    s.lzk.find(l => l.typ===typ && l.lerntheke && !ltMeta.some(m => m.key === l.lerntheke)) || {}
   ) : {};
   _lzkModal.id = existing.id || null;
   _lzkModal.anfrage = existing.anfrage || null;
