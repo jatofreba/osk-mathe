@@ -222,6 +222,29 @@ zuordnen…* -- jeweils in der Richtung, die du wählst -- und *Aliasse auf dem
 Server umbenennen…*). Alles andere -- Abrufen der Ergebnisse, Aliasse,
 Halbjahresübersicht -- liest nur.
 
+## Mathe-Talks
+
+Unter den Bausteinen jeder Person steht die Liste ihrer **Mathe-Talks**, je Halbjahr
+zusammengefasst (gehalten, mit vorgetragen, zugehört, Flammen, noch unbewertet). Das
+laufende Halbjahr ist aufgeklappt.
+
+- **Abrufen:** „Lerntheken-App → Mathe-Talks abrufen" (passiert auch bei „Ergebnisse
+  abrufen"). Neue Talks kommen dazu; Datum, Uhrzeit und wer dabei ist, kommen immer
+  vom Server.
+- **Bewerten:** Doppelklick auf einen Talk oder „Bewerten…": ok / nicht ok, Flammen
+  (Zuhören bis 2, Vortrag bis 3), Emoji, eine Bemerkung (bleibt nur hier). Beim
+  gehaltenen Talk lässt sich auch das Thema schärfen.
+- **Hochladen:** „Lerntheken-App → Mathe-Talk-Bewertungen hochladen…" zeigt vorher
+  jede Änderung (online / neu). Gelb markierte Talks warten noch darauf.
+
+Hochgeladen wird nur, was hier seit dem letzten Abruf geändert wurde, und nie
+„noch nicht bewertet" oder ein leeres Thema. Beim Abruf gilt umgekehrt: Was hier
+geändert und noch nicht hochgeladen ist, bleibt stehen. Haben sich beide Seiten
+verschieden geändert, bleibt der Stand hier und der Bericht nennt den Talk. Ein
+Talk, der online verschwunden ist, wird grau markiert, aber nicht gelöscht.
+
+Die Talks stehen nur in der Arbeitsdatei (.json), nicht im Excel-Export.
+
 ## Passwort und Offline-Arbeiten
 
 - Das Passwort wird **einmal pro Programmstart** abgefragt, beim ersten

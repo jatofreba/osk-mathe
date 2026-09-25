@@ -251,6 +251,40 @@ class AppClient:
                 grund = ""
             raise ValueError(grund or f"Kursung setzen fehlgeschlagen (HTTP {e.code}).")
 
+    def _fehlertext(self, e, standard: str) -> str:
+        try:
+            grund = json.loads(e.read().decode("utf-8")).get("error", "")
+        except Exception:
+            grund = ""
+        return grund or f"{standard} (HTTP {e.code})."
+
+    def mathe_talks(self) -> List[dict]:
+        """Alle Mathe-Talk-Termine des Tandems mit Buchung, Vortragenden und
+        Zuhoerenden (dieselbe Liste wie in der Talk-Verwaltung der App)."""
+        return self._get("/api/admin/talking-slots?typ=talk&subject=mathe")
+
+    def talk_bewerten(self, rolle: str, online_id, status: str, flammen: int, emoji: str) -> None:
+        """Bewertung eines Talks setzen. Der Endpunkt schreibt Status, Flammen und
+        Emoji immer zusammen -- deshalb wird auch immer alles mitgeschickt.
+
+        rolle "gehalten": die Buchung selbst; sonst die Einladung (Mit-Vortrag
+        oder Zuhoeren).
+        """
+        daten = {"status": status, "pokale": int(flammen or 0), "qualityEmoji": emoji or None}
+        pfad = (f"/api/admin/talking-sessions/{online_id}/confirm-presented" if rolle == "gehalten"
+                else f"/api/admin/talking-invitations/{online_id}/confirm-attended")
+        try:
+            self._post(pfad, daten)
+        except error.HTTPError as e:
+            raise ValueError(self._fehlertext(e, "Bewertung senden fehlgeschlagen"))
+
+    def talk_thema(self, session_id, thema: str) -> None:
+        """Thema eines gebuchten Talks nachschaerfen (nur eigene Termine bzw. Super-Admin)."""
+        try:
+            self._post(f"/api/admin/talking-sessions/{session_id}/thema", {"thema": thema})
+        except error.HTTPError as e:
+            raise ValueError(self._fehlertext(e, "Thema senden fehlgeschlagen"))
+
     def umbenennen(self, user_id, neuer_name: str) -> str:
         """Aendert NUR den Kontonamen auf dem Server. Fortschritt, LZK-Eintraege,
         Talks/Fachbuero-Termine und Flammen bleiben vollstaendig erhalten --

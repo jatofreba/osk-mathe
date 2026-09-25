@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from openpyxl import Workbook, load_workbook
@@ -878,6 +878,306 @@ def _ohne_leere(d: dict) -> dict:
     return {k: v for k, v in d.items() if v not in (None, "", [], {})}
 
 
+# ----------------------------------------------------------------------
+# Mathe-Talks (2026-09-25)
+# ----------------------------------------------------------------------
+# Jede Person fuehrt ihre Talks als eigene Liste: einen Eintrag je Talk, den
+# sie gehalten (auch zu zweit), mit vorgetragen oder zugehoert hat. Abgerufen
+# wird alles, was online steht; zurueckgeschickt werden nur BEWERTUNGEN (und
+# bei gehaltenen Talks das Thema) -- und nur, was hier seit dem letzten
+# Abgleich geaendert wurde. Grundlage dafuer ist `online`: der Stand, auf den
+# sich Liste und Server zuletzt geeinigt haben (wie lzk_online bei den LZK).
+
+TALK_ROLLEN = ("gehalten", "mitvortrag", "zugehoert")
+TALK_ROLLEN_TEXT = {"gehalten": "gehalten", "mitvortrag": "mit vorgetragen",
+                    "zugehoert": "zugehört"}
+# Dieselben Werte wie auf dem Server (TALKING_STATUS_VALUES). "ausstehend" heisst
+# "noch nicht bewertet" und wird nie hochgeschickt.
+TALK_STATUS_WERTE = ["ausstehend", "erledigt", "nicht_erledigt"]
+TALK_STATUS_TEXT = {"ausstehend": "noch nicht bewertet",
+                    "erledigt": "✓ ok", "nicht_erledigt": "✗ nicht ok"}
+# Auswahl wie auf dem Server (TALKING_QUALITY_EMOJIS); "" = kein Emoji.
+TALK_EMOJIS = ["", "🤩", "🌟", "👍", "🙂", "🤔", "💡", "🎯", "🔥"]
+TALK_BEWERTUNG = ("status", "flammen", "emoji")
+
+
+def _talk_datum(wert) -> Optional[date]:
+    """Datum eines Talks aus der Server-Antwort.
+
+    Der Server schickt DATE-Spalten als Zeitstempel der lokalen Mitternacht in
+    UTC ("2026-09-24T22:00:00.000Z" fuer den 25.09.). Das blosse Abschneiden
+    ergaebe den Vortag; +12 Stunden landen fuer jede Zeitzone zwischen -12 und
+    +12 Stunden sicher auf dem richtigen Tag.
+    """
+    if isinstance(wert, str) and "T" in wert:
+        try:
+            zeit = datetime.fromisoformat(wert.replace("Z", "+00:00"))
+        except ValueError:
+            return _to_date(wert[:10])
+        return (zeit + timedelta(hours=12)).date()
+    return _to_date(wert)
+
+
+def _flammen(wert, hoechstens: int) -> int:
+    try:
+        n = int(wert or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return max(0, min(hoechstens, n))
+
+
+@dataclass
+class MatheTalk:
+    rolle: str = "zugehoert"           # siehe TALK_ROLLEN
+    # Kennung online: bei "gehalten" die Buchung (talking_sessions.id), sonst die
+    # Einladung (talking_invitations.id) -- daran haengt jeweils die Bewertung.
+    online_id: Optional[int] = None
+    session_id: Optional[int] = None
+    datum: Optional[date] = None
+    uhrzeit: str = ""
+    halbjahr: str = ""
+    thema: str = ""
+    # Wer sonst vortraegt ("gehalten"/"mitvortrag") bzw. bei wem man
+    # zugehoert hat ("zugehoert").
+    mit: str = ""
+    status: str = "ausstehend"
+    flammen: int = 0
+    emoji: str = ""
+    bemerkung: str = ""                # nur hier, geht nie zum Server
+    online: Optional[dict] = None      # {"status","flammen","emoji","thema"}
+    # Beim letzten Abruf online nicht mehr gefunden (Termin geloescht, Person
+    # ausgeladen). Wird gemeldet, nie von selbst geloescht.
+    online_fehlt: bool = False
+
+    @property
+    def max_flammen(self) -> int:
+        # Zuhoeren bis 2 Flammen, Vortrag und Mit-Vortrag bis 3 (wie der Server).
+        return 2 if self.rolle == "zugehoert" else 3
+
+    @property
+    def schluessel(self):
+        return ("s" if self.rolle == "gehalten" else "i", self.online_id)
+
+    def bewertung(self) -> dict:
+        return {"status": self.status, "flammen": int(self.flammen or 0),
+                "emoji": self.emoji or ""}
+
+
+def talk_als_dict(t: MatheTalk) -> dict:
+    return _ohne_leere({
+        "rolle": t.rolle, "online_id": t.online_id, "session_id": t.session_id,
+        "datum": _iso(t.datum), "uhrzeit": t.uhrzeit, "halbjahr": t.halbjahr,
+        "thema": t.thema, "mit": t.mit, "status": t.status,
+        "flammen": t.flammen or None, "emoji": t.emoji, "bemerkung": t.bemerkung,
+        "online": t.online, "online_fehlt": t.online_fehlt or None,
+    })
+
+
+def talk_aus_dict(d: dict) -> MatheTalk:
+    rolle = d.get("rolle") if d.get("rolle") in TALK_ROLLEN else "zugehoert"
+    status = d.get("status") if d.get("status") in TALK_STATUS_WERTE else "ausstehend"
+    t = MatheTalk(rolle=rolle, online_id=d.get("online_id"), session_id=d.get("session_id"),
+                  datum=_to_date(d.get("datum")), uhrzeit=d.get("uhrzeit") or "",
+                  halbjahr=d.get("halbjahr") or "", thema=d.get("thema") or "",
+                  mit=d.get("mit") or "", status=status,
+                  emoji=d.get("emoji") if d.get("emoji") in TALK_EMOJIS else "",
+                  bemerkung=d.get("bemerkung") or "",
+                  online=d.get("online") if isinstance(d.get("online"), dict) else None,
+                  online_fehlt=bool(d.get("online_fehlt")))
+    t.flammen = _flammen(d.get("flammen"), t.max_flammen)
+    return t
+
+
+def _dabei(eintrag: dict) -> bool:
+    """Zaehlt eine Einladung? Zugesagt, oder schon bewertet (wie der Server)."""
+    return (eintrag.get("status") == "angenommen"
+            or (eintrag.get("attendedStatus") or "ausstehend") != "ausstehend")
+
+
+def lt_mathe_talks(slots: list) -> dict:
+    """Server-Antwort (/api/admin/talking-slots, Mathe-Talks) -> je Benutzername
+    die Liste seiner Talks (dicts in MatheTalk-Form, dazu "online")."""
+    je_person = {}
+
+    def dazu(name, **werte):
+        name = (name or "").strip().lower()
+        if not name:
+            return
+        werte["online"] = {"status": werte["status"], "flammen": werte["flammen"],
+                           "emoji": werte["emoji"], "thema": werte["thema"]}
+        je_person.setdefault(name, []).append(werte)
+
+    for slot in slots or []:
+        if not slot.get("session_id"):
+            continue                       # freier Termin, noch niemand gebucht
+        if (slot.get("typ") or "talk") != "talk":
+            continue
+        datum = _talk_datum(slot.get("datum"))
+        gemeinsam = dict(session_id=slot["session_id"], datum=datum,
+                         uhrzeit=slot.get("uhrzeit") or "",
+                         halbjahr=(slot.get("halbjahr") or "").strip()
+                         or (halbjahr_fuer_datum(datum) if datum else ""),
+                         thema=slot.get("thema") or "")
+        vortrag = slot.get("presenter_username") or ""
+        mit_vortrag = [c for c in slot.get("coPresenters") or [] if _dabei(c)]
+        mit_namen = [c.get("username") or "" for c in mit_vortrag]
+
+        dazu(vortrag, rolle="gehalten", online_id=slot["session_id"],
+             mit=" & ".join(mit_namen),
+             status=slot.get("presentedStatus") or "ausstehend",
+             flammen=_flammen(slot.get("pokale"), 3),
+             emoji=slot.get("qualityEmoji") or "", **gemeinsam)
+        for c in mit_vortrag:
+            andere = [vortrag] + [n for n in mit_namen if n != c.get("username")]
+            dazu(c.get("username"), rolle="mitvortrag", online_id=c.get("id"),
+                 mit=" & ".join(n for n in andere if n),
+                 status=c.get("attendedStatus") or "ausstehend",
+                 flammen=_flammen(c.get("pokale"), 3),
+                 emoji=c.get("qualityEmoji") or "", **gemeinsam)
+        alle_vortragenden = " & ".join(n for n in [vortrag] + mit_namen if n)
+        for i in slot.get("invitees") or []:
+            if not _dabei(i):
+                continue
+            dazu(i.get("username"), rolle="zugehoert", online_id=i.get("id"),
+                 mit=alle_vortragenden,
+                 status=i.get("attendedStatus") or "ausstehend",
+                 flammen=_flammen(i.get("pokale"), 2),
+                 emoji=i.get("qualityEmoji") or "", **gemeinsam)
+    return je_person
+
+
+def _talk_text(student, t) -> str:
+    return (f"{student.voller_name}: {_fmt_kurz(t.datum)} „{t.thema or 'Talk'}“ "
+            f"({TALK_ROLLEN_TEXT.get(t.rolle, t.rolle)})")
+
+
+def lt_talks_uebernehmen(student, eintraege: list) -> dict:
+    """Traegt den Serverstand in student.talks ein -- Drei-Wege-Abgleich.
+
+    Termin-Angaben (Datum, Uhrzeit, wer dabei ist) kommen immer vom Server. Bei
+    Bewertung und Thema entscheidet der letzte gemeinsame Stand (`online`):
+    hier unveraendert -> Server uebernehmen; nur hier geaendert -> bleibt und
+    wartet aufs Hochladen; beide verschieden geaendert -> bleibt hier, wird
+    gemeldet. Was online fehlt, wird markiert, nie geloescht.
+    """
+    bericht = {"neu": 0, "uebernommen": [], "konflikte": [], "fehlen": []}
+    vorhanden = {t.schluessel: t for t in student.talks if t.online_id is not None}
+    gesehen = set()
+
+    for e in eintraege or []:
+        schluessel = ("s" if e["rolle"] == "gehalten" else "i", e["online_id"])
+        gesehen.add(schluessel)
+        srv = e["online"]
+        t = vorhanden.get(schluessel)
+        if t is None:
+            t = MatheTalk(
+                rolle=e["rolle"], online_id=e["online_id"], session_id=e["session_id"],
+                datum=e["datum"], uhrzeit=e["uhrzeit"], halbjahr=e["halbjahr"],
+                thema=e["thema"], mit=e["mit"], status=srv["status"],
+                flammen=srv["flammen"], emoji=srv["emoji"], online=dict(srv))
+            student.talks.append(t)
+            vorhanden[schluessel] = t
+            bericht["neu"] += 1
+            continue
+        t.session_id, t.datum, t.uhrzeit = e["session_id"], e["datum"], e["uhrzeit"]
+        t.halbjahr, t.mit, t.online_fehlt = e["halbjahr"], e["mit"], False
+        alt = t.online or {}
+        srv_bew = {k: srv[k] for k in TALK_BEWERTUNG}
+        alt_bew = {k: alt.get(k) for k in TALK_BEWERTUNG}
+        hier_bew = t.bewertung()
+        if hier_bew == alt_bew or hier_bew == srv_bew:
+            if hier_bew != srv_bew:
+                bericht["uebernommen"].append(_talk_text(student, t) + " -- Bewertung")
+            t.status, t.flammen, t.emoji = srv["status"], srv["flammen"], srv["emoji"]
+            bew_neu = srv_bew
+        elif srv_bew == alt_bew:
+            bew_neu = alt_bew              # nur hier geaendert: wartet aufs Hochladen
+        else:
+            bericht["konflikte"].append(_talk_text(student, t)
+                                        + " -- hier und online verschieden bewertet, hier bleibt")
+            bew_neu = srv_bew              # beim Hochladen sichtbar als "online inzwischen"
+        # Das Thema pflegt hier nur der gehaltene Talk; alle anderen folgen dem Server.
+        if t.rolle != "gehalten" or t.thema in (alt.get("thema"), srv["thema"]):
+            if t.rolle == "gehalten" and t.thema != srv["thema"]:
+                bericht["uebernommen"].append(_talk_text(student, t) + " -- Thema")
+            t.thema = srv["thema"]
+            thema_neu = srv["thema"]
+        elif srv["thema"] == alt.get("thema"):
+            thema_neu = alt.get("thema")
+        else:
+            bericht["konflikte"].append(_talk_text(student, t)
+                                        + " -- Thema hier und online geaendert, hier bleibt")
+            thema_neu = srv["thema"]
+        t.online = dict(bew_neu, thema=thema_neu)
+
+    for t in student.talks:
+        if t.online_id is not None and t.schluessel not in gesehen and not t.online_fehlt:
+            t.online_fehlt = True
+            bericht["fehlen"].append(_talk_text(student, t))
+    student.talks.sort(key=lambda t: (t.datum or date.min, t.uhrzeit), reverse=True)
+    return bericht
+
+
+def lt_talks_hochladen_liste(student) -> list:
+    """Was von dieser Person zum Server geht: [(talk, was, hier, online)].
+
+    `was` ist "bewertung" oder "thema". Nur hier Geaendertes; "noch nicht
+    bewertet" und ein leeres Thema gehen nie hoch (leer loescht online nichts).
+    """
+    return _talk_auftraege(student.talks)
+
+
+def _talk_auftraege(talks) -> list:
+    auftraege = []
+    for t in talks:
+        if t.online_id is None or t.online_fehlt:
+            continue
+        alt = t.online or {}
+        alt_bew = {k: alt.get(k) for k in TALK_BEWERTUNG}
+        if t.status != "ausstehend" and t.bewertung() != alt_bew:
+            auftraege.append((t, "bewertung", t.bewertung(), alt_bew))
+        if (t.rolle == "gehalten" and (t.thema or "").strip()
+                and t.thema.strip() != (alt.get("thema") or "").strip()):
+            auftraege.append((t, "thema", t.thema.strip(), alt.get("thema") or ""))
+    return auftraege
+
+
+def talk_wartet(t: MatheTalk) -> bool:
+    """Hier geaendert und noch nicht hochgeladen?"""
+    return bool(_talk_auftraege([t]))
+
+
+def talk_hochgeladen(t: MatheTalk, was: str):
+    """Nach erfolgreichem Hochladen: der hiesige Stand ist jetzt der gemeinsame."""
+    stand = dict(t.online or {})
+    if was == "bewertung":
+        stand.update(t.bewertung())
+    else:
+        stand["thema"] = t.thema.strip()
+    t.online = stand
+
+
+def talks_je_halbjahr(student) -> dict:
+    """{halbjahr: [talks]} -- neueste Halbjahre zuerst."""
+    gruppen = {}
+    for t in student.talks:
+        gruppen.setdefault(t.halbjahr or "ohne Halbjahr", []).append(t)
+    return dict(sorted(gruppen.items(), key=lambda kv: kv[0], reverse=True))
+
+
+def talks_zusammenfassung(talks: list) -> str:
+    geh = sum(1 for t in talks if t.rolle in ("gehalten", "mitvortrag"))
+    zu = sum(1 for t in talks if t.rolle == "zugehoert")
+    flammen = sum(t.flammen or 0 for t in talks if t.status == "erledigt")
+    offen = sum(1 for t in talks if t.status == "ausstehend")
+    teile = [f"{geh}x gehalten", f"{zu}x zugehört"]
+    if flammen:
+        teile.append(f"{flammen} 🔥")
+    if offen:
+        teile.append(f"{offen} unbewertet")
+    return " · ".join(teile)
+
+
 @dataclass
 class Baustein:
     name: str = ""
@@ -932,6 +1232,9 @@ class Student:
     # Grundlage für "letzter_besuch_fb" sowie für den Schnell-Eintrag
     # ("War heute im FB" / "Nachtragen") in der Oberfläche.
     fb_besuche: List[date] = field(default_factory=list)
+    # Mathe-Talks der Person (gehalten, mit vorgetragen, zugehoert) -- nur im
+    # JSON-Format, Excel kennt sie nicht. Siehe MatheTalk.
+    talks: List[MatheTalk] = field(default_factory=list)
 
     def fb_besuch_eintragen(self, tag: date):
         if tag not in self.fb_besuche:
@@ -997,6 +1300,7 @@ def student_als_dict(s: "Student") -> dict:
         "sonstige_deadline_anlass": s.sonstige_deadline_bemerkung,
         "fb_besuche": [d.isoformat() for d in s.fb_besuche],
         "bausteine": [baustein_als_dict(b) for b in s.bausteine],
+        "mathe_talks": [talk_als_dict(t) for t in s.talks],
     })
 
 
@@ -1020,6 +1324,7 @@ def student_aus_dict(d: dict) -> "Student":
     besuche = sorted({b for b in (_to_date(x) for x in d.get("fb_besuche") or []) if b})
     s.fb_besuche = besuche
     s.letzter_besuch_fb = besuche[-1] if besuche else None
+    s.talks = [talk_aus_dict(t) for t in d.get("mathe_talks") or [] if isinstance(t, dict)]
     return s
 
 

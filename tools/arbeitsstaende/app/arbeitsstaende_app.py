@@ -21,6 +21,9 @@ from arbeitsstaende_data import (
     lt_freie_lzk_abgleich, lt_freie_lzk_senden, lt_freie_lzk_uebernehmen, lzk_verknuepfung,
     FREIE_LZK_FACH,
     LZK_ERGEBNIS_TEXT, LZK_ERGEBNIS_SYMBOL,
+    MatheTalk, TALK_ROLLEN_TEXT, TALK_STATUS_WERTE, TALK_STATUS_TEXT, TALK_EMOJIS,
+    lt_mathe_talks, lt_talks_uebernehmen, lt_talks_hochladen_liste, talk_hochgeladen,
+    talk_wartet, talks_je_halbjahr, talks_zusammenfassung,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -73,6 +76,16 @@ def _mit_bemerkung(text, bemerkung):
     if not bemerkung:
         return text
     return f"{text} · {bemerkung}" if text else bemerkung
+
+
+def talk_bewertung_text(t) -> str:
+    """Bewertung eines Talks in einer Zelle: "✓ ok 🔥🔥 🤩"."""
+    teile = [TALK_STATUS_TEXT.get(t.status, t.status)]
+    if t.status == "erledigt" and t.flammen:
+        teile.append("🔥" * t.flammen)
+    if t.emoji:
+        teile.append(t.emoji)
+    return " ".join(teile)
 
 
 def parse_datum(text):
@@ -377,6 +390,148 @@ class LzkSendenDialog(tk.Toplevel):
         self.bind("<Escape>", lambda e: self.destroy())
 
     def _senden(self):
+        self.result = True
+        self.destroy()
+
+
+class TalkDialog(tk.Toplevel):
+    """Einen Mathe-Talk bewerten (und beim gehaltenen Talk das Thema schaerfen).
+
+    Aendert nur die Liste hier. Zum Server geht es erst ueber
+    "Lerntheken-App -> Mathe-Talk-Bewertungen hochladen…".
+    """
+
+    def __init__(self, parent, talk: MatheTalk, person: str):
+        super().__init__(parent)
+        self.title("Mathe-Talk bewerten")
+        self.resizable(False, False)
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+        self.talk = talk
+
+        info = (f"{person} · {TALK_ROLLEN_TEXT.get(talk.rolle, talk.rolle)}\n"
+                f"{fmt_datum(talk.datum)} {talk.uhrzeit}".strip())
+        if talk.mit:
+            info += f"\n{'bei' if talk.rolle == 'zugehoert' else 'mit'} {talk.mit}"
+        ttk.Label(self, text=info, justify="left").grid(row=0, column=0, columnspan=2,
+                                                      sticky="w", padx=8, pady=(8, 6))
+        zeile = 1
+        ttk.Label(self, text="Thema").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
+        self.v_thema = tk.StringVar(value=talk.thema)
+        thema = ttk.Entry(self, textvariable=self.v_thema, width=40)
+        thema.grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        if talk.rolle != "gehalten":
+            # Das Thema gehoert zur Buchung; geschaerft wird es am gehaltenen Talk.
+            thema.config(state="disabled")
+        zeile += 1
+
+        ttk.Label(self, text="Bewertung").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
+        self._status_texte = [TALK_STATUS_TEXT[w] for w in TALK_STATUS_WERTE]
+        self.v_status = tk.StringVar(value=TALK_STATUS_TEXT.get(talk.status, self._status_texte[0]))
+        ttk.Combobox(self, textvariable=self.v_status, values=self._status_texte,
+                     state="readonly", width=24).grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        zeile += 1
+
+        ttk.Label(self, text="Flammen").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
+        self.v_flammen = tk.StringVar(value=str(talk.flammen or 0))
+        ttk.Combobox(self, textvariable=self.v_flammen,
+                     values=[str(n) for n in range(talk.max_flammen + 1)],
+                     state="readonly", width=6).grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        zeile += 1
+
+        ttk.Label(self, text="Emoji").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
+        self.v_emoji = tk.StringVar(value=talk.emoji or "")
+        ttk.Combobox(self, textvariable=self.v_emoji, values=TALK_EMOJIS,
+                     state="readonly", width=6).grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        zeile += 1
+
+        ttk.Label(self, text="Bemerkung\n(nur hier)").grid(row=zeile, column=0, sticky="ne", padx=8, pady=4)
+        self.t_bem = tk.Text(self, width=40, height=4, wrap="word")
+        self.t_bem.grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        self.t_bem.insert("1.0", talk.bemerkung or "")
+        self.t_bem.bind("<Return>", BausteinDialog._zeilenumbruch)
+        zeile += 1
+
+        ttk.Label(self, text="Flammen zählen nur bei „✓ ok“. „Noch nicht bewertet“ wird nie hochgeladen.",
+                  foreground="#555").grid(row=zeile, column=0, columnspan=2, sticky="w", padx=8)
+        zeile += 1
+        btns = ttk.Frame(self)
+        btns.grid(row=zeile, column=0, columnspan=2, pady=10)
+        ttk.Button(btns, text="Übernehmen", command=self._uebernehmen).pack(side="left", padx=4)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="left", padx=4)
+        self.bind("<Return>", lambda e: self._uebernehmen())
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _uebernehmen(self):
+        t = self.talk
+        status = TALK_STATUS_WERTE[self._status_texte.index(self.v_status.get())]
+        try:
+            flammen = int(self.v_flammen.get() or 0)
+        except ValueError:
+            flammen = 0
+        self.result = {
+            "status": status,
+            "flammen": max(0, min(t.max_flammen, flammen)),
+            "emoji": self.v_emoji.get() if self.v_emoji.get() in TALK_EMOJIS else "",
+            "bemerkung": self.t_bem.get("1.0", "end").rstrip("\n"),
+            "thema": self.v_thema.get().strip() if t.rolle == "gehalten" else t.thema,
+        }
+        self.destroy()
+
+
+class TalkHochladenDialog(tk.Toplevel):
+    """Zeigt vor dem Hochladen jede Aenderung einzeln: hier und online."""
+
+    def __init__(self, parent, auftraege: list, klasse: str):
+        super().__init__(parent)
+        self.title("Mathe-Talk-Bewertungen hochladen")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self, text=f"Tandem {klasse} — {len(auftraege)} Änderung(en) gehen zum Server:",
+                  font=("", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 6))
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=10)
+        tabelle = ttk.Treeview(rahmen, columns=("talk", "was", "online", "hier"),
+                               show="tree headings", height=14)
+        tabelle.heading("#0", text="Person")
+        for key, text, breite in (("talk", "Talk", 240), ("was", "", 80),
+                                  ("online", "online", 150), ("hier", "neu", 150)):
+            tabelle.heading(key, text=text)
+            tabelle.column(key, width=breite)
+        tabelle.column("#0", width=150)
+
+        def bew(werte):
+            if not werte or not werte.get("status"):
+                return "—"
+            t = MatheTalk(status=werte["status"], flammen=werte.get("flammen") or 0,
+                          emoji=werte.get("emoji") or "")
+            return talk_bewertung_text(t)
+
+        for i, (student, t, was, hier, online) in enumerate(auftraege):
+            talk = f"{fmt_datum(t.datum)} {t.thema} ({TALK_ROLLEN_TEXT.get(t.rolle, t.rolle)})"
+            if was == "bewertung":
+                werte = (talk, "Bewertung", bew(online), bew(hier))
+            else:
+                werte = (talk, "Thema", online or "—", hier)
+            tabelle.insert("", "end", iid=str(i), text=student.voller_name, values=werte)
+        sb = ttk.Scrollbar(rahmen, command=tabelle.yview)
+        tabelle.config(yscrollcommand=sb.set)
+        tabelle.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        ttk.Label(self, text="Nur, was hier seit dem letzten Abruf geändert wurde. "
+                             "Was online inzwischen anders steht, wird damit überschrieben.",
+                  foreground="#555", wraplength=640, justify="left").pack(anchor="w", padx=10, pady=(8, 0))
+        btns = ttk.Frame(self)
+        btns.pack(pady=10)
+        ttk.Button(btns, text="Hochladen", command=self._ok).pack(side="left", padx=4)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="left", padx=4)
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _ok(self):
         self.result = True
         self.destroy()
 
@@ -955,6 +1110,10 @@ class App(tk.Tk):
         lerntheke_menu.add_command(label="LZK-Termine zum Server schicken…",
                                    command=self.app_lzk_senden)
         lerntheke_menu.add_separator()
+        lerntheke_menu.add_command(label="Mathe-Talks abrufen", command=self.talks_abrufen)
+        lerntheke_menu.add_command(label="Mathe-Talk-Bewertungen hochladen…",
+                                   command=self.talks_hochladen)
+        lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
         lerntheke_menu.add_command(label="Kursungen abgleichen…",
                                    command=self.kursungen_abgleichen)
@@ -1110,7 +1269,7 @@ class App(tk.Tk):
         baustein_rahmen.pack(fill="both", expand=True, pady=(8, 0))
 
         spalten = ("status", "bausteinarbeit", "lzk1", "note1", "lzk2", "note2", "halbjahr", "bemerkung")
-        self.tabelle = ttk.Treeview(baustein_rahmen, columns=spalten, show="tree headings", height=12)
+        self.tabelle = ttk.Treeview(baustein_rahmen, columns=spalten, show="tree headings", height=9)
         self.tabelle.heading("#0", text="Baustein",
                              command=lambda: self._bausteine_sortieren("#0"))
         self._bausteine_sortierung = None      # None = Reihenfolge wie in der Datei
@@ -1146,6 +1305,32 @@ class App(tk.Tk):
                                                  command=self.baustein_entfernen)
         self.btn_baustein_entfernen.pack(side="left")
         self.tabelle.bind("<<TreeviewSelect>>", self._knoepfe_aktualisieren)
+
+        # Mathe-Talks der Person, je Halbjahr zusammengefasst. Die Zeile des Halbjahres
+        # traegt die Summe; aufgeklappt ist nur das laufende.
+        talk_rahmen = ttk.LabelFrame(rechts, text="Mathe-Talks", padding=8)
+        talk_rahmen.pack(fill="both", expand=True, pady=(8, 0))
+        self.talk_tabelle = ttk.Treeview(talk_rahmen, columns=("datum", "rolle", "mit", "bewertung", "bemerkung"),
+                                         show="tree headings", height=7)
+        self.talk_tabelle.heading("#0", text="Halbjahr / Thema")
+        for key, text, width in (("datum", "Datum", 110), ("rolle", "Rolle", 110),
+                                 ("mit", "mit / bei", 130), ("bewertung", "Bewertung", 190),
+                                 ("bemerkung", "Bemerkung", 200)):
+            self.talk_tabelle.heading(key, text=text)
+            self.talk_tabelle.column(key, width=width)
+        self.talk_tabelle.column("#0", width=210)
+        self.talk_tabelle.pack(fill="both", expand=True)
+        self.talk_tabelle.tag_configure("halbjahr", font=("", 10, "bold"))
+        self.talk_tabelle.tag_configure("wartet", background="#FFEB9C")
+        self.talk_tabelle.tag_configure("fehlt", foreground="#999")
+        self.talk_tabelle.bind("<Double-1>", lambda e: self.talk_bewerten())
+        self.talk_tabelle.bind("<<TreeviewSelect>>", self._knoepfe_aktualisieren)
+        talk_btns = ttk.Frame(talk_rahmen)
+        talk_btns.pack(fill="x", pady=(6, 0))
+        self.btn_talk_bewerten = ttk.Button(talk_btns, text="Bewerten…", command=self.talk_bewerten)
+        self.btn_talk_bewerten.pack(side="left")
+        ttk.Label(talk_btns, text="Gelb = hier geändert, noch nicht hochgeladen · grau = online nicht mehr da",
+                  foreground="#666").pack(side="left", padx=10)
 
         self.status_leiste = ttk.Label(self, text="Keine Datei geladen.", anchor="w", padding=4)
         self.status_leiste.pack(fill="x", side="bottom")
@@ -1547,6 +1732,8 @@ class App(tk.Tk):
         baustein = "normal" if self.tabelle.selection() else "disabled"
         for b in (self.btn_baustein_bearbeiten, self.btn_baustein_entfernen):
             b.config(state=baustein)
+        # Bewerten nur auf einer Talk-Zeile, nicht auf der Halbjahres-Summe.
+        self.btn_talk_bewerten.config(state="normal" if self._markierter_talk() else "disabled")
 
     def _auswahl_geaendert(self, event=None):
         # Immer zuerst: die Knopf-Zustaende haengen an der Markierung, nicht daran,
@@ -1655,7 +1842,141 @@ class App(tk.Tk):
         self.f_deadline_bem.set("")
         self.deadline_hinweis.config(text="")
         self.tabelle.delete(*self.tabelle.get_children())
+        self.talk_tabelle.delete(*self.talk_tabelle.get_children())
         self._knoepfe_aktualisieren()
+
+    def _talks_anzeigen(self):
+        """Talk-Liste der Person neu fuellen: je Halbjahr eine Summenzeile."""
+        self.talk_tabelle.delete(*self.talk_tabelle.get_children())
+        s = self.aktueller_schueler
+        if s is None:
+            return
+        aktuelles = halbjahr_fuer_datum()
+        for hj, talks in talks_je_halbjahr(s).items():
+            knoten = f"hj:{hj}"
+            self.talk_tabelle.insert("", "end", iid=knoten, text=hj, open=(hj == aktuelles),
+                                     values=("", "", "", talks_zusammenfassung(talks), ""),
+                                     tags=("halbjahr",))
+            for t in talks:
+                tags = []
+                if t.online_fehlt:
+                    tags.append("fehlt")
+                elif talk_wartet(t):
+                    tags.append("wartet")
+                self.talk_tabelle.insert(
+                    knoten, "end", iid=f"t:{s.talks.index(t)}", text=t.thema or "Talk",
+                    values=(f"{fmt_datum(t.datum)} {t.uhrzeit}".strip(),
+                            TALK_ROLLEN_TEXT.get(t.rolle, t.rolle), t.mit,
+                            talk_bewertung_text(t) + (" · online nicht mehr da" if t.online_fehlt else ""),
+                            _einzeilig(t.bemerkung)),
+                    tags=tuple(tags))
+
+    def _markierter_talk(self):
+        s = self.aktueller_schueler
+        auswahl = self.talk_tabelle.selection() if s is not None else ()
+        if not auswahl or not auswahl[0].startswith("t:"):
+            return None
+        i = int(auswahl[0][2:])
+        return s.talks[i] if 0 <= i < len(s.talks) else None
+
+    def talk_bewerten(self):
+        t = self._markierter_talk()
+        if t is None:
+            return
+        dlg = TalkDialog(self, t, self.aktueller_schueler.voller_name)
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+        for feld, wert in dlg.result.items():
+            setattr(t, feld, wert)
+        self._markiere_ungespeichert()
+        self._talks_anzeigen()
+        self._knoepfe_aktualisieren()
+
+    def _talks_abgleichen(self, client):
+        """Holt die Mathe-Talks und traegt sie bei allen Personen ein. Gibt den
+        Berichtstext zurueck (wirft bei Verbindungsfehlern)."""
+        je_person = lt_mathe_talks(client.mathe_talks())
+        neu, uebernommen, konflikte, fehlen = 0, [], [], []
+        for st in self.az.students:
+            alias = st.alias.strip().lower()
+            if not alias:
+                continue
+            b = lt_talks_uebernehmen(st, je_person.get(alias, []))
+            neu += b["neu"]
+            uebernommen += b["uebernommen"]
+            konflikte += b["konflikte"]
+            fehlen += b["fehlen"]
+        warten = sum(len(lt_talks_hochladen_liste(st)) for st in self.az.students)
+        text = f"Mathe-Talks: {neu} neu eingetragen, {len(uebernommen)} von online übernommen."
+        if warten:
+            text += (f"\n{warten} hier geänderte Bewertung(en) warten aufs Hochladen "
+                     "(„Mathe-Talk-Bewertungen hochladen…“).")
+        for titel, liste in (("Hier und online verschieden geändert -- hier bleibt", konflikte),
+                             ("Online nicht mehr vorhanden -- hier markiert, nicht gelöscht", fehlen),
+                             ("Von online übernommen", uebernommen)):
+            if liste:
+                text += f"\n\n{titel} ({len(liste)}):\n" + "\n".join(liste[:15])
+                if len(liste) > 15:
+                    text += f"\n... und {len(liste) - 15} weitere"
+        return text, bool(neu or uebernommen or fehlen)
+
+    def talks_abrufen(self):
+        if self._dubletten_melden("Mathe-Talks abrufen"):
+            return
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            text, geaendert = self._talks_abgleichen(client)
+        except Exception as e:
+            messagebox.showerror("Mathe-Talks abrufen", f"Abruf fehlgeschlagen:\n{e}")
+            return
+        if geaendert:
+            self._markiere_ungespeichert()
+        self._talks_anzeigen()
+        self._knoepfe_aktualisieren()
+        self._bericht("Mathe-Talks abrufen", f"Tandem {klasse}.\n{text}\n\nNoch speichern nicht vergessen.")
+
+    def talks_hochladen(self):
+        auftraege = [(st, t, was, hier, online)
+                     for st in self.az.students
+                     for t, was, hier, online in lt_talks_hochladen_liste(st)]
+        if not auftraege:
+            self._melde("Mathe-Talks: hier ist nichts geändert, was hochzuladen wäre.")
+            return
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        dlg = TalkHochladenDialog(self, auftraege, klasse)
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+        erledigt, fehler = [], []
+        for st, t, was, hier, _online in auftraege:
+            name = f"{st.voller_name}: {fmt_datum(t.datum)} {t.thema}"
+            try:
+                if was == "bewertung":
+                    client.talk_bewerten(t.rolle, t.online_id, hier["status"], hier["flammen"], hier["emoji"])
+                else:
+                    client.talk_thema(t.session_id, hier)
+            except Exception as e:
+                fehler.append(f"{name} ({'Bewertung' if was == 'bewertung' else 'Thema'}): {e}")
+                continue
+            talk_hochgeladen(t, was)
+            erledigt.append(f"{name} -- {'Bewertung' if was == 'bewertung' else 'Thema'}")
+        self._markiere_ungespeichert()
+        self._talks_anzeigen()
+        text = f"{len(erledigt)} von {len(auftraege)} Änderung(en) hochgeladen."
+        if erledigt:
+            text += "\n\n" + "\n".join(erledigt)
+        if fehler:
+            text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
+            messagebox.showwarning("Mathe-Talk-Bewertungen hochladen", text)
+        else:
+            self._bericht("Mathe-Talk-Bewertungen hochladen", text + "\n\nNoch speichern nicht vergessen.")
 
     def _detail_anzeigen(self):
         s = self.aktueller_schueler
@@ -1698,6 +2019,7 @@ class App(tk.Tk):
                                          _note_mit_ergebnis(b.lzk_note_2, b.lzk_ergebnis_2),
                                          b.halbjahr, _einzeilig(b.bemerkung)),
                                  tags=tuple(tags))
+        self._talks_anzeigen()
         # Die Tabelle wurde gerade neu gefuellt, also ist keine Zeile mehr markiert:
         # Bearbeiten/Entfernen muessen wieder ausgrauen.
         self._knoepfe_aktualisieren()
@@ -2531,6 +2853,14 @@ class App(tk.Tk):
                      f"Menü „Lerntheken-App → Freie Mathe-LZK zuordnen…“.\n")
         if zeilen:
             text += f"Rohdaten im Blatt 'App-Daten': {zeilen} Zeilen.\n"
+        # Die Mathe-Talks gleich mit: der Abgleich ist drei-Wege-sicher (hier
+        # Geaendertes bleibt), und ein Fehler dabei soll den Rest nicht kippen.
+        try:
+            talk_text, _ = self._talks_abgleichen(client)
+            self._talks_anzeigen()
+            text += talk_text + "\n"
+        except Exception as e:
+            text += f"Mathe-Talks konnten nicht abgerufen werden: {e}\n"
         text += "\nNoch speichern nicht vergessen."
 
         def _liste(titel, eintraege, grenze=10):

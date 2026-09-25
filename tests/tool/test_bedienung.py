@@ -106,8 +106,12 @@ def mach_app(personen=(), bausteine=()):
     app.liste = Auswahl(personen)
     app.tabelle = Auswahl(bausteine)
     for name in ("btn_person_entfernen", "btn_fb_heute", "btn_fb_nachtragen",
-                 "btn_baustein_neu", "btn_baustein_bearbeiten", "btn_baustein_entfernen"):
+                 "btn_baustein_neu", "btn_baustein_bearbeiten", "btn_baustein_entfernen",
+                 "btn_talk_bewerten"):
         setattr(app, name, Knopf())
+    # Talk-Liste der Person (seit den Mathe-Talks): ohne markierte Zeile.
+    app.talk_tabelle = Auswahl()
+    app.aktueller_schueler = None
     return app
 
 
@@ -119,6 +123,8 @@ pruefe("K1 ohne Auswahl sind alle Knoepfe aus",
 pruefe("K1b und Bearbeiten/Entfernen der Bausteine ebenfalls",
        app.btn_baustein_bearbeiten.state == "disabled"
        and app.btn_baustein_entfernen.state == "disabled")
+
+pruefe("K1c und Bewerten eines Mathe-Talks auch", app.btn_talk_bewerten.state == "disabled")
 
 app = mach_app(personen=("Ben Jansen",))
 app._knoepfe_aktualisieren()
