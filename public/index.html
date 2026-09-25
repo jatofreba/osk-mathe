@@ -4428,9 +4428,11 @@ function renderKlasseTable() {
   const tbody = document.getElementById('klasse-tbl');
   if (!tbody) return;
   const thead = document.getElementById('klasse-thead-row');
-  if (thead) thead.innerHTML = '<th>Name</th>' + subjectsMeta.map(s => `<th>${escHtml(s.name)}</th>`).join('') + '<th>Status</th><th></th>';
+  // Kursung gibt es nur in Angebotsfaechern - die Lernberatung (nurZugewiesen) ist nicht gekurst.
+  const kursFaecher = angebotsFaecher();
+  if (thead) thead.innerHTML = '<th>Name</th>' + kursFaecher.map(s => `<th>${escHtml(s.name)}</th>`).join('') + '<th>Status</th><th></th>';
   if (!allStudents.length) {
-    tbody.innerHTML = `<tr><td colspan="${subjectsMeta.length + 3}" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${kursFaecher.length + 3}" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
     return;
   }
   // Aktive zuerst (jeweils neueste oben), passive Schüler:innen rutschen ans Ende - bleiben aber
@@ -4442,7 +4444,7 @@ function renderKlasseTable() {
   });
   tbody.innerHTML = sorted.map(s => {
     const isAktiv = s.aktiv !== false;
-    const subjCols = subjectsMeta.map(subj => {
+    const subjCols = kursFaecher.map(subj => {
       const kurs = (subj.key === 'mathe') ? (s.kurs || 'E') : ((s.subject_kurs && s.subject_kurs[subj.key]) || 'E');
       return `<td>
         <button class="kurs-btn ${kurs === 'G' ? 'kurs-g' : 'kurs-e'}"
