@@ -637,12 +637,22 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
 .cal-title{font-size:20px;font-weight:800;display:flex;align-items:center;gap:8px;color:#1d4ed8;}
 .cal-subtitle{font-size:12.5px;color:var(--md-on-surface-variant);margin-top:2px;}
-.cal-nav{display:flex;align-items:center;gap:10px;}
 .cal-gridnav{display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0 6px;flex-wrap:wrap;}
 .cal-nav-btn{width:36px;height:36px;border-radius:50%;border:1px solid var(--md-outline-variant);background:var(--md-surface);font-size:18px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s;}
 .cal-nav-btn:hover{background:#eff6ff;border-color:#93c5fd;}
 .cal-month{font-size:18px;font-weight:800;min-width:160px;text-align:center;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+/* LZK-Uebersicht der Lernbegleitung (Reiter "LZK") */
+.lzk-ue-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+.lzk-ue-filter select.form-input{width:auto;}
+.lzk-ue-filter input.form-input{flex:1 1 220px;width:auto;min-width:0;}
+.lzk-ue-kopf{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;margin:20px 0 2px;}
+.lzk-ue-erkl{font-size:12.5px;color:var(--md-on-surface-variant);margin-bottom:6px;}
+.lzk-ue-tag{font-size:12.5px;font-weight:700;color:var(--md-on-surface-variant);margin:12px 0 6px;}
+.lzk-ue-leer{font-size:13px;color:var(--md-on-surface-variant);padding:2px 0 6px;}
+.lzk-ue-doppelt{font-size:12px;color:#b45309;margin:0 0 3px 4px;}
+/* summary bleibt list-item - mit display:flex verschwaende der Aufklapp-Pfeil */
+.lzk-ue-bewertet > summary{font-size:16px;font-weight:800;margin:20px 0 2px;cursor:pointer;}
 .cal-dow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--md-on-surface-variant);text-align:center;padding:4px 0;}
 .cal-cell{min-height:80px;border:1px solid var(--md-outline-variant);border-radius:8px;padding:4px 5px;background:var(--md-surface);display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:background .12s;overflow:hidden;}
 .cal-cell:hover{background:#f5f8ff;}
@@ -1112,6 +1122,7 @@ textarea.form-input{
   <nav class="tabs" id="app-tabs" aria-label="Bereiche">
     <button type="button" class="tab active" id="tab-home" onclick="showHome()">🏠 Start</button>
     <button type="button" class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</button>
+    <button type="button" class="tab" id="tab-lzk" style="display:none" onclick="showView('lzk')">📝 LZK</button>
     <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
     <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(defaultSubjectKey())">🗣️ Talks</button>
     <button type="button" class="tab" id="tab-lerntheke" onclick="showLerntheken()">📚 Mathe-Lerntheken</button>
@@ -1253,12 +1264,6 @@ textarea.form-input{
           <div class="cal-title">📅 Mein Kalender</div>
           <div class="cal-subtitle" id="cal-subtitle"></div>
         </div>
-        <div class="cal-nav">
-          <button class="cal-nav-btn" onclick="calShiftMonth(-1)" title="Vorheriger Monat">‹</button>
-          <div class="cal-month" id="cal-month-label"></div>
-          <button class="cal-nav-btn" onclick="calShiftMonth(1)" title="Nächster Monat">›</button>
-          <button class="btn-sm" onclick="calGoToday()">Heute</button>
-        </div>
       </div>
       <div id="cal-admin-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="btn-act btn-green" onclick="openInputSlotModal()">+ FaBü-Termin</button>
@@ -1271,11 +1276,12 @@ textarea.form-input{
       <div id="cal-leer-hinweis" style="display:none;margin:10px 0;padding:12px 14px;border-radius:12px;
         background:var(--md-surface-container-low);border:1px solid var(--md-outline-variant);
         font-size:13px;color:var(--md-on-surface-variant);"></div>
-      <!-- Ueber dem Raster nochmal blaettern: die Kopfzeile ist durch Wunschliste
-           und Wochenansicht weit nach oben gerutscht, man schaut aber hierhin. -->
+      <!-- Geblaettert wird direkt ueber dem Raster - dort schaut man hin. Die Kopfzeile
+           hatte dieselbe Leiste noch einmal; sie ist weg (ueber Wunschliste und
+           Wochenansicht war sie weit weg vom Monat, den sie blaettert). -->
       <div class="cal-gridnav">
         <button class="cal-nav-btn" onclick="calShiftMonth(-1)" title="Vorheriger Monat" aria-label="Vorheriger Monat">‹</button>
-        <div class="cal-month" id="cal-month-label2"></div>
+        <div class="cal-month" id="cal-month-label"></div>
         <button class="cal-nav-btn" onclick="calShiftMonth(1)" title="Nächster Monat" aria-label="Nächster Monat">›</button>
         <button class="btn-sm" onclick="calGoToday()">Heute</button>
       </div>
@@ -1288,6 +1294,27 @@ textarea.form-input{
         <span id="cal-legend-subjects"></span>
       </div>
       <div class="cal-detail" id="cal-detail"><div class="cal-detail-empty">Wähle einen Tag, um Details & Buchung zu sehen.</div></div>
+    </div>
+  </div>
+
+  <div id="view-lzk" style="display:none;">
+    <div class="cal-wrap">
+      <div class="cal-head">
+        <div>
+          <div class="cal-title">📝 LZK</div>
+          <div class="cal-subtitle">Alle Lernzielkontrollen deiner Lerngruppe: Anfragen entscheiden, bewerten, verschieben.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="btn-act btn-green" onclick="openLzkEintragModal(null)">+ LZK eintragen</button>
+        <button class="btn-act btn-outline" onclick="loadLzkUebersicht()">↺ Laden</button>
+      </div>
+      <div class="lzk-ue-filter">
+        <select class="form-input" id="lzk-ue-fach" aria-label="Fach" onchange="_lzkUeFach = this.value; renderLzkUebersicht()"></select>
+        <input class="form-input" id="lzk-ue-suche" type="search" placeholder="Name oder Thema suchen …" aria-label="Name oder Thema suchen"
+               oninput="_lzkUeSuche = this.value; renderLzkUebersicht()">
+      </div>
+      <div id="lzk-ue-liste"></div>
     </div>
   </div>
 
@@ -3415,8 +3442,11 @@ async function mwZumKalender(slotId) {
 }
 
 // Nach einer Aktion die Ansicht auffrischen, aus der sie kam: Kalender und "Meine Woche"
-// zeigen dieselben Termine, aber nur eine der beiden ist gerade sichtbar.
+// zeigen dieselben Termine, aber nur eine der beiden ist gerade sichtbar - dazu die
+// LZK-Uebersicht der Lernbegleitung, die dieselben LZK-Aktionen benutzt.
 function calReload() {
+  const lzk = document.getElementById('view-lzk');
+  if (lzk && lzk.style.display !== 'none') { loadLzkUebersicht(); return; }
   const cal = document.getElementById('view-calendar');
   if (cal && cal.style.display !== 'none') loadCalendar(); else loadMyWeek();
 }
@@ -3766,6 +3796,8 @@ async function showApp() {
     if (tabKlasse) tabKlasse.style.display = '';
     const tabPlenum = document.getElementById('tab-plenum');
     if (tabPlenum) tabPlenum.style.display = '';
+    const tabLzk = document.getElementById('tab-lzk');
+    if (tabLzk) tabLzk.style.display = '';
     // Kein eigenständiger Lerntheke-/Start-Tab für Admins: die Vorschau einer Lerntheke
     // läuft ausschließlich über den 👁-Button (viewStudent()) in der Lerntheken-Übersicht,
     // und "Start" zeigt eigene Pokale/Talks, die Admins nicht haben.
@@ -3907,13 +3939,13 @@ function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','home','picker','admin','talking','calendar','halbjahr','klasse','plenum','changepw'].forEach(id => {
+  ['lerntheke','home','picker','admin','talking','calendar','lzk','halbjahr','klasse','plenum','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'halbjahr' || id === 'klasse' || id === 'plenum') {
+    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'lzk' || id === 'halbjahr' || id === 'klasse' || id === 'plenum') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -3946,6 +3978,7 @@ function showView(v) {
   if (v === 'halbjahr') loadHalbjahr();
   if (v === 'klasse') loadKlasse();
   if (v === 'plenum') loadPlenum();
+  if (v === 'lzk') loadLzkUebersicht();
   if (v === 'changepw') {
     const forcedMsg = document.getElementById('cpw-forced-msg');
     const cancelBtn = document.getElementById('cpw-cancel-btn');
@@ -5261,6 +5294,103 @@ async function submitLzkEintrag() {
   calReload();
 }
 
+// ── LZK-Uebersicht (Reiter "LZK", nur Lernbegleitungen) ───────────────────────
+// Alle LZK der Lerngruppe an einem Ort. Dieselben Daten wie der Kalender
+// (/api/calendar liefert Lernbegleitungen alle LZK der aktiven Schueler:innen) und
+// dieselben Zeilen und Aktionen (calLzkZeile, lzkBewerten, openLzkEintragModal ...) -
+// die lesen calData.lzk, und calReload() frischt diese Ansicht auf, wenn sie offen ist.
+let _lzkUeFach = null;   // null = noch nicht gewaehlt -> Standard-Fach der Lernbegleitung
+let _lzkUeSuche = '';
+async function loadLzkUebersicht() {
+  const ziel = document.getElementById('lzk-ue-liste');
+  if (ziel) ziel.innerHTML = '<div class="lzk-ue-leer">Lade …</div>';
+  await loadSubjectsMeta();
+  try {
+    const [cr, cmr] = await Promise.all([fetch('/api/calendar'), fetch('/api/classmates')]);
+    calData = cr.ok ? await cr.json() : { slots: [], deadlines: [] };
+    calClassmates = (cmr && cmr.ok) ? await cmr.json() : [];
+  } catch (e) { calData = { slots: [], deadlines: [] }; }
+  const sel = document.getElementById('lzk-ue-fach');
+  if (sel) {
+    if (_lzkUeFach === null) _lzkUeFach = (me && me.defaultSubjectId != null) ? String(me.defaultSubjectId) : '';
+    sel.innerHTML = '<option value="">Alle Fächer</option>'
+      + lzkFaecher().map(x => `<option value="${x.id}">${escHtml(x.name)}</option>`).join('');
+    sel.value = _lzkUeFach;
+    _lzkUeFach = sel.value;   // ein Standard-Fach ohne LZK (z.B. Lernberatung) -> alle
+  }
+  renderLzkUebersicht();
+}
+function lzkUeTag(iso) {
+  return iso ? new Date(iso + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+             : 'ohne Datum';
+}
+function renderLzkUebersicht() {
+  const ziel = document.getElementById('lzk-ue-liste');
+  if (!ziel) return;
+  const heute = calDateStr(new Date());
+  const halbjahr = halbjahrForDateClient(new Date());
+  const fach = _lzkUeFach ? parseInt(_lzkUeFach) : null;
+  const suche = String(_lzkUeSuche || '').trim().toLowerCase();
+  // Abgelehnte Anfragen sind erledigt - wie im Kalender.
+  const alle = (calData.lzk || []).filter(l => l.anfrage !== 'abgelehnt');
+  // Zwei LZK derselben Person im selben Fach am selben Tag sind meist eine doppelt
+  // eingetragene - etwa eine freie LZK und ihre Lerntheken-Kopie (Fehler bis 7ba7a50).
+  const amTag = {};
+  alle.forEach(l => {
+    if (!l.datumIso) return;
+    const k = `${l.userId}|${l.subjectId}|${l.datumIso}`;
+    (amTag[k] = amTag[k] || []).push(l);
+  });
+  const liste = alle.filter(l => (fach == null || l.subjectId === fach)
+    && (!suche || (l.username || '').toLowerCase().includes(suche) || lzkTitel(l).toLowerCase().includes(suche)));
+  const frueher = (a, b) => (a.datumIso || '9999').localeCompare(b.datumIso || '9999')
+    || (a.username || '').localeCompare(b.username || '', 'de');
+  const anfragen = liste.filter(l => l.anfrage === 'offen').sort(frueher);
+  const fest = liste.filter(l => !l.anfrage);
+  const zuBewerten = fest.filter(l => l.status === 'ausstehend' && l.datumIso && l.datumIso <= heute).sort(frueher);
+  const anstehend = fest.filter(l => l.status === 'ausstehend' && !(l.datumIso && l.datumIso <= heute)).sort(frueher);
+  const bewertet = fest.filter(l => l.status !== 'ausstehend' && halbjahrForDateClient(l.datumIso) === halbjahr)
+    .sort((a, b) => frueher(b, a));
+
+  const zeile = l => {
+    const andere = l.datumIso ? (amTag[`${l.userId}|${l.subjectId}|${l.datumIso}`] || []).filter(x => x.id !== l.id) : [];
+    const warnung = andere.length
+      ? `<div class="lzk-ue-doppelt">⚠ Am selben Tag noch: ${andere.map(x => escHtml(lzkTitel(x))).join(', ')} – doppelt eingetragen?</div>`
+      : '';
+    return warnung + calLzkZeile(l, true);
+  };
+  // Nach Tag gruppiert - so steht das Datum ueber den Zeilen (die Kalender-Zeile selbst
+  // zeigt keins, im Tagesdetail waere es doppelt).
+  const nachTag = ls => {
+    let html = '', tag;
+    ls.forEach((l, i) => {
+      if (i === 0 || l.datumIso !== tag) {
+        tag = l.datumIso;
+        const n = ls.filter(x => x.datumIso === tag).length;
+        html += `<h4 class="lzk-ue-tag">${escHtml(lzkUeTag(tag))}${n > 1 ? ` · ${n} LZK` : ''}</h4>`;
+      }
+      html += zeile(l);
+    });
+    return html;
+  };
+  const abschnitt = (titel, ls, erklaerung, leer) =>
+    `<h3 class="lzk-ue-kopf">${titel} <span class="pill">${ls.length}</span></h3>`
+    + `<div class="lzk-ue-erkl">${erklaerung}</div>`
+    + (ls.length ? nachTag(ls) : `<div class="lzk-ue-leer">${leer}</div>`);
+
+  const faecherText = fach == null ? '' : ` im Fach ${escHtml(subjectById(fach).name)}`;
+  ziel.innerHTML =
+    abschnitt('⏳ Offene Anfragen', anfragen,
+      'Schüler:innen fragen LZK an – mit „Annehmen“ legst du den Tag fest.', `Keine offenen Anfragen${faecherText}.`)
+    + abschnitt('✍️ Zu bewerten', zuBewerten,
+      'Ab dem Termintag: ✗ nicht bestanden · 🔥 bis 🔥🔥🔥 bestanden mit Flammen.', `Nichts zu bewerten${faecherText}.`)
+    + abschnitt('📅 Anstehend', anstehend, 'Feste Termine ab morgen.', `Keine anstehenden LZK${faecherText}.`)
+    + (bewertet.length
+      ? `<details class="lzk-ue-bewertet"><summary>✅ Bewertet in diesem Halbjahr <span class="pill">${bewertet.length}</span></summary>`
+        + nachTag(bewertet) + '</details>'
+      : '');
+}
+
 function calSlotState(it) {
   if (it.mineAsPresenter || it.mineAsListener) return 'mine';
   if (me && me.role === 'admin') return it.booked ? 'closed' : 'free';
@@ -5283,10 +5413,7 @@ function renderCalendar() {
   const grid = document.getElementById('cal-grid');
   const label = document.getElementById('cal-month-label');
   if (!grid) return;
-  const beschriftung = CAL_MONTHS[calMonth] + ' ' + calYear;
-  if (label) label.textContent = beschriftung;
-  const label2 = document.getElementById('cal-month-label2');
-  if (label2) label2.textContent = beschriftung;
+  if (label) label.textContent = CAL_MONTHS[calMonth] + ' ' + calYear;
   if (dowRow) dowRow.innerHTML = ['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => `<div class="cal-dow">${d}</div>`).join('');
 
   const legendSubj = document.getElementById('cal-legend-subjects');
