@@ -240,6 +240,17 @@ async function initDB() {
         ALTER TABLE talking_invitations ADD COLUMN gesehen_am TIMESTAMPTZ;
       END IF;
     END $$;
+    -- Mehrere Vortragende je Talk (2026-09-25): die weiteren Vortragenden sind Einladungen mit
+    -- rolle='vortrag' - keine neue Spalte an der Buchung. So hat jede von ihnen gleich alles, was
+    -- eine Person an einem Talk braucht: Zusage (status) und eigene Bewertung (attended_status,
+    -- pokale bis 3, quality_emoji). Bestehende Einladungen bekommen 'zuhoeren' - an ihnen
+    -- aendert sich nichts.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='talking_invitations' AND column_name='rolle') THEN
+        ALTER TABLE talking_invitations ADD COLUMN rolle TEXT NOT NULL DEFAULT 'zuhoeren';
+      END IF;
+    END $$;
     -- Mathe-Input (2026-08-01): talking_slots dienen jetzt auch als Input-Termine (typ='input').
     -- typ='talk' = Schüler-Vortrag (mit Pokalen), typ='input' = Angebot der Lernbegleitung, Solo-buchbar, ohne Pokale.
     -- Sichtbar heißt typ='input' seit 2026-09 überall "Fachbüro" (kurz FaBü); der gespeicherte Wert bleibt 'input'.
@@ -405,6 +416,30 @@ async function initDB() {
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='lzk_modus') THEN
         ALTER TABLE subjects ADD COLUMN lzk_modus TEXT NOT NULL DEFAULT 'direkt';
+      END IF;
+    END $$;
+    -- Wie viele Personen EIN Talk hat (2026-09-25, je Fach): Vortragende (die buchende Person
+    -- mitgezaehlt) und Zuhoerende, jeweils Minimum/Maximum. Standard 1-2 / 2-5. Geprueft wird
+    -- beim Buchen und Nachladen - schon gebuchte Talks bleiben, wie sie sind. Eigener Waechter
+    -- je Spalte (sonst fehlte bei getrennten Deploys eine).
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='talk_min_vortragende') THEN
+        ALTER TABLE subjects ADD COLUMN talk_min_vortragende INTEGER NOT NULL DEFAULT 1;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='talk_max_vortragende') THEN
+        ALTER TABLE subjects ADD COLUMN talk_max_vortragende INTEGER NOT NULL DEFAULT 2;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='talk_min_zuhoerende') THEN
+        ALTER TABLE subjects ADD COLUMN talk_min_zuhoerende INTEGER NOT NULL DEFAULT 2;
+      END IF;
+    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='talk_max_zuhoerende') THEN
+        ALTER TABLE subjects ADD COLUMN talk_max_zuhoerende INTEGER NOT NULL DEFAULT 5;
       END IF;
     END $$;
     -- Admin-erstellte Input-Sessions ohne festen "Presenter" (nur zugewiesene Teilnehmer:innen) - siehe [[project_talking_sessions]].
@@ -611,6 +646,27 @@ async function mayManageSlot(req, slotId) {
   if (adminId === req.session.userId) return { ok: true, adminId };
   if (await isSuperAdmin(req.session.userId)) return { ok: true, adminId };
   return { ok: false, status: 403, error: 'Dieser Termin gehört einer anderen Lernbegleitung - nur Super-Admins dürfen ihn ändern' };
+}
+
+// Mehr Vortragende als so viele gibt es je Talk nicht (Obergrenze fuer die Fach-Einstellung).
+const TALK_MAX_VORTRAGENDE = 4;
+// Die weiteren Vortragenden einer Buchung als JSON-Liste (nach Einladung sortiert, ohne Absagen) -
+// fuer alle Listen, die eine Buchung zeigen. Sie stehen bewusst NICHT in "invitees": dort stehen
+// die Zuhoerenden, und daran haengen Zaehlungen und Anzeigen, die von weiteren Vortragenden nichts
+// wissen muessen.
+const TALK_MITVORTRAG_JSON = `COALESCE((SELECT json_agg(json_build_object(
+    'id', ci.id, 'userId', cu.id, 'username', cu.username, 'status', ci.status,
+    'attendedStatus', ci.attended_status, 'pokale', ci.pokale, 'qualityEmoji', ci.quality_emoji) ORDER BY ci.id)
+  FROM talking_invitations ci JOIN users cu ON cu.id = ci.listener_id
+  WHERE ci.session_id = ts.id AND ci.rolle = 'vortrag' AND ci.status <> 'abgelehnt'), '[]')`;
+
+// Grenzen je Talk fuer den Slot (Fach-Einstellung) - mit den Standardwerten als Rueckfall.
+async function talkGrenzen(q, slotId) {
+  const r = await q.query(`
+    SELECT COALESCE(sub.talk_min_vortragende, 1) AS "minV", COALESCE(sub.talk_max_vortragende, 2) AS "maxV",
+           COALESCE(sub.talk_min_zuhoerende, 2) AS "minZ", COALESCE(sub.talk_max_zuhoerende, 5) AS "maxZ"
+    FROM talking_slots sl LEFT JOIN subjects sub ON sub.id = sl.subject_id WHERE sl.id=$1`, [slotId]);
+  return r.rows[0] || { minV: 1, maxV: 2, minZ: 2, maxZ: 5 };
 }
 
 // Vorgegebene Auswahl für die Qualitäts-Bewertung von Mathe-Talks (Admin)
@@ -1474,7 +1530,9 @@ app.get('/api/subjects', requireLogin, async (req, res) => {
                default_dauer AS "defaultDauer", pflicht_praesentieren AS "pflichtPraesentieren",
                pflicht_zuhoeren AS "pflichtZuhoeren",
                optional_praesentieren AS "optionalPraesentieren",
-               optional_zuhoeren AS "optionalZuhoeren"
+               optional_zuhoeren AS "optionalZuhoeren",
+               talk_min_vortragende AS "minVortragende", talk_max_vortragende AS "maxVortragende",
+               talk_min_zuhoerende AS "minZuhoerende", talk_max_zuhoerende AS "maxZuhoerende"
         FROM subjects ORDER BY id
       `),
       pool.query(`
@@ -1511,6 +1569,19 @@ app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
   try {
     const { defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
             optionalPraesentieren, optionalZuhoeren, halbjahr, reset } = req.body;
+    // Grenzen je Talk: nur, wenn mitgeschickt (aeltere Aufrufe wie "Halbjahr zuruecksetzen"
+    // lassen sie stehen), und nur als stimmiges Paar.
+    const zahl = v => (v === undefined || v === null || v === '') ? null : parseInt(v);
+    const grenzen = ['minVortragende', 'maxVortragende', 'minZuhoerende', 'maxZuhoerende'].map(k => zahl(req.body[k]));
+    if (grenzen.some(g => g !== null)) {
+      const [minV, maxV, minZ, maxZ] = grenzen;
+      if (grenzen.some(g => g === null || isNaN(g)))
+        return res.status(400).json({ error: 'Bitte alle vier Zahlen für „je Talk“ angeben.' });
+      if (minV < 1 || maxV > TALK_MAX_VORTRAGENDE || minV > maxV)
+        return res.status(400).json({ error: `Vortragende: mindestens 1, höchstens ${TALK_MAX_VORTRAGENDE}, und das Minimum nicht über dem Maximum.` });
+      if (minZ < 1 || maxZ > 50 || minZ > maxZ)
+        return res.status(400).json({ error: 'Zuhörende: mindestens 1, höchstens 50, und das Minimum nicht über dem Maximum.' });
+    }
     const dauer = Math.min(600, Math.max(5, parseInt(defaultDauer) || 45));
     const pp = Math.min(10, Math.max(0, parseInt(pflichtPraesentieren)));
     const pz = Math.min(10, Math.max(0, parseInt(pflichtZuhoeren)));
@@ -1523,6 +1594,13 @@ app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
 
     await pool.query(`UPDATE subjects SET default_ort=$1, default_dauer=$2 WHERE id=$3`,
       [defaultOrt || '', dauer, req.params.id]);
+    // Grenzen je Talk gelten immer fach-weit (wie Ort/Dauer), nicht je Halbjahr.
+    if (grenzen.every(g => g !== null)) {
+      await pool.query(
+        `UPDATE subjects SET talk_min_vortragende=$1, talk_max_vortragende=$2,
+                             talk_min_zuhoerende=$3, talk_max_zuhoerende=$4 WHERE id=$5`,
+        [...grenzen, req.params.id]);
+    }
 
     if (!hj) {
       await pool.query(
@@ -1580,13 +1658,21 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         SELECT ts.presenter_id AS user_id, ts.presented_status AS "presentedStatus", ts.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
         FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
         WHERE sl.typ = 'talk'
+        UNION ALL
+        -- Mit-Vortrag: ein eigener Vortrag der Person, bewertet an ihrer Einladung.
+        SELECT ti.listener_id AS user_id, ti.attended_status AS "presentedStatus", ti.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
+        FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        JOIN talking_slots sl ON sl.id = ts.slot_id
+        WHERE sl.typ = 'talk' AND ti.rolle = 'vortrag'
+          AND (ti.status = 'angenommen' OR ti.attended_status <> 'ausstehend')
       `),
       pool.query(`
         SELECT ti.listener_id AS user_id, ti.attended_status AS "attendedStatus", ti.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE ti.status = 'angenommen' AND sl.typ = 'talk'
+        WHERE ti.status = 'angenommen' AND sl.typ = 'talk' AND ti.rolle <> 'vortrag'
       `),
       pool.query(`SELECT DISTINCT klasse, halbjahr, subject_id AS "subjectId" FROM talking_slots WHERE typ='talk'`),
       pool.query(`SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
@@ -2146,7 +2232,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     const subject = subjRes.rows[0];
     const myCreatedAt = meRow.rows[0] ? meRow.rows[0].created_at : null;
     const myPassivSeit = meRow.rows[0] ? meRow.rows[0].passiv_seit : null;
-    const [presenting, invitations, slotHalbjahre, fabue] = await Promise.all([
+    const [presenting, invitations, slotHalbjahre, fabue, mitVortrag] = await Promise.all([
       pool.query(`
         SELECT ts.id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji",
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
@@ -2155,7 +2241,13 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
                  'status', ti.status, 'herkunft', ti.herkunft, 'gesehen', ti.gesehen_am IS NOT NULL,
                  'attendedStatus', ti.attended_status,
                  'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
-               )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
+               )) FILTER (WHERE ti.id IS NOT NULL AND ti.rolle <> 'vortrag'), '[]') AS invitees,
+               ${TALK_MITVORTRAG_JSON} AS "coPresenters",
+               -- Wer das Mit-Vortragen abgesagt hat: nur fuer die buchende Person, damit sie es
+               -- sieht und die Zeile ausladen kann (sonst verschwaende die Person lautlos).
+               COALESCE((SELECT json_agg(json_build_object('id', ai.id, 'userId', au.id, 'username', au.username) ORDER BY ai.id)
+                 FROM talking_invitations ai JOIN users au ON au.id = ai.listener_id
+                 WHERE ai.session_id = ts.id AND ai.rolle = 'vortrag' AND ai.status = 'abgelehnt'), '[]') AS "coPresentersAbgesagt"
         FROM talking_sessions ts
         JOIN talking_slots sl ON sl.id = ts.slot_id
         LEFT JOIN talking_invitations ti ON ti.session_id = ts.id
@@ -2169,12 +2261,15 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
                ti.attended_status AS "attendedStatus", ti.pokale, ti.quality_emoji AS "qualityEmoji",
                ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus",
                sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
-               pu.username AS presenter_username
+               pu.username AS presenter_username,
+               COALESCE((SELECT json_agg(cu.username ORDER BY ci.id)
+                 FROM talking_invitations ci JOIN users cu ON cu.id = ci.listener_id
+                 WHERE ci.session_id = ts.id AND ci.rolle = 'vortrag' AND ci.status <> 'abgelehnt'), '[]') AS "coPresenterNames"
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
         JOIN users pu ON pu.id = ts.presenter_id
-        WHERE ti.listener_id = $1 AND sl.typ = 'talk' AND sl.subject_id = $2
+        WHERE ti.listener_id = $1 AND sl.typ = 'talk' AND sl.subject_id = $2 AND ti.rolle <> 'vortrag'
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid, subject.id]),
       pool.query(`SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1 AND typ='talk' AND subject_id=$2`, [req.session.klasse, subject.id]),
@@ -2198,7 +2293,38 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         WHERE ti.listener_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
         ORDER BY datum DESC
       `, [uid, subject.id]),
+      // Talks, bei denen die Person MIT vortraegt: Bewertung und Zusage stehen an ihrer
+      // Einladung (rolle='vortrag'), die Liste der Zuhoerenden gehoert zur Buchung.
+      pool.query(`
+        SELECT ts.id, ts.thema, ti.attended_status AS "presentedStatus", ti.pokale, ti.quality_emoji AS "qualityEmoji",
+               sl.datum, sl.uhrzeit, sl.ort, sl.halbjahr,
+               true AS "alsMitVortrag", ti.id AS "meineEinladungId", ti.status AS "meinStatus",
+               ts.presented_status AS "buchungStatus", pu.username AS "gebuchtVon",
+               COALESCE((SELECT json_agg(json_build_object(
+                   'id', li.id, 'listenerId', lu.id, 'username', lu.username,
+                   'status', li.status, 'herkunft', li.herkunft, 'gesehen', li.gesehen_am IS NOT NULL,
+                   'attendedStatus', li.attended_status, 'pokale', li.pokale, 'qualityEmoji', li.quality_emoji
+                 ) ORDER BY li.id)
+                 FROM talking_invitations li JOIN users lu ON lu.id = li.listener_id
+                 WHERE li.session_id = ts.id AND li.rolle <> 'vortrag'), '[]') AS invitees,
+               ${TALK_MITVORTRAG_JSON} AS "coPresenters"
+        FROM talking_invitations ti
+        JOIN talking_sessions ts ON ts.id = ti.session_id
+        JOIN talking_slots sl ON sl.id = ts.slot_id
+        LEFT JOIN users pu ON pu.id = ts.presenter_id
+        WHERE ti.listener_id = $1 AND ti.rolle = 'vortrag' AND sl.typ = 'talk' AND sl.subject_id = $2
+        ORDER BY sl.datum DESC, sl.uhrzeit
+      `, [uid, subject.id]),
     ]);
+
+    // Mit-Vortrag zaehlt wie ein eigener Vortrag, sobald die Person zugesagt hat (oder die
+    // Lernbegleitung schon bewertet hat) - wie beim Zuhoeren. Eine noch offene Einladung steht
+    // getrennt in mitVortragOffen (zum Annehmen/Ablehnen), eine abgelehnte nirgends.
+    const mitDabei = mitVortrag.rows.filter(r => r.meinStatus === 'angenommen' || r.presentedStatus !== 'ausstehend');
+    const mitVortragOffen = mitVortrag.rows.filter(r => r.meinStatus === 'eingeladen' && r.buchungStatus === 'ausstehend');
+    // Stabil sortiert: ohne Mit-Vortraege bleibt die Reihenfolge exakt die der Abfrage.
+    const allePraesentationen = [...presenting.rows, ...mitDabei]
+      .sort((a, b) => new Date(b.datum) - new Date(a.datum));
 
     const accepted = invitations.rows.filter(i => i.status === 'angenommen');
     // Halbjahre vor der Account-Erstellung und nach dem Passiv-Setzen zählen nicht mit - sonst
@@ -2206,13 +2332,14 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     // und bei einer passiv gesetzten Person würde es mit jedem neuen Halbjahr weiterwachsen.
     const myHalbjahre = slotHalbjahre.rows.map(r => r.halbjahr)
       .filter(hj => halbjahrCountsForUser(hj, myCreatedAt, myPassivSeit));
-    const trophies = computeTalkingTrophies(myHalbjahre, presenting.rows, accepted,
+    const trophies = computeTalkingTrophies(myHalbjahre, allePraesentationen, accepted,
       buildTargetsResolver(subject, targetRows.rows));
 
     res.json({
-      presenting: presenting.rows,
+      presenting: allePraesentationen,
       invitations: invitations.rows,
       fabue: fabue.rows,
+      mitVortragOffen,
       trophies
     });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -2224,7 +2351,11 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
 app.post('/api/talking-sessions', requireLogin, async (req, res) => {
   const { slotId, thema, inviteeIds } = req.body;
   if (!slotId) return res.status(400).json({ error: 'Fehlende Angaben' });
-  const ids = [...new Set((Array.isArray(inviteeIds) ? inviteeIds : []).map(Number))].filter(id => id && id !== req.session.userId);
+  // Weitere Vortragende (optional, je nach Fach). Wer mit vortraegt, hoert nicht zugleich zu.
+  const mitIds = [...new Set((Array.isArray(req.body.coPresenterIds) ? req.body.coPresenterIds : []).map(Number))]
+    .filter(id => id && id !== req.session.userId);
+  const ids = [...new Set((Array.isArray(inviteeIds) ? inviteeIds : []).map(Number))]
+    .filter(id => id && id !== req.session.userId && !mitIds.includes(id));
 
   const client = await pool.connect();
   try {
@@ -2270,22 +2401,51 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Fehlende Angaben' });
     }
-    // Talks brauchen mind. 1 eingeladene Person; Input ist Solo-buchbar (0 Eingeladene erlaubt).
-    if ((slotCheck.rows[0].typ || 'talk') === 'talk' && !ids.length) {
+    const istTalk = (slotCheck.rows[0].typ || 'talk') === 'talk';
+    if (mitIds.length && !istTalk) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Mindestens eine eingeladene Person nötig' });
+      return res.status(400).json({ error: 'Gemeinsam vortragen gibt es nur bei Talks.' });
+    }
+    // Talks: so viele Vortragende und Zuhoerende, wie das Fach je Talk vorsieht (Standard 1-2 und
+    // 2-5). Die Mindestzahl Zuhoerende hoechstens so gross wie die Zahl der Mitschueler:innen, die es
+    // ueberhaupt gibt. Input ist Solo-buchbar (0 Eingeladene erlaubt). Gilt nur hier beim Buchen:
+    // schon gebuchte Talks bleiben gueltig, auch wenn das Fach spaeter anders eingestellt wird.
+    if (istTalk) {
+      const g = await talkGrenzen(client, slotId);
+      const vortragende = 1 + mitIds.length;
+      if (vortragende > g.maxV || vortragende < g.minV) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: g.maxV === 1
+          ? 'In diesem Fach hält eine Person den Talk allein.'
+          : vortragende > g.maxV
+            ? `Höchstens ${g.maxV} Personen tragen gemeinsam vor.`
+            : `In diesem Fach tragen mindestens ${g.minV} Personen gemeinsam vor – wähle, mit wem du vorträgst.` });
+      }
+      const andere = await client.query(
+        `SELECT count(*)::int AS n FROM users
+         WHERE role='student' AND klasse=$1 AND aktiv=true AND NOT (id = ANY($2::int[]))`,
+        [req.session.klasse, [req.session.userId, ...mitIds]]);
+      const noetig = Math.max(1, Math.min(g.minZ, andere.rows[0].n));
+      if (ids.length < noetig || ids.length > g.maxZ) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: ids.length > g.maxZ
+          ? `Höchstens ${g.maxZ} Personen zum Zuhören einladen.`
+          : noetig === 1 ? 'Für einen Talk mindestens eine Person zum Zuhören einladen.'
+          : `Für einen Talk mindestens ${noetig} Personen zum Zuhören einladen.` });
+      }
     }
     // Überschneidungsschutz: der/die Buchende darf zu dieser Zeit nicht schon belegt sein.
     if (await hasScheduleConflict(req.session.userId, slotId)) {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen anderen Termin.' });
     }
-    if (ids.length) {
+    const alleIds = [...ids, ...mitIds];
+    if (alleIds.length) {
       const validInvitees = await client.query(
         'SELECT id FROM users WHERE id = ANY($1) AND role=$2 AND klasse=$3',
-        [ids, 'student', req.session.klasse]
+        [alleIds, 'student', req.session.klasse]
       );
-      if (validInvitees.rows.length !== ids.length) {
+      if (validInvitees.rows.length !== alleIds.length) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Ungültige eingeladene Person' });
       }
@@ -2299,6 +2459,13 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
       await client.query(
         'INSERT INTO talking_invitations (session_id, listener_id) VALUES ($1,$2)',
         [sessionId, listenerId]
+      );
+    }
+    // Weitere Vortragende werden gefragt wie alle anderen: sie sagen zu oder ab.
+    for (const mitId of mitIds) {
+      await client.query(
+        `INSERT INTO talking_invitations (session_id, listener_id, rolle) VALUES ($1,$2,'vortrag')`,
+        [sessionId, mitId]
       );
     }
     await client.query('COMMIT');
@@ -2315,23 +2482,60 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
 app.post('/api/talking-sessions/:id/invite', requireLogin, async (req, res) => {
   try {
     const { inviteeIds } = req.body;
-    if (!Array.isArray(inviteeIds) || !inviteeIds.length)
+    const mitIds = [...new Set((Array.isArray(req.body.coPresenterIds) ? req.body.coPresenterIds : []).map(Number))]
+      .filter(id => id && id !== req.session.userId);
+    if ((!Array.isArray(inviteeIds) || !inviteeIds.length) && !mitIds.length)
       return res.status(400).json({ error: 'Fehlende Angaben' });
     const session = await pool.query(
-      'SELECT id, presented_status FROM talking_sessions WHERE id=$1 AND presenter_id=$2',
+      `SELECT ts.id, ts.presented_status, ts.slot_id, sl.typ FROM talking_sessions ts
+       JOIN talking_slots sl ON sl.id = ts.slot_id WHERE ts.id=$1 AND ts.presenter_id=$2`,
       [req.params.id, req.session.userId]
     );
     if (!session.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     if (session.rows[0].presented_status !== 'ausstehend')
       return res.status(409).json({ error: 'Vortrag bereits bewertet, keine Einladungen mehr möglich' });
-    const ids = [...new Set(inviteeIds.map(Number))].filter(id => id && id !== req.session.userId);
-    if (!ids.length) return res.status(400).json({ error: 'Fehlende Angaben' });
+    const ids = [...new Set((Array.isArray(inviteeIds) ? inviteeIds : []).map(Number))]
+      .filter(id => id && id !== req.session.userId && !mitIds.includes(id));
+    if (!ids.length && !mitIds.length) return res.status(400).json({ error: 'Fehlende Angaben' });
+    // Erst alles pruefen, dann schreiben - sonst bliebe bei einer ungueltigen Person eine halbe
+    // Aenderung stehen. Die Grenzen des Fachs zaehlen, wer schon dabei ist (ohne Absagen).
+    const istTalk = (session.rows[0].typ || 'talk') === 'talk';
+    if (mitIds.length && !istTalk) return res.status(400).json({ error: 'Gemeinsam vortragen gibt es nur bei Talks.' });
+    const bisher = await pool.query(
+      `SELECT listener_id, status, rolle, attended_status FROM talking_invitations WHERE session_id=$1`, [req.params.id]);
+    const aktiv = bisher.rows.filter(r => r.status !== 'abgelehnt');
+    if (istTalk) {
+      const g = await talkGrenzen(pool, session.rows[0].slot_id);
+      const mitSchon = aktiv.filter(r => r.rolle === 'vortrag').length;
+      if (mitIds.length && 1 + mitSchon + mitIds.length > g.maxV)
+        return res.status(409).json({ error: g.maxV === 1 ? 'In diesem Fach hält eine Person den Talk allein.'
+          : `Höchstens ${g.maxV} Personen tragen gemeinsam vor.` });
+      const zuSchon = aktiv.filter(r => r.rolle !== 'vortrag').length;
+      const zuNeu = ids.filter(id => !aktiv.some(r => r.listener_id === id)).length;
+      if (zuNeu && zuSchon + zuNeu > g.maxZ)
+        return res.status(409).json({ error: `Höchstens ${g.maxZ} Personen zum Zuhören – ${zuSchon} sind schon eingeladen.` });
+    }
+    // Wer schon auf der Liste steht (und nicht abgesagt hat), wird nicht zugleich Vortragende:r.
+    const doppelt = mitIds.find(id => aktiv.some(r => r.listener_id === id));
+    if (doppelt) return res.status(409).json({ error: 'Diese Person steht schon auf der Liste – erst ausladen.' });
+    // Eine abgesagte Zeile wird unten neu gestellt - aber nie eine, an der schon eine Bewertung haengt.
+    const bewertet = mitIds.find(id => bisher.rows.some(r => r.listener_id === id && r.attended_status !== 'ausstehend'));
+    if (bewertet) return res.status(409).json({ error: 'Für diese Person ist hier schon eine Bewertung eingetragen.' });
+    const alle = [...ids, ...mitIds];
     const validInvitees = await pool.query(
       'SELECT id FROM users WHERE id = ANY($1) AND role=$2 AND klasse=$3',
-      [ids, 'student', req.session.klasse]
+      [alle, 'student', req.session.klasse]
     );
-    if (validInvitees.rows.length !== ids.length)
+    if (validInvitees.rows.length !== alle.length)
       return res.status(400).json({ error: 'Ungültige eingeladene Person' });
+    for (const mitId of mitIds) {
+      // Hat schon einmal abgesagt: dieselbe Zeile neu stellen (UNIQUE je Buchung und Person).
+      await pool.query(
+        `INSERT INTO talking_invitations (session_id, listener_id, rolle) VALUES ($1,$2,'vortrag')
+         ON CONFLICT (session_id, listener_id)
+         DO UPDATE SET status='eingeladen', rolle='vortrag', updated_at=NOW()`,
+        [req.params.id, mitId]);
+    }
     for (const listenerId of ids) {
       await pool.query(
         'INSERT INTO talking_invitations (session_id, listener_id) VALUES ($1,$2) ON CONFLICT (session_id, listener_id) DO NOTHING',
@@ -2686,7 +2890,8 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
                'status', ti.status, 'herkunft', ti.herkunft, 'gesehen', ti.gesehen_am IS NOT NULL,
                'attendedStatus', ti.attended_status,
                'pokale', ti.pokale, 'qualityEmoji', ti.quality_emoji
-             )) FILTER (WHERE ti.id IS NOT NULL), '[]') AS invitees
+             )) FILTER (WHERE ti.id IS NOT NULL AND ti.rolle <> 'vortrag'), '[]') AS invitees,
+             ${TALK_MITVORTRAG_JSON} AS "coPresenters"
       FROM talking_slots s
       JOIN subjects sub ON sub.id = s.subject_id
       LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
@@ -2845,9 +3050,11 @@ app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, as
     if (!TALKING_STATUS_VALUES.includes(status)) return res.status(400).json({ error: 'Ungültiger Status' });
     if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
       return res.status(400).json({ error: 'Ungültiges Emoji' });
-    const pk = Math.min(2, Math.max(0, parseInt(pokale) || 0));
+    // Zuhoeren bis 2 Flammen, ein Mit-Vortrag bis 3 (wie der Vortrag selbst).
+    const pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
     const r = await pool.query(`
-      UPDATE talking_invitations ti SET attended_status=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
+      UPDATE talking_invitations ti SET attended_status=$1,
+        pokale=LEAST($2::int, CASE WHEN ti.rolle = 'vortrag' THEN 3 ELSE 2 END), quality_emoji=$3, admin_id=$4, updated_at=NOW()
       FROM talking_sessions ts, talking_slots sl
       WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$5 AND sl.klasse=$6
       RETURNING ti.id
@@ -3088,9 +3295,11 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
                (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
                (SELECT ti.herkunft FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationHerkunft",
                (SELECT ti.gesehen_am IS NOT NULL FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationGesehen",
+               (SELECT ti.rolle FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationRolle",
                COALESCE(json_agg(json_build_object('id', inv.id, 'username', lu.username, 'status', inv.status,
                  'herkunft', inv.herkunft, 'gesehen', inv.gesehen_am IS NOT NULL, 'attendedStatus', inv.attended_status))
-                 FILTER (WHERE inv.id IS NOT NULL), '[]') AS invitees
+                 FILTER (WHERE inv.id IS NOT NULL AND inv.rolle <> 'vortrag'), '[]') AS invitees,
+               ${TALK_MITVORTRAG_JSON} AS "coPresenters"
         FROM talking_slots s
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
         LEFT JOIN users pu ON pu.id = ts.presenter_id
@@ -3119,6 +3328,9 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
       booked: !!s.session_id,
       mineAsPresenter: s.presenterId === uid,
       mineAsListener: !!s.myInvitationId,
+      // Traegt mit vor (Einladung mit rolle='vortrag', nicht abgesagt). mineAsListener bleibt dabei
+      // wahr - der Termin gehoert ihr, wie jeder, zu dem sie eingeladen ist.
+      mineAsCoPresenter: s.myInvitationRolle === 'vortrag' && s.myInvitationStatus !== 'abgelehnt',
     })).filter(s => {
       // Serverseitig gefiltert, damit solche Termine gar nicht erst beim Browser
       // ankommen. Admins sehen weiterhin alles.
@@ -3158,13 +3370,19 @@ async function halbjahrOverview(klasse, onlyUid) {
                         WHERE usk.user_id = u.id) AS subject_kurs
                 FROM users u WHERE u.role='student' AND u.klasse=$1${aktivFilter}${onlyUid ? ' AND u.id=$2' : ''} ORDER BY u.username`, params),
     pool.query(`
-      SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale
+      SELECT ts.presenter_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ts.presented_status AS status, ts.thema, ts.pokale,
+             (SELECT string_agg(cu.username, ', ' ORDER BY ci.id) FROM talking_invitations ci JOIN users cu ON cu.id = ci.listener_id
+               WHERE ci.session_id = ts.id AND ci.rolle = 'vortrag'
+                 AND (ci.status = 'angenommen' OR ci.attended_status <> 'ausstehend')) AS mit
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
       JOIN users u ON u.id = ts.presenter_id
       WHERE u.klasse = $1${uidFilter}
     `, params),
     pool.query(`
-      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter, ti.pokale
+      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter, ti.pokale, ti.rolle,
+             (SELECT string_agg(cu.username, ', ' ORDER BY ci.id) FROM talking_invitations ci JOIN users cu ON cu.id = ci.listener_id
+               WHERE ci.session_id = ts.id AND ci.rolle = 'vortrag' AND ci.listener_id <> ti.listener_id
+                 AND (ci.status = 'angenommen' OR ci.attended_status <> 'ausstehend')) AS mit_andere
       FROM talking_invitations ti
       JOIN talking_sessions ts ON ts.id = ti.session_id
       JOIN talking_slots sl ON sl.id = ts.slot_id
@@ -3262,10 +3480,22 @@ async function halbjahrOverview(klasse, onlyUid) {
     halbjahre.add(hj);
     const s = ensureSubject(r.uid, hj, r.subjectId);
     s.talksPresented++; s.pokalePresented += r.pokale || 0;
-    s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale });
+    s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale, ...(r.mit ? { mit: r.mit } : {}) });
     s.lastTalk = maxD(s.lastTalk, r.datum);
   });
   attended.rows.forEach(r => {
+    // Mit-Vortrag: ein gehaltener Talk der Person, kein Zuhoeren.
+    if (r.typ !== 'input' && r.rolle === 'vortrag') {
+      if (r.status !== 'erledigt') return;
+      const hj = slotHj(r); if (!hj) return;
+      halbjahre.add(hj);
+      const s = ensureSubject(r.uid, hj, r.subjectId);
+      s.talksPresented++; s.pokalePresented += r.pokale || 0;
+      const mit = [r.presenter, r.mit_andere].filter(Boolean).join(', ');
+      s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale, ...(mit ? { mit } : {}) });
+      s.lastTalk = maxD(s.lastTalk, r.datum);
+      return;
+    }
     // "angemeldet" statt "teilgenommen": die Rolle sagt nur, dass die Person auf der
     // Liste steht. Ob sie da war, steht daneben im Status - "teilgenommen · noch offen"
     // las sich wie ein Widerspruch.

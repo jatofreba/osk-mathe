@@ -651,6 +651,13 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .lzk-ue-tag{font-size:12.5px;font-weight:700;color:var(--md-on-surface-variant);margin:12px 0 6px;}
 .lzk-ue-leer{font-size:13px;color:var(--md-on-surface-variant);padding:2px 0 6px;}
 .lzk-ue-doppelt{font-size:12px;color:#b45309;margin:0 0 3px 4px;}
+/* Talk buchen/nachladen: wer traegt mit vor, wer hoert zu */
+.talk-auswahl{max-height:180px;overflow-y:auto;}
+.talk-auswahl input:disabled + span{opacity:.45;}
+/* Fach-Einstellungen: Grenzen je Talk als min/max-Paar */
+.ssettings-minmax{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+.ssettings-minmax .form-input{width:76px;}
+.ssettings-minmax .form-label{margin:0;min-width:92px;}
 /* summary bleibt list-item - mit display:flex verschwaende der Aufklapp-Pfeil */
 .lzk-ue-bewertet > summary{font-size:16px;font-weight:800;margin:20px 0 2px;cursor:pointer;}
 .cal-dow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--md-on-surface-variant);text-align:center;padding:4px 0;}
@@ -1530,10 +1537,7 @@ textarea.form-input{
       <label class="form-label" for="tbook-thema">Thema</label>
       <input class="form-input" id="tbook-thema" placeholder="z.B. Wie funktioniert der Dreisatz?">
     </div>
-    <div class="form-group">
-      <label class="form-label" id="tbook-cm-lbl">Wen lädst du ein?</label>
-      <div role="group" aria-labelledby="tbook-cm-lbl" id="tbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
-    </div>
+    <div id="tbook-classmates"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-book')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="submitBookSession()">Anmelden</button>
@@ -1545,9 +1549,7 @@ textarea.form-input{
 <div class="overlay" id="modal-talking-invite">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">Weitere Personen einladen</div>
-    <div class="form-group">
-      <div id="tinvite-classmates" style="max-height:240px;overflow-y:auto;"></div>
-    </div>
+    <div id="tinvite-classmates"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-talking-invite')">Abbrechen</button>
       <button class="btn-act btn-blue" onclick="submitInviteMore()">Einladen</button>
@@ -1650,10 +1652,11 @@ textarea.form-input{
       <label class="form-label" for="calbook-thema">Thema</label>
       <input class="form-input" id="calbook-thema" placeholder="Worum geht es?">
     </div>
-    <div class="form-group">
-      <label class="form-label" id="calbook-cm-label">Wen lädst du ein?</label>
-      <div id="calbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
+    <div class="form-group" id="calbook-cm-gruppe">
+      <label class="form-label" id="calbook-cm-label">Mitschüler:innen mitbringen (optional)</label>
+      <div role="group" aria-labelledby="calbook-cm-label" id="calbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
     </div>
+    <div id="calbook-talk-auswahl"></div>
     <div id="calbook-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-cal-book')">Abbrechen</button>
@@ -1799,7 +1802,22 @@ textarea.form-input{
     <div class="modal-title" id="ssettings-title">Fach-Einstellungen</div>
     <div class="form-group"><label class="form-label" for="ssettings-ort">Standard-Ort</label><input class="form-input" id="ssettings-ort" placeholder="z.B. Mathe-Fachbüro"></div>
     <div class="form-group"><label class="form-label" for="ssettings-dauer">Standard-Dauer (Minuten)</label><input class="form-input" id="ssettings-dauer" type="number" min="5" max="600"></div>
-    <div style="font-size:12px;font-weight:700;color:var(--md-on-surface-variant);margin:4px 0 8px;">Vorgaben</div>
+    <div style="font-size:12px;font-weight:700;color:var(--md-on-surface-variant);margin:4px 0 8px;">Je Talk <span style="font-weight:500;">(gilt für alle Halbjahre)</span></div>
+    <div class="ssettings-minmax">
+      <span class="form-label" id="ssettings-v-lbl">🎤 Vortragende</span>
+      min <input class="form-input" id="ssettings-minv" type="number" min="1" max="4" aria-label="Vortragende mindestens" aria-describedby="ssettings-v-lbl">
+      max <input class="form-input" id="ssettings-maxv" type="number" min="1" max="4" aria-label="Vortragende höchstens" aria-describedby="ssettings-v-lbl">
+    </div>
+    <div class="ssettings-minmax">
+      <span class="form-label" id="ssettings-z-lbl">👂 Zuhörende</span>
+      min <input class="form-input" id="ssettings-minz" type="number" min="1" max="50" aria-label="Zuhörende mindestens" aria-describedby="ssettings-z-lbl">
+      max <input class="form-input" id="ssettings-maxz" type="number" min="1" max="50" aria-label="Zuhörende höchstens" aria-describedby="ssettings-z-lbl">
+    </div>
+    <div style="font-size:11.5px;color:var(--md-on-surface-variant);margin:-4px 0 12px;line-height:1.4;">
+      Beim Buchen: so viele tragen vor (die buchende Person mitgezählt) und so viele werden zum Zuhören eingeladen.
+      Schon gebuchte Talks bleiben, wie sie sind.
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--md-on-surface-variant);margin:4px 0 8px;">Vorgaben je Halbjahr</div>
     <div class="form-group">
       <label class="form-label" for="ssettings-hj">Gilt für</label>
       <select class="form-input" id="ssettings-hj" onchange="onSubjectSettingsHalbjahrChange()"></select>
@@ -3115,6 +3133,7 @@ async function loadPlenum() {
 function plPersonen(s) {
   const leute = [];
   if (s.presenterUsername) leute.push({ name: s.presenterUsername, haupt: true });
+  (s.coPresenters || []).forEach(c => leute.push({ name: c.username, haupt: true, offen: c.status !== 'angenommen' }));
   (s.invitees || []).forEach(iv => {
     if (iv.status === 'abgelehnt') return;
     leute.push({ name: iv.username, haupt: false, offen: iv.status !== 'angenommen' });
@@ -4776,7 +4795,8 @@ function buildTalkingPickerSummaryHtml(data, subject) {
   const currentHj = currentHalbjahrGuess();
   const allGroups = talkingGroupByHalbjahr(data.presenting, data.invitations);
   const groups = [allGroups.find(g => g.halbjahr === currentHj) || { halbjahr: currentHj, presenting: [], listening: [] }];
-  const pendingCount = (data.invitations || []).filter(i => i.status === 'eingeladen').length;
+  const pendingCount = (data.invitations || []).filter(i => i.status === 'eingeladen').length
+    + (data.mitVortragOffen || []).length;
 
   const presentCell = (s, grey) => {
     if (!s) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
@@ -4798,7 +4818,7 @@ function buildTalkingPickerSummaryHtml(data, subject) {
       : i.attendedStatus === 'nicht_erledigt' ? '✗ nicht teilgenommen' : (missed ? 'Verpasst?' : '⏳ ausstehend');
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Von:</div>
-      <div class="tsum-field-value">${escHtml(i.presenter_username)}</div>
+      <div class="tsum-field-value">${[i.presenter_username, ...(i.coPresenterNames || [])].map(escHtml).join(' & ')}</div>
       <div class="tsum-field-label">Topic:</div>
       <div class="tsum-field-value">${escHtml(i.thema)}</div>
       <div class="tsum-field-label">Quality:</div>
@@ -5550,7 +5570,7 @@ function renderCalDetail() {
     } else {
       // Bei einem FaBü, das die Lernbegleitung angelegt und zugewiesen hat, gibt es keine
       // vortragende Person - dann steht dort nur das Thema statt eines Platzhalters.
-      const who = it.mineAsPresenter ? 'Du' : escHtml(it.presenterUsername || '');
+      const who = talkVortragendeText(it.mineAsPresenter ? 'Du' : escHtml(it.presenterUsername || ''), it.coPresenters);
       const kopf = [who ? `<strong>${who}</strong>` : '', escHtml(it.thema || '')].filter(Boolean).join(' · ');
       body = `<div>${kopf || 'Gebucht'}</div>` + calInviteeListHtml(it);
       if (!isAdmin && it.mineAsListener && it.myInvitationStatus === 'eingeladen' && it.presentedStatus === 'ausstehend') {
@@ -5566,7 +5586,8 @@ function renderCalDetail() {
         const meins = { status: it.myInvitationStatus, herkunft: it.myInvitationHerkunft, gesehen: it.myInvitationGesehen };
         const s = it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt'
           : it.myInvitationStatus === 'angenommen'
-            ? (invEingeteilt(meins) ? '📋 Von der Lernbegleitung eingeladen' : '✓ zugesagt')
+            ? (it.mineAsCoPresenter ? '🎤 Du trägst mit vor'
+              : invEingeteilt(meins) ? '📋 Von der Lernbegleitung eingeladen' : '✓ zugesagt')
             : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`
           + (invEingeteilt(meins) && !meins.gesehen && !slotVorbei(it)
@@ -5652,6 +5673,81 @@ async function calRespondInvite(id, accept) {
   loadCalendar();
 }
 
+// ── Talk: wer traegt vor, wer hoert zu ─────────────────────────────────────────
+// Grenzen je Talk aus den Fach-Einstellungen (Standard 1-2 Vortragende, 2-5 Zuhoerende).
+// Die buchende Person zaehlt bei den Vortragenden mit.
+function talkGrenzen(subj) {
+  const z = (v, d) => (v == null || isNaN(parseInt(v))) ? d : parseInt(v);
+  return { minV: z(subj && subj.minVortragende, 1), maxV: z(subj && subj.maxVortragende, 2),
+           minZ: z(subj && subj.minZuhoerende, 2), maxZ: z(subj && subj.maxZuhoerende, 5) };
+}
+// Auswahl fuer "Talk anmelden" und "weitere einladen": oben, wer mit vortraegt (nur wenn das
+// Fach mehr als eine vortragende Person erlaubt), darunter, wer zuhoert. Dieselbe Person nie in
+// beiden Listen, und nie mehr Haken, als die Grenzen erlauben - das regelt talkAuswahlPruefen().
+// schon = wer bei einer bestehenden Buchung schon dabei ist (nicht abgesagt), fuer die Grenzen.
+function talkAuswahlHtml(praefix, leute, g, schon) {
+  const nachladen = !!schon;
+  schon = schon || { mit: 0, zu: 0 };
+  const mitPlaetze = Math.max(0, g.maxV - 1 - schon.mit);
+  const zuPlaetze = Math.max(0, g.maxZ - schon.zu);
+  const mitMin = Math.max(0, g.minV - 1);
+  const zeile = (typ, c) => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+      <input type="checkbox" value="${c.id}" class="${praefix}-${typ}-cb" onchange="talkAuswahlPruefen('${praefix}', ${mitPlaetze}, ${zuPlaetze})"><span>${escHtml(c.username)}</span></label>`;
+  const leer = '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Mitschüler:innen gefunden.</span>';
+  const teil = (typ, frage, zusatz) => `
+    <div class="form-group">
+      <div class="form-label" id="${praefix}-${typ}-lbl">${frage} <span style="font-weight:500;">(${zusatz})</span></div>
+      <div class="talk-auswahl" role="group" aria-labelledby="${praefix}-${typ}-lbl">${leute.map(c => zeile(typ, c)).join('') || leer}</div>
+    </div>`;
+  // Mit-Vortrag nur, wenn das Fach mehr als eine vortragende Person erlaubt und noch Platz ist.
+  const mitTeil = mitPlaetze <= 0 ? '' : teil('mit', '🎤 Mit wem trägst du vor?',
+    nachladen ? `noch höchstens ${mitPlaetze}` : `${mitMin ? `mind. ${mitMin}, ` : 'optional, '}höchstens ${mitPlaetze}`);
+  const zuTeil = zuPlaetze > 0
+    ? teil('zu', '👂 Wen lädst du zum Zuhören ein?', nachladen ? `noch höchstens ${zuPlaetze}` : `${g.minZ}–${g.maxZ}`)
+    : `<div class="form-group" style="color:var(--md-on-surface-variant);font-size:13px;">👂 Zum Zuhören sind schon ${schon.zu} eingeladen – mehr passen nicht (höchstens ${g.maxZ}).</div>`;
+  return mitTeil + zuTeil;
+}
+function talkAuswahlPruefen(praefix, mitPlaetze, zuPlaetze) {
+  const mit = [...document.querySelectorAll('.' + praefix + '-mit-cb')];
+  const zu = [...document.querySelectorAll('.' + praefix + '-zu-cb')];
+  const mitIds = new Set(mit.filter(b => b.checked).map(b => b.value));
+  const zuIds = new Set(zu.filter(b => b.checked).map(b => b.value));
+  mit.forEach(b => { b.disabled = !b.checked && (zuIds.has(b.value) || mitIds.size >= mitPlaetze); });
+  zu.forEach(b => { b.disabled = !b.checked && (mitIds.has(b.value) || zuIds.size >= zuPlaetze); });
+}
+// Liest die Auswahl und prueft sie gegen die Grenzen - dieselben Regeln wie der Server.
+// verfuegbar = wie viele Mitschueler:innen es ueberhaupt gibt (die Mindestzahl Zuhoerende ist
+// hoechstens so gross). Beim Nachladen (schon gesetzt) gilt nur das Maximum.
+function talkAuswahlLesen(praefix, g, verfuegbar, schon) {
+  const ids = typ => [...document.querySelectorAll('.' + praefix + '-' + typ + '-cb')]
+    .filter(b => b.checked).map(b => parseInt(b.value));
+  const mit = ids('mit');
+  const zu = ids('zu').filter(id => !mit.includes(id));
+  if (schon) {
+    if (!mit.length && !zu.length) return { fehler: 'Bitte mindestens eine Person auswählen.' };
+    if (1 + schon.mit + mit.length > g.maxV) return { fehler: `Höchstens ${g.maxV} Personen tragen gemeinsam vor.` };
+    if (schon.zu + zu.length > g.maxZ) return { fehler: `Höchstens ${g.maxZ} Personen zum Zuhören.` };
+    return { mit, zu };
+  }
+  const vortragende = 1 + mit.length;
+  if (vortragende > g.maxV) return { fehler: `Höchstens ${g.maxV} Personen tragen gemeinsam vor.` };
+  if (vortragende < g.minV) return { fehler: `In diesem Fach tragen mindestens ${g.minV} Personen gemeinsam vor – wähle, mit wem du vorträgst.` };
+  const noetig = Math.max(1, Math.min(g.minZ, verfuegbar - mit.length));
+  if (zu.length < noetig) return { fehler: noetig === 1 ? 'Lade mindestens eine Person zum Zuhören ein.' : `Lade mindestens ${noetig} Personen zum Zuhören ein.` };
+  if (zu.length > g.maxZ) return { fehler: `Höchstens ${g.maxZ} Personen zum Zuhören.` };
+  return { mit, zu };
+}
+// Die Vortragenden eines Talks als Text: buchende Person und zugesagte bzw. noch gefragte weitere.
+// "Du" fuer einen selbst; wer noch nicht geantwortet hat, bekommt ⏳.
+function talkVortragendeText(praesentierend, weitere) {
+  const ich = me && me.userId;
+  const namen = [];
+  if (praesentierend) namen.push(praesentierend);
+  (weitere || []).forEach(c => namen.push((c.userId === ich ? 'Du' : escHtml(c.username))
+    + (c.status === 'angenommen' ? '' : ' <span title="noch keine Antwort">⏳</span>')));
+  return namen.join(' & ');
+}
+
 // Buchung (Talk oder Fachbüro) direkt aus dem Kalender
 let _calBookSlot = null;
 function openCalBookModal(slotId) {
@@ -5665,11 +5761,15 @@ function openCalBookModal(slotId) {
   document.getElementById('calbook-info').textContent =
     `${new Date(slot.datum+'T00:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long'})} · ${slot.uhrzeit||''}${slot.dauer?' · '+slot.dauer+' Min':''}${slot.ort?' · '+slot.ort:''}${teacherInfo}`;
   document.getElementById('calbook-thema').value = '';
-  document.getElementById('calbook-cm-label').textContent = isInput ? 'Mitschüler:innen mitbringen (optional)' : 'Wen lädst du ein? (mind. 1)';
-  document.getElementById('calbook-classmates').innerHTML = (calClassmates || []).map(c =>
+  // Fachbuero: wie bisher, wer mitkommt (optional). Talk: wer mit vortraegt und wer zuhoert, in
+  // den Grenzen des Fachs.
+  document.getElementById('calbook-cm-gruppe').style.display = isInput ? '' : 'none';
+  document.getElementById('calbook-classmates').innerHTML = !isInput ? '' : (calClassmates || []).map(c =>
     `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
       <input type="checkbox" value="${c.id}" class="calbook-cm-cb"> ${escHtml(c.username)}
     </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Mitschüler:innen gefunden.</span>';
+  document.getElementById('calbook-talk-auswahl').innerHTML = isInput ? ''
+    : talkAuswahlHtml('calbook', calClassmates || [], talkGrenzen(bookSubj));
   document.getElementById('calbook-error').style.display = 'none';
   openModal('modal-cal-book');
 }
@@ -5678,12 +5778,18 @@ async function submitCalBook() {
   if (!_calBookSlot) return;
   const isInput = _calBookSlot.typ === 'input';
   const thema = document.getElementById('calbook-thema').value.trim();
-  const inviteeIds = [...document.querySelectorAll('.calbook-cm-cb:checked')].map(cb => parseInt(cb.value));
   if (!thema) { errEl.textContent = 'Bitte ein Thema angeben.'; errEl.style.display = 'block'; return; }
-  if (!isInput && !inviteeIds.length) { errEl.textContent = 'Für einen Talk mindestens eine Person einladen.'; errEl.style.display = 'block'; return; }
+  let inviteeIds, coPresenterIds = [];
+  if (isInput) {
+    inviteeIds = [...document.querySelectorAll('.calbook-cm-cb:checked')].map(cb => parseInt(cb.value));
+  } else {
+    const w = talkAuswahlLesen('calbook', talkGrenzen(subjectById(_calBookSlot.subjectId)), (calClassmates || []).length);
+    if (w.fehler) { errEl.textContent = w.fehler; errEl.style.display = 'block'; return; }
+    inviteeIds = w.zu; coPresenterIds = w.mit;
+  }
   const r = await fetch('/api/talking-sessions', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ slotId: _calBookSlot.id, thema, inviteeIds })
+    body: JSON.stringify({ slotId: _calBookSlot.id, thema, inviteeIds, coPresenterIds })
   });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Buchen.'; errEl.style.display = 'block'; return; }
@@ -5880,6 +5986,11 @@ function openSubjectSettingsModal() {
   document.getElementById('ssettings-title').textContent = `⚙ ${subj.name}-Einstellungen`;
   document.getElementById('ssettings-ort').value = subj.defaultOrt || '';
   document.getElementById('ssettings-dauer').value = subj.defaultDauer || 45;
+  const g = talkGrenzen(subj);
+  document.getElementById('ssettings-minv').value = g.minV;
+  document.getElementById('ssettings-maxv').value = g.maxV;
+  document.getElementById('ssettings-minz').value = g.minZ;
+  document.getElementById('ssettings-maxz').value = g.maxZ;
   // Auswahl "Gilt für": Fach-Standard + alle Halbjahre, die in den Terminen dieses Fachs
   // vorkommen, plus das laufende Halbjahr und bereits gepflegte Abweichungen.
   const hjSel = document.getElementById('ssettings-hj');
@@ -5947,15 +6058,25 @@ async function submitSubjectSettings() {
   const optionalPraesentieren = parseInt(document.getElementById('ssettings-op').value);
   const optionalZuhoeren = parseInt(document.getElementById('ssettings-oz').value);
   const halbjahr = document.getElementById('ssettings-hj').value;
+  const zahl = id => parseInt(document.getElementById(id).value);
+  const grenzen = { minVortragende: zahl('ssettings-minv'), maxVortragende: zahl('ssettings-maxv'),
+                    minZuhoerende: zahl('ssettings-minz'), maxZuhoerende: zahl('ssettings-maxz') };
+  const fehler = t => { errEl.textContent = t; errEl.style.display = 'block'; };
+  if (Object.values(grenzen).some(v => isNaN(v))) return fehler('Bitte bei „Je Talk“ alle vier Zahlen angeben.');
+  if (grenzen.minVortragende < 1 || grenzen.maxVortragende > 4 || grenzen.minVortragende > grenzen.maxVortragende)
+    return fehler('Vortragende: mindestens 1, höchstens 4 – und min nicht über max.');
+  if (grenzen.minZuhoerende < 1 || grenzen.minZuhoerende > grenzen.maxZuhoerende)
+    return fehler('Zuhörende: mindestens 1 – und min nicht über max.');
   const r = await fetch(`/api/admin/subjects/${subj.id}`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,
-                           optionalPraesentieren, optionalZuhoeren, halbjahr })
+                           optionalPraesentieren, optionalZuhoeren, halbjahr, ...grenzen })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler beim Speichern.'; errEl.style.display = 'block'; return; }
-  // Ort/Dauer gelten immer fach-weit; die Vorgaben je nach Auswahl als Standard oder Halbjahr.
-  Object.assign(subj, { defaultOrt, defaultDauer });
+  // Ort/Dauer und die Grenzen je Talk gelten immer fach-weit; die Vorgaben je nach Auswahl
+  // als Standard oder Halbjahr.
+  Object.assign(subj, { defaultOrt, defaultDauer, ...grenzen });
   if (halbjahr) {
     subj.halbjahrTargets = subj.halbjahrTargets || {};
     subj.halbjahrTargets[halbjahr] = { pflichtPraesentieren, pflichtZuhoeren, optionalPraesentieren, optionalZuhoeren };
@@ -6189,7 +6310,7 @@ function renderCalInvites() {
       const dl = new Date(s.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
       return `<div class="stat-card" style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-          <div>${icon} ${s.presenterUsername ? `<strong>${escHtml(s.presenterUsername)}</strong> · ` : ''}${escHtml(s.thema || '')}<br>
+          <div>${icon} ${s.presenterUsername ? `<strong>${escHtml(s.presenterUsername)}</strong>${s.myInvitationRolle === 'vortrag' ? ' möchte mit dir zusammen vortragen' : ''} · ` : ''}${escHtml(s.thema || '')}<br>
             <span style="color:var(--md-on-surface-variant);font-size:12px;">${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</span></div>
           <div style="display:flex;gap:6px;">
             <button class="btn-act btn-green" onclick="calRespondInvite(${s.myInvitationId}, true)">Annehmen</button>
@@ -6313,6 +6434,11 @@ function awChip(s) {
     leute.push({ name: s.presenterUsername, haupt: true, offen: false, icon: '',
                  titel: s.typ === 'input' ? 'hat gebucht' : 'hält den Talk' });
   }
+  (s.coPresenters || []).forEach(c => {
+    const offen = c.status !== 'angenommen';
+    leute.push({ name: c.username, haupt: true, offen, icon: offen ? '⏳' : '',
+                 titel: offen ? 'trägt mit vor - noch keine Antwort' : 'trägt mit vor' });
+  });
   (s.invitees || []).forEach(iv => {
     if (iv.status === 'abgelehnt') return; // abgesagt - nimmt nicht teil
     const angefragt = iv.status === 'angefragt';
@@ -6441,6 +6567,13 @@ function awRenderBar() {
       : '';
     leute.push(`<span class="pill ${klasse}" style="font-size:11px;"><strong>${escHtml(s.presenterUsername)}</strong> · ${zustand}${knoepfe}</span>`);
   }
+  // Weitere Vortragende: bewertet wird im Talks-Reiter (Flammen), hier nur, wer dabei ist.
+  (s.coPresenters || []).forEach(c => {
+    const zustand = c.attendedStatus === 'erledigt' ? '✓ da gewesen' : c.attendedStatus === 'nicht_erledigt' ? '✗ gefehlt'
+      : c.status === 'angenommen' ? 'trägt mit vor' : 'trägt mit vor · ⏳ noch keine Antwort';
+    const klasse = c.attendedStatus === 'erledigt' ? 'pill-green' : c.attendedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
+    leute.push(`<span class="pill ${klasse}" style="font-size:11px;"><strong>${escHtml(c.username)}</strong> · ${zustand}</span>`);
+  });
   (s.invitees || []).forEach(iv => {
     const name = escHtml(iv.username);
     if (iv.status === 'angefragt') {
@@ -6550,7 +6683,8 @@ function renderAdminWeek() {
   // Teilnahmen = alle Personen, die diese Woche tatsächlich an einem Termin sind
   // (buchende Person + zugesagte/noch offene Eingeladene, ohne Absagen).
   const teilnahmen = weekSlots.reduce((sum, s) =>
-    sum + (s.presenterUsername ? 1 : 0) + (s.invitees || []).filter(iv => iv.status !== 'abgelehnt' && iv.status !== 'angefragt').length, 0);
+    sum + (s.presenterUsername ? 1 : 0) + (s.coPresenters || []).length
+      + (s.invitees || []).filter(iv => iv.status !== 'abgelehnt' && iv.status !== 'angefragt').length, 0);
 
   const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) =>
     `<div class="lw-dayhead">${name}
@@ -6814,7 +6948,7 @@ function renderHalbjahr() {
 function hjDetailHtml(s, subjectKey) {
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
-  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🔥'.repeat(t.pokale):''}</span></div>`;
+  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.mit?' mit '+escHtml(t.mit):''}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🔥'.repeat(t.pokale):''}</span></div>`;
   // "noch offen" heisst: Termin war, die Lernbegleitung hat aber nichts eingetragen.
   // Ein Termin, der erst noch kommt, ist etwas anderes - sonst sieht es aus, als waere
   // da etwas liegengeblieben.
@@ -6968,10 +7102,26 @@ function renderTalkingStudent() {
   const presentDetailCell = (s, grey) => {
     if (!s) return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei für einen freiwilligen ${escHtml(subj.name)}-Talk –</span></div>`;
     const invitees = s.invitees || [];
+    // Bei einem Talk, an dem man MIT vortraegt, verwaltet die buchende Person die Liste - hier nur lesen.
+    const mitVortrag = !!s.alsMitVortrag;
+    const offenBuchung = (mitVortrag ? s.buchungStatus : s.presentedStatus) === 'ausstehend';
+    const weitere = (s.coPresenters || []).filter(c => !(me && c.userId === me.userId));
+    const weitereList = weitere.map(c => {
+      const icon = c.status === 'angenommen' ? '✓' : '⏳';
+      const rating = c.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(c.pokale || 0, 3)}${c.qualityEmoji ? ' ' + c.qualityEmoji : ''}` : (c.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
+      const weg = !mitVortrag && offenBuchung && c.attendedStatus === 'ausstehend'
+        ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${c.id})">✕</span>` : '';
+      return `<span class="pill pill-purple">🎤 ${escHtml(c.username)} ${icon}${rating}${weg}</span>`;
+    }).join(' ');
+    // Absagen sieht nur die buchende Person - mit ✕, damit sie die Person danach anders einladen kann.
+    const abgesagtList = (mitVortrag ? [] : (s.coPresentersAbgesagt || [])).map(c =>
+      `<span class="pill pill-purple" title="hat abgesagt">🎤 ${escHtml(c.username)} ✗${offenBuchung
+        ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${c.id})">✕</span>` : ''}</span>`).join(' ');
+    const mitZeile = [weitereList, abgesagtList].filter(Boolean).join(' ');
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
       const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : (iv.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
-      const canRemove = s.presentedStatus === 'ausstehend' && iv.attendedStatus === 'ausstehend';
+      const canRemove = !mitVortrag && s.presentedStatus === 'ausstehend' && iv.attendedStatus === 'ausstehend';
       const removeBtn = canRemove ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${iv.id})">✕</span>` : '';
       return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}${removeBtn}</span>`;
     }).join(' ');
@@ -6983,11 +7133,15 @@ function renderTalkingStudent() {
       <div class="tsum-field-value">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}</div>
       <div class="tsum-field-label">Topic:</div>
       <div class="tsum-field-value">${escHtml(s.thema)}</div>
-      <div class="tsum-field-label">Zuschauer:innen:</div>
+      ${mitVortrag ? `<div class="tsum-field-label">Gebucht von:</div>
+      <div class="tsum-field-value">${escHtml(s.gebuchtVon || '')}</div>
+      ` : ''}${mitZeile ? `<div class="tsum-field-label">Mit-Vortrag:</div>
+      <div class="tsum-field-value">${mitZeile}</div>
+      ` : ''}<div class="tsum-field-label">Zuschauer:innen:</div>
       <div class="tsum-field-value">${inviteeList || '<span class="tsum-empty">Niemand eingeladen</span>'}</div>
       <div class="tsum-field-label">Quality:</div>
       <div class="tsum-field-value">${quality}</div>
-      ${s.presentedStatus === 'ausstehend' ? `<button class="btn-sm" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
+      ${!mitVortrag && s.presentedStatus === 'ausstehend' ? `<button class="btn-sm" onclick="openInviteMoreModal(${s.id})">+ weitere einladen</button>` : ''}
     </div>`;
   };
   const listenDetailCell = (i, grey) => {
@@ -6998,7 +7152,7 @@ function renderTalkingStudent() {
     const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
     return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Von:</div>
-      <div class="tsum-field-value">${escHtml(i.presenter_username)}</div>
+      <div class="tsum-field-value">${[i.presenter_username, ...(i.coPresenterNames || [])].map(escHtml).join(' & ')}</div>
       <div class="tsum-field-label">Datum:</div>
       <div class="tsum-field-value">${fmtTalkingDatum(i.datum)} · ${escHtml(i.uhrzeit || '')} ${escHtml(i.ort || '')}</div>
       <div class="tsum-field-label">Topic:</div>
@@ -7046,7 +7200,19 @@ function renderTalkingStudent() {
     </details>`;
   }).join('');
 
-  el.innerHTML = `
+  // Offene Einladungen, mit jemandem zusammen vorzutragen - oben, weil sie eine Antwort brauchen.
+  const mitOffen = talkingMine.mitVortragOffen || [];
+  const mitBanner = mitOffen.length ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+      <div style="font-weight:800;color:#6d28d9;margin-bottom:6px;">🎤 Gemeinsam vortragen – bitte antworten (${mitOffen.length})</div>
+      ${mitOffen.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
+        <div><strong>${escHtml(o.gebuchtVon || '')}</strong> möchte mit dir vortragen: „${escHtml(o.thema || '')}“<br>
+          <span style="color:var(--md-on-surface-variant);font-size:12px;">${fmtTalkingDatum(o.datum)} · ${escHtml(o.uhrzeit || '')} ${escHtml(o.ort || '')}</span></div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-act btn-green" onclick="respondTalkingInvitation(${o.meineEinladungId}, true)">Annehmen</button>
+          <button class="btn-cancel" onclick="respondTalkingInvitation(${o.meineEinladungId}, false)">Ablehnen</button>
+        </div></div>`).join('')}
+    </div>` : '';
+  el.innerHTML = mitBanner + `
     <div class="stats-row">${trophyCard}${progressCards}</div>
     <div class="admin-top" style="margin-top:16px;">
       <div class="admin-title" style="font-size:16px;">🗣️ Meine ${escHtml(subj.name)}-Talks im Detail</div>
@@ -7064,22 +7230,20 @@ function openBookSessionModal() {
     `<option value="${s.id}">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} (${escHtml(s.halbjahr)})</option>`
   ).join('');
   document.getElementById('tbook-thema').value = '';
-  document.getElementById('tbook-classmates').innerHTML = talkingClassmates.map(c =>
-    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
-      <input type="checkbox" value="${c.id}" class="tbook-cm-cb"> ${escHtml(c.username)}
-    </label>`
-  ).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Mitschüler:innen gefunden.</span>';
+  document.getElementById('tbook-classmates').innerHTML =
+    talkAuswahlHtml('tbook', talkingClassmates, talkGrenzen(subjectByKey(activeSubject)));
   openModal('modal-talking-book');
 }
 
 async function submitBookSession() {
   const slotId = parseInt(document.getElementById('tbook-slot').value);
   const thema = document.getElementById('tbook-thema').value.trim();
-  const inviteeIds = [...document.querySelectorAll('.tbook-cm-cb:checked')].map(cb => parseInt(cb.value));
-  if (!slotId || !thema || !inviteeIds.length) { alert('Bitte Termin, Thema und mindestens eine Person auswählen.'); return; }
+  if (!slotId || !thema) { alert('Bitte Termin und Thema angeben.'); return; }
+  const w = talkAuswahlLesen('tbook', talkGrenzen(subjectByKey(activeSubject)), talkingClassmates.length);
+  if (w.fehler) { alert(w.fehler); return; }
   const r = await fetch('/api/talking-sessions', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ slotId, thema, inviteeIds })
+    body: JSON.stringify({ slotId, thema, inviteeIds: w.zu, coPresenterIds: w.mit })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Buchen.'); return; }
@@ -7087,26 +7251,30 @@ async function submitBookSession() {
   loadTalkingStudent();
 }
 
-let _inviteMoreSessionId = null;
+let _inviteMoreSessionId = null, _inviteMoreSchon = { mit: 0, zu: 0 };
 function openInviteMoreModal(sessionId) {
   _inviteMoreSessionId = sessionId;
   const session = talkingMine.presenting.find(s => s.id === sessionId);
-  const alreadyInvited = new Set((session?.invitees || []).map(iv => iv.listenerId));
+  const invitees = session?.invitees || [];
+  const weitere = session?.coPresenters || [];
+  // Wie bei den Zuhoerenden: wer abgesagt hat, wird erst ausgeladen (✕), dann neu gefragt.
+  const alreadyInvited = new Set([...invitees.map(iv => iv.listenerId), ...weitere.map(c => c.userId),
+                                  ...(session?.coPresentersAbgesagt || []).map(c => c.userId)]);
   const remaining = talkingClassmates.filter(c => !alreadyInvited.has(c.id));
-  document.getElementById('tinvite-classmates').innerHTML = remaining.map(c =>
-    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
-      <input type="checkbox" value="${c.id}" class="tinvite-cm-cb"> ${escHtml(c.username)}
-    </label>`
-  ).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Bereits alle Mitschüler:innen eingeladen.</span>';
+  // Fuer die Grenzen zaehlt, wer schon dabei ist - Absagen nicht.
+  _inviteMoreSchon = { mit: weitere.length, zu: invitees.filter(iv => iv.status !== 'abgelehnt').length };
+  document.getElementById('tinvite-classmates').innerHTML = remaining.length
+    ? talkAuswahlHtml('tinvite', remaining, talkGrenzen(subjectByKey(activeSubject)), _inviteMoreSchon)
+    : '<div class="form-group" style="color:var(--md-on-surface-variant);font-size:13px;">Bereits alle Mitschüler:innen eingeladen.</div>';
   openModal('modal-talking-invite');
 }
 
 async function submitInviteMore() {
-  const inviteeIds = [...document.querySelectorAll('.tinvite-cm-cb:checked')].map(cb => parseInt(cb.value));
-  if (!inviteeIds.length) { alert('Bitte mindestens eine Person auswählen.'); return; }
+  const w = talkAuswahlLesen('tinvite', talkGrenzen(subjectByKey(activeSubject)), talkingClassmates.length, _inviteMoreSchon);
+  if (w.fehler) { alert(w.fehler); return; }
   const r = await fetch(`/api/talking-sessions/${_inviteMoreSessionId}/invite`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ inviteeIds })
+    body: JSON.stringify({ inviteeIds: w.zu, coPresenterIds: w.mit })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Einladen.'); return; }
@@ -7169,6 +7337,15 @@ function computeTalkingOverview(slots) {
     if (s.presentedStatus === 'erledigt') pRow.presentDone++;
     else if (s.presentedStatus === 'nicht_erledigt') pRow.presentFailed++;
     else pRow.presentPending++;
+    // Weitere Vortragende: ihr Vortrag zaehlt wie ein eigener - sobald sie zugesagt haben
+    // oder schon bewertet sind (dieselbe Regel wie beim Zuhoeren).
+    (s.coPresenters || []).forEach(c => {
+      if (c.status !== 'angenommen' && c.attendedStatus === 'ausstehend') return;
+      const cRow = ensure(s.halbjahr, c.username);
+      if (c.attendedStatus === 'erledigt') cRow.presentDone++;
+      else if (c.attendedStatus === 'nicht_erledigt') cRow.presentFailed++;
+      else cRow.presentPending++;
+    });
     (s.invitees || []).forEach(iv => {
       // Ein/e Zuhörer:in zählt mit, wenn die Einladung angenommen wurde ODER der Admin trotzdem
       // schon ein Ergebnis eingetragen hat (z.B. "nicht teilgenommen" direkt gesetzt, ohne dass die
@@ -7415,8 +7592,15 @@ function renderTalkingOverview(slots, roster) {
 // Detailauflistung für eine Schüler:in (Klick auf Zeile in renderTalkingOverview): alle Mathe-Talks
 // als Presenter bzw. als (angenommene) Zuhörer:in, gruppiert nach presentedStatus/attendedStatus.
 function openTalkingStudentDetail(username, halbjahr) {
+  // Eigene Buchungen und Talks, an denen die Person MIT vortraegt (Bewertung an ihrer Einladung).
   const presenting = talkingAdminSlots
-    .filter(s => s.session_id && s.presenter_username === username && (!halbjahr || s.halbjahr === halbjahr))
+    .filter(s => s.session_id && (!halbjahr || s.halbjahr === halbjahr))
+    .flatMap(s => {
+      if (s.presenter_username === username) return [s];
+      const c = (s.coPresenters || []).find(x => x.username === username
+        && (x.status === 'angenommen' || x.attendedStatus !== 'ausstehend'));
+      return c ? [{ ...s, presentedStatus: c.attendedStatus, pokale: c.pokale, qualityEmoji: c.qualityEmoji }] : [];
+    })
     .sort((a, b) => new Date(b.datum) - new Date(a.datum));
 
   const listening = [];
@@ -7509,13 +7693,20 @@ function renderTalkingAdmin() {
         </div>
         ${booked ? `
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            🎤 <strong>${escHtml(s.presenter_username)}</strong> · ${escHtml(s.thema)}
+            🎤 <strong>${[s.presenter_username, ...(s.coPresenters || []).map(c => c.username)].map(escHtml).join(' & ')}</strong> · ${escHtml(s.thema)}
             <span class="pill ${presentCls}" style="cursor:pointer;" title="Vortrag bewerten" onclick="openTalkingRateModal('presented', ${s.session_id}, 3, ${s.pokale || 0}, ${s.qualityEmoji ? `'${s.qualityEmoji}'` : 'null'}, '${s.presentedStatus || 'ausstehend'}')">
               ${presentTxt}${presentRating}
             </span>
             <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
           </div>
-          <div style="margin-top:6px;">${inviteesHtml || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
+          ${(s.coPresenters || []).length ? `<div style="margin-top:6px;">${(s.coPresenters || []).map(c => {
+            const cls = c.attendedStatus === 'erledigt' ? 'pill-green' : c.attendedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
+            const txt = c.attendedStatus === 'erledigt' ? `✓ ${talkingPokalStr(c.pokale || 0, 3)}${c.qualityEmoji ? ' ' + c.qualityEmoji : ''}`
+              : c.attendedStatus === 'nicht_erledigt' ? '✗ nicht gehalten'
+              : c.status === 'angenommen' ? '⏳ Vortrag bewerten' : '⏳ noch keine Antwort';
+            return `<span class="pill ${cls}" style="cursor:pointer;" title="Mit-Vortrag bewerten" onclick="openTalkingRateModal('mitvortrag', ${c.id}, 3, ${c.pokale || 0}, ${c.qualityEmoji ? `'${c.qualityEmoji}'` : 'null'}, '${c.attendedStatus || 'ausstehend'}')">🎤 ${escHtml(c.username)} · ${txt}</span>`;
+          }).join(' ')}</div>
+          ` : ''}<div style="margin-top:6px;">${inviteesHtml || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
         ` : `<div style="margin-top:8px;color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</div>`}
       </div>`;
   };
@@ -7708,8 +7899,11 @@ async function cancelTalkingSession(sessionId) {
 let _talkingRateModal = {};
 function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentStatus) {
   _talkingRateModal = { type, id, pokale: currentPokale || 0, emoji: currentEmoji || null };
-  document.getElementById('trate-modal-title').textContent = type === 'presented' ? '🎤 Vortrag bewerten' : '👂 Teilnahme bewerten';
-  document.getElementById('trate-modal-status-no').textContent = type === 'presented' ? '✗ Nicht gehalten' : '✗ Nicht teilgenommen';
+  // 'mitvortrag' = weitere vortragende Person: bewertet wie ein Vortrag (bis 3 Flammen),
+  // gespeichert an ihrer Einladung (confirm-attended).
+  const vortrag = type === 'presented' || type === 'mitvortrag';
+  document.getElementById('trate-modal-title').textContent = vortrag ? '🎤 Vortrag bewerten' : '👂 Teilnahme bewerten';
+  document.getElementById('trate-modal-status-no').textContent = vortrag ? '✗ Nicht gehalten' : '✗ Nicht teilgenommen';
   document.getElementById('trate-modal-status').value = currentStatus || 'ausstehend';
   document.getElementById('trate-modal-pokale').innerHTML = Array.from({ length: maxPokale + 1 }, (_, v) =>
     `<button class="lzk-pokal-btn ${v === (currentPokale || 0) ? 'active' : ''}" data-v="${v}" onclick="selectTalkingRatePokal(${v})">${v} 🔥</button>`

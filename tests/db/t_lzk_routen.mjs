@@ -30,7 +30,9 @@ const FREMD = await neu('fremd', 'student', 'M7M8');
 const HERF = await neu('herf', 'admin');
 
 // --- Helfer und Handler aus dem Quelltext --------------------------------
-const hilfen = src.slice(src.indexOf("const LZK_STATUS = "), src.indexOf("app.get('/api/lzk',"));
+// Talk-Bausteine (TALK_MITVORTRAG_JSON u.a.) braucht der Kalender-Handler mit.
+const talkBausteine = src.slice(src.indexOf('const TALK_MAX_VORTRAGENDE'), src.indexOf('// Vorgegebene Auswahl für die Qualitäts-Bewertung'));
+const hilfen = talkBausteine + src.slice(src.indexOf("const LZK_STATUS = "), src.indexOf("app.get('/api/lzk',"));
 function handler(marke) {
   const a = src.indexOf(marke);
   if (a < 0) throw new Error('nicht gefunden: ' + marke);

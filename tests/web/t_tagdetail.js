@@ -31,7 +31,8 @@ const stubs = [
 function baue(rolle, items, tag) {
   const el = { innerHTML: '' };
   const code = schneide('function calDateStr(d) {') + schneide('function slotVorbei(s) {') + schneide('function calGehoertMir(it) {')
-             + schneide('function invEingeteilt(iv) {') + schneide('function renderCalDetail() {');
+             + schneide('function invEingeteilt(iv) {') + schneide('function talkVortragendeText(praesentierend, weitere) {')
+             + schneide('function renderCalDetail() {');
   const wann = tag || HEUTE;
   const tage = {}; tage[wann] = items;
   new Function('FAECHER', 'TAGE', 'me', 'calSelected', 'document',
