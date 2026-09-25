@@ -222,6 +222,20 @@ zuordnen…* -- jeweils in der Richtung, die du wählst -- und *Aliasse auf dem
 Server umbenennen…*). Alles andere -- Abrufen der Ergebnisse, Aliasse,
 Halbjahresübersicht -- liest nur.
 
+## Halbjahres-Zusammenfassung
+
+Der Knopf **„Zusammenfassung…“** oben rechts bei einer Person zeigt alles aus einem
+Halbjahr (voreingestellt: das laufende): bearbeitete Bausteine mit Status und
+Kommentaren, die LZK mit Note, Ergebnis und Bemerkung, die Zahl der
+Fachbüro-Besuche (mit Daten) und die Mathe-Talks. Oben lässt sich das Halbjahr
+wechseln und die **HJ-Note** für genau dieses Halbjahr eintragen. Sie wird
+übernommen, sobald man das Halbjahr wechselt oder das Fenster schließt. „Text
+kopieren“ legt die Zusammenfassung in die Zwischenablage.
+
+Die HJ-Note wird jetzt pro Halbjahr gespeichert. Das Feld „HJ-Note (lfd. HJ)“ im
+Personenkopf ist die Note des laufenden Halbjahres. Eine Note aus einer älteren
+Datei zählt fürs laufende Halbjahr.
+
 ## Mathe-Talks
 
 Unter den Bausteinen jeder Person steht die Liste ihrer **Mathe-Talks**, je Halbjahr

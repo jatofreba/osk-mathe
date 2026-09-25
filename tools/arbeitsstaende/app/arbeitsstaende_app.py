@@ -24,6 +24,7 @@ from arbeitsstaende_data import (
     MatheTalk, TALK_ROLLEN_TEXT, TALK_STATUS_WERTE, TALK_STATUS_TEXT, TALK_EMOJIS,
     lt_mathe_talks, lt_talks_uebernehmen, lt_talks_hochladen_liste, talk_hochgeladen,
     talk_wartet, talks_je_halbjahr, talks_zusammenfassung,
+    hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -533,6 +534,85 @@ class TalkHochladenDialog(tk.Toplevel):
 
     def _ok(self):
         self.result = True
+        self.destroy()
+
+
+class HjZusammenfassungDialog(tk.Toplevel):
+    """Halbjahres-Zusammenfassung einer Person, mit HJ-Note.
+
+    Die Note wird beim Halbjahreswechsel im Fenster und beim Schliessen
+    uebernommen (`bei_note(hj, note)`) -- es gibt keinen Weg, eine getippte
+    Note versehentlich zu verwerfen.
+    """
+
+    def __init__(self, parent, student: Student, bei_note):
+        super().__init__(parent)
+        self.title(f"Zusammenfassung – {student.voller_name}")
+        self.transient(parent)
+        self.grab_set()
+        self.student = student
+        self.bei_note = bei_note
+        self._hj = halbjahr_fuer_datum()
+
+        oben = ttk.Frame(self, padding=(10, 10, 10, 4))
+        oben.pack(fill="x")
+        ttk.Label(oben, text="Halbjahr").pack(side="left")
+        self.v_hj = tk.StringVar(value=self._hj)
+        auswahl = ttk.Combobox(oben, textvariable=self.v_hj, values=hj_auswahl(student),
+                               state="readonly", width=10)
+        auswahl.pack(side="left", padx=(6, 18))
+        auswahl.bind("<<ComboboxSelected>>", lambda e: self._halbjahr_gewechselt())
+        ttk.Label(oben, text="HJ-Note").pack(side="left")
+        self.v_note = tk.StringVar(value=hj_note_von(student, self._hj))
+        self.e_note = ttk.Entry(oben, textvariable=self.v_note, width=8)
+        self.e_note.pack(side="left", padx=6)
+
+        rahmen = ttk.Frame(self, padding=(10, 0))
+        rahmen.pack(fill="both", expand=True)
+        self.feld = tk.Text(rahmen, width=90, height=28, wrap="word")
+        self.feld.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.feld.yview)
+        sb.pack(side="right", fill="y")
+        self.feld.config(yscrollcommand=sb.set)
+
+        btns = ttk.Frame(self, padding=10)
+        btns.pack(fill="x")
+        ttk.Button(btns, text="Text kopieren", command=self._kopieren).pack(side="left")
+        ttk.Button(btns, text="Schließen", command=self._schliessen).pack(side="right")
+        self.protocol("WM_DELETE_WINDOW", self._schliessen)
+        self.bind("<Escape>", lambda e: self._schliessen())
+        self._fuellen()
+        self.e_note.focus_set()
+
+    def _note_uebernehmen(self):
+        note = self.v_note.get().strip()
+        if note != hj_note_von(self.student, self._hj):
+            self.bei_note(self._hj, note)
+
+    def _halbjahr_gewechselt(self):
+        self._note_uebernehmen()
+        self._hj = self.v_hj.get()
+        self.v_note.set(hj_note_von(self.student, self._hj))
+        self._fuellen()
+
+    def _text(self) -> str:
+        return hj_zusammenfassung_text(self.student, hj_zusammenfassung(self.student, self._hj))
+
+    def _fuellen(self):
+        self.feld.config(state="normal")
+        self.feld.delete("1.0", "end")
+        self.feld.insert("1.0", self._text())
+        self.feld.config(state="disabled")
+
+    def _kopieren(self):
+        # Die Note aus dem Feld zaehlt, auch wenn sie gerade erst getippt wurde.
+        self._note_uebernehmen()
+        self._fuellen()
+        self.clipboard_clear()
+        self.clipboard_append(self._text())
+
+    def _schliessen(self):
+        self._note_uebernehmen()
         self.destroy()
 
 
@@ -1231,7 +1311,10 @@ class App(tk.Tk):
         self.f_deadline_bem = tk.StringVar()
 
         self.name_label = ttk.Label(kopf, text="–", font=("", 14, "bold"))
-        self.name_label.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
+        self.name_label.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self.btn_zusammenfassung = ttk.Button(kopf, text="Zusammenfassung…",
+                                              command=self.zusammenfassung_zeigen)
+        self.btn_zusammenfassung.grid(row=0, column=3, sticky="e", pady=(0, 6))
 
         ttk.Label(kopf, text="Kursung").grid(row=1, column=0, sticky="e", padx=4)
         ttk.Combobox(kopf, textvariable=self.f_kursung, values=KURSUNG_OPTIONEN,
@@ -1239,7 +1322,8 @@ class App(tk.Tk):
         ttk.Label(kopf, text="Jahrgangsstufe").grid(row=1, column=2, sticky="e", padx=4)
         ttk.Entry(kopf, textvariable=self.f_jahrgang, width=6).grid(row=1, column=3, sticky="w")
 
-        ttk.Label(kopf, text="HJ-Note").grid(row=2, column=0, sticky="e", padx=4, pady=(4, 0))
+        # Die Note des LAUFENDEN Halbjahres; fruehere stehen in der Zusammenfassung.
+        ttk.Label(kopf, text="HJ-Note (lfd. HJ)").grid(row=2, column=0, sticky="e", padx=4, pady=(4, 0))
         ttk.Entry(kopf, textvariable=self.f_hjnote, width=6).grid(row=2, column=1, sticky="w", pady=(4, 0))
         ttk.Label(kopf, text="Letzter Besuch FB").grid(row=2, column=2, sticky="e", padx=4, pady=(4, 0))
         ttk.Label(kopf, textvariable=self.f_letzter_besuch).grid(row=2, column=3, sticky="w", pady=(4, 0))
@@ -1726,7 +1810,7 @@ class App(tk.Tk):
         """Knoepfe freigeben oder ausgrauen, je nachdem was ausgewaehlt ist."""
         person = "normal" if self.liste.selection() else "disabled"
         for b in (self.btn_person_entfernen, self.btn_fb_heute,
-                  self.btn_fb_nachtragen, self.btn_baustein_neu):
+                  self.btn_fb_nachtragen, self.btn_baustein_neu, self.btn_zusammenfassung):
             b.config(state=person)
         # Bearbeiten/Entfernen beziehen sich auf die markierte Zeile der Baustein-Tabelle.
         baustein = "normal" if self.tabelle.selection() else "disabled"
@@ -1878,6 +1962,22 @@ class App(tk.Tk):
             return None
         i = int(auswahl[0][2:])
         return s.talks[i] if 0 <= i < len(s.talks) else None
+
+    def zusammenfassung_zeigen(self):
+        s = self.aktueller_schueler
+        if s is None:
+            return
+
+        def bei_note(hj, note):
+            hj_note_setzen(s, hj, note)
+            self._markiere_ungespeichert()
+            if hj == halbjahr_fuer_datum() and s is self.aktueller_schueler:
+                # Kopffeld nachziehen, ohne dass es sich selbst zurueckschreibt.
+                self._laden_sperre = True
+                self.f_hjnote.set(s.hj_note or "")
+                self._laden_sperre = False
+
+        self.wait_window(HjZusammenfassungDialog(self, s, bei_note))
 
     def talk_bewerten(self):
         t = self._markierter_talk()
@@ -2065,7 +2165,7 @@ class App(tk.Tk):
             s.jahrgangsstufe = int(self.f_jahrgang.get()) if self.f_jahrgang.get().strip() else None
         except ValueError:
             pass
-        s.hj_note = self.f_hjnote.get()
+        hj_note_setzen(s, halbjahr_fuer_datum(), self.f_hjnote.get())
         s.alias = self.f_alias.get().strip().lower()
         s.sonstige_deadline_bemerkung = self.f_deadline_bem.get().strip()
         # Beim Tippen ist das Datum zwischendurch unvollstaendig; solange wird

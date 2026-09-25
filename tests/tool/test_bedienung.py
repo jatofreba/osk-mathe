@@ -107,7 +107,7 @@ def mach_app(personen=(), bausteine=()):
     app.tabelle = Auswahl(bausteine)
     for name in ("btn_person_entfernen", "btn_fb_heute", "btn_fb_nachtragen",
                  "btn_baustein_neu", "btn_baustein_bearbeiten", "btn_baustein_entfernen",
-                 "btn_talk_bewerten"):
+                 "btn_talk_bewerten", "btn_zusammenfassung"):
         setattr(app, name, Knopf())
     # Talk-Liste der Person (seit den Mathe-Talks): ohne markierte Zeile.
     app.talk_tabelle = Auswahl()
@@ -125,6 +125,7 @@ pruefe("K1b und Bearbeiten/Entfernen der Bausteine ebenfalls",
        and app.btn_baustein_entfernen.state == "disabled")
 
 pruefe("K1c und Bewerten eines Mathe-Talks auch", app.btn_talk_bewerten.state == "disabled")
+pruefe("K1d die Zusammenfassung braucht eine Person", app.btn_zusammenfassung.state == "disabled")
 
 app = mach_app(personen=("Ben Jansen",))
 app._knoepfe_aktualisieren()

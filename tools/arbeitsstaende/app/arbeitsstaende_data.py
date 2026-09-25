@@ -12,7 +12,7 @@ import json
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -1178,6 +1178,143 @@ def talks_zusammenfassung(talks: list) -> str:
     return " · ".join(teile)
 
 
+def hj_note_von(student, hj: str) -> str:
+    return (student.hj_noten or {}).get(hj, "")
+
+
+def hj_note_setzen(student, hj: str, note: str):
+    """HJ-Note fuer ein Halbjahr setzen (leer = entfernen). Betrifft es das
+    laufende Halbjahr, zieht das Kopffeld (hj_note) mit."""
+    note = (note or "").strip()
+    if note:
+        student.hj_noten[hj] = note
+    else:
+        student.hj_noten.pop(hj, None)
+    if hj == halbjahr_fuer_datum():
+        student.hj_note = note
+
+
+def hj_noten_angleichen(student, heute: Optional[date] = None):
+    """Aeltere Dateien (und Excel) kennen nur EINE HJ-Note -- sie gilt fuers
+    laufende Halbjahr. Danach ist hj_note immer die Note dieses Halbjahres."""
+    hj = halbjahr_fuer_datum(heute)
+    if (student.hj_note or "").strip() and hj not in student.hj_noten:
+        student.hj_noten[hj] = student.hj_note.strip()
+    student.hj_note = student.hj_noten.get(hj, "")
+
+
+def _ohne_app_marker(text: str) -> str:
+    text = (text or "").strip()
+    if text.startswith(LT_MARKER):
+        return "(aus der App) " + text[len(LT_MARKER):].strip()
+    return text
+
+
+def hj_zusammenfassung(student, hj: str) -> dict:
+    """Alles, was zu einer Person in einem Halbjahr gehoert.
+
+    Bausteine: die mit diesem Halbjahr (ohne die Talk-Textzeile -- die Talks
+    stehen einzeln). LZK: nach dem Datum dem Halbjahr zugeordnet, undatierte
+    nach dem Halbjahr ihres Bausteins. FB-Besuche und Talks nach Datum bzw.
+    Halbjahr.
+    """
+    bausteine = [b for b in student.bausteine
+                 if b.halbjahr == hj and not (b.name or "").startswith(LT_TALK_NAME)]
+    lzk = []
+    for b in student.bausteine:
+        if (b.name or "").startswith(LT_TALK_NAME):
+            continue
+        for nr in (1, 2):
+            datum = getattr(b, f"lzk_datum_{nr}")
+            note = getattr(b, f"lzk_note_{nr}") or ""
+            erg = getattr(b, f"lzk_ergebnis_{nr}") or ""
+            bem = getattr(b, f"lzk_bem_{nr}") or ""
+            if datum:
+                im_hj = halbjahr_fuer_datum(datum) == hj
+            else:
+                im_hj = b.halbjahr == hj and bool(note or erg or bem)
+            if im_hj:
+                lzk.append({"baustein": b.name, "nr": nr, "datum": datum, "note": note,
+                            "ergebnis": erg, "bemerkung": bem})
+    lzk.sort(key=lambda x: (x["datum"] or date.max, x["baustein"], x["nr"]))
+    return {
+        "halbjahr": hj,
+        "bausteine": bausteine,
+        "lzk": lzk,
+        "fb_besuche": sorted(t for t in student.fb_besuche if halbjahr_fuer_datum(t) == hj),
+        "talks": sorted((t for t in student.talks if t.halbjahr == hj),
+                        key=lambda t: (t.datum or date.min, t.uhrzeit)),
+        "hj_note": hj_note_von(student, hj),
+    }
+
+
+def hj_zusammenfassung_text(student, z: dict) -> str:
+    """Die Zusammenfassung als lesbarer Text (zum Anzeigen und Kopieren)."""
+    zeilen = [f"{student.voller_name} — Halbjahr {z['halbjahr']}"]
+    kopf = []
+    if student.kursung:
+        kopf.append(f"{student.kursung}-Kurs")
+    if student.jahrgangsstufe:
+        kopf.append(f"Jahrgang {student.jahrgangsstufe}")
+    kopf.append(f"HJ-Note: {z['hj_note'] or '—'}")
+    zeilen += [" · ".join(kopf), ""]
+
+    zeilen.append(f"BAUSTEINE ({len(z['bausteine'])})")
+    if not z["bausteine"]:
+        zeilen.append("  keine")
+    for b in z["bausteine"]:
+        teile = [b.status]
+        if b.bausteinarbeit:
+            teile.append(b.bausteinarbeit)
+        zeilen.append(f"• {b.name} — " + ", ".join(teile))
+        bem = _ohne_app_marker(b.bemerkung)
+        for z_ in bem.splitlines():
+            if z_.strip():
+                zeilen.append(f"    {z_.strip()}")
+    zeilen.append("")
+
+    zeilen.append(f"LZK ({len(z['lzk'])})")
+    if not z["lzk"]:
+        zeilen.append("  keine")
+    for l in z["lzk"]:
+        teile = [_fmt_kurz(l["datum"]) or "ohne Datum"]
+        if l["note"]:
+            teile.append(f"Note {l['note']}")
+        if l["ergebnis"]:
+            teile.append(LZK_ERGEBNIS_TEXT.get(l["ergebnis"], l["ergebnis"]))
+        zeilen.append(f"• {l['baustein']} (LZK {l['nr']}): " + ", ".join(teile))
+        for z_ in (l["bemerkung"] or "").splitlines():
+            if z_.strip():
+                zeilen.append(f"    {z_.strip()}")
+    zeilen.append("")
+
+    besuche = z["fb_besuche"]
+    zeilen.append(f"FACHBÜRO-BESUCHE: {len(besuche)}")
+    if besuche:
+        zeilen.append("  " + ", ".join(_fmt_kurz(t) for t in besuche))
+    zeilen.append("")
+
+    talks = z["talks"]
+    zeilen.append(f"MATHE-TALKS: {talks_zusammenfassung(talks) if talks else 'keine'}")
+    for t in talks:
+        teil = f"• {_fmt_kurz(t.datum)} {t.thema or 'Talk'} ({TALK_ROLLEN_TEXT.get(t.rolle, t.rolle)})"
+        bew = TALK_STATUS_TEXT.get(t.status, t.status)
+        if t.status == "erledigt" and t.flammen:
+            bew += " " + "🔥" * t.flammen
+        zeilen.append(f"{teil}: {bew}")
+    return "\n".join(zeilen)
+
+
+def hj_auswahl(student) -> List[str]:
+    """Halbjahre fuer die Auswahl: die ueblichen plus alle, in denen die Person
+    etwas hat -- neueste zuerst."""
+    eigene = {b.halbjahr for b in student.bausteine}
+    eigene |= {t.halbjahr for t in student.talks}
+    eigene |= set(student.hj_noten)
+    eigene |= {halbjahr_fuer_datum(t) for t in student.fb_besuche}
+    return halbjahr_optionen(sorted(x for x in eigene if x))
+
+
 @dataclass
 class Baustein:
     name: str = ""
@@ -1235,6 +1372,9 @@ class Student:
     # Mathe-Talks der Person (gehalten, mit vorgetragen, zugehoert) -- nur im
     # JSON-Format, Excel kennt sie nicht. Siehe MatheTalk.
     talks: List[MatheTalk] = field(default_factory=list)
+    # HJ-Note je Halbjahr ({"2627_1": "2-"}). `hj_note` bleibt die des LAUFENDEN
+    # Halbjahres (Kopffeld, Excel) und wird ueber hj_note_setzen() mitgefuehrt.
+    hj_noten: Dict[str, str] = field(default_factory=dict)
 
     def fb_besuch_eintragen(self, tag: date):
         if tag not in self.fb_besuche:
@@ -1296,6 +1436,7 @@ def student_als_dict(s: "Student") -> dict:
         "kursung": s.kursung,
         "jahrgangsstufe": s.jahrgangsstufe,
         "hj_note": s.hj_note,
+        "hj_noten": dict(s.hj_noten),
         "sonstige_deadline": _iso(s.sonstige_deadline),
         "sonstige_deadline_anlass": s.sonstige_deadline_bemerkung,
         "fb_besuche": [d.isoformat() for d in s.fb_besuche],
@@ -1325,6 +1466,9 @@ def student_aus_dict(d: dict) -> "Student":
     s.fb_besuche = besuche
     s.letzter_besuch_fb = besuche[-1] if besuche else None
     s.talks = [talk_aus_dict(t) for t in d.get("mathe_talks") or [] if isinstance(t, dict)]
+    noten = d.get("hj_noten") if isinstance(d.get("hj_noten"), dict) else {}
+    s.hj_noten = {str(k): str(v).strip() for k, v in noten.items() if str(v or "").strip()}
+    hj_noten_angleichen(s)
     return s
 
 
@@ -1488,6 +1632,7 @@ class Arbeitsstaende:
                 student.fb_besuche.sort()
             if student.fb_besuche:
                 student.letzter_besuch_fb = student.fb_besuche[-1]
+            hj_noten_angleichen(student)
             self.students.append(student)
 
         return warnungen
