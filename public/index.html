@@ -5700,8 +5700,18 @@ function talkAuswahlHtml(praefix, leute, g, schon) {
       <div class="talk-auswahl" role="group" aria-labelledby="${praefix}-${typ}-lbl">${leute.map(c => zeile(typ, c)).join('') || leer}</div>
     </div>`;
   // Mit-Vortrag nur, wenn das Fach mehr als eine vortragende Person erlaubt und noch Platz ist.
-  const mitTeil = mitPlaetze <= 0 ? '' : teil('mit', '🎤 Mit wem trägst du vor?',
-    nachladen ? `noch höchstens ${mitPlaetze}` : `${mitMin ? `mind. ${mitMin}, ` : 'optional, '}höchstens ${mitPlaetze}`);
+  // Ist er freiwillig, steht zuerst nur "Ich möchte nicht alleine vortragen" da; die Liste
+  // erscheint erst mit dem Haken (talkMitUmschalten). Verlangt das Fach zwei Vortragende oder
+  // traegt schon jemand mit vor, gibt es nichts zu fragen - dann gleich die Liste.
+  const mitListe = teil('mit', '🎤 Mit wem trägst du vor?',
+    nachladen ? `noch höchstens ${mitPlaetze}` : `${mitMin ? `mind. ${mitMin}, ` : ''}höchstens ${mitPlaetze}`);
+  const mitTeil = mitPlaetze <= 0 ? '' : (mitMin > 0 || schon.mit > 0) ? mitListe : `
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;">
+        <input type="checkbox" id="${praefix}-nicht-allein" aria-controls="${praefix}-mit-box" aria-expanded="false"
+          onchange="talkMitUmschalten('${praefix}', this.checked, ${mitPlaetze}, ${zuPlaetze})"><span>🎤 Ich möchte nicht alleine vortragen</span></label>
+    </div>
+    <div id="${praefix}-mit-box" style="display:none;">${mitListe}</div>`;
   const zuTeil = zuPlaetze > 0
     ? teil('zu', '👂 Wen lädst du zum Zuhören ein?', nachladen ? `noch höchstens ${zuPlaetze}` : `${g.minZ}–${g.maxZ}`)
     : `<div class="form-group" style="color:var(--md-on-surface-variant);font-size:13px;">👂 Zum Zuhören sind schon ${schon.zu} eingeladen – mehr passen nicht (höchstens ${g.maxZ}).</div>`;
@@ -5715,6 +5725,16 @@ function talkAuswahlPruefen(praefix, mitPlaetze, zuPlaetze) {
   mit.forEach(b => { b.disabled = !b.checked && (zuIds.has(b.value) || mitIds.size >= mitPlaetze); });
   zu.forEach(b => { b.disabled = !b.checked && (mitIds.has(b.value) || zuIds.size >= zuPlaetze); });
 }
+// "Ich möchte nicht alleine vortragen": blendet die Liste ein bzw. aus. Beim Ausblenden fallen die
+// Haken dort weg - sonst wuerde unsichtbar doch jemand als Vortragende:r eingeladen.
+function talkMitUmschalten(praefix, an, mitPlaetze, zuPlaetze) {
+  const box = document.getElementById(praefix + '-mit-box');
+  if (box) box.style.display = an ? '' : 'none';
+  const schalter = document.getElementById(praefix + '-nicht-allein');
+  if (schalter) schalter.setAttribute('aria-expanded', an ? 'true' : 'false');
+  if (!an) document.querySelectorAll('.' + praefix + '-mit-cb').forEach(b => { b.checked = false; });
+  talkAuswahlPruefen(praefix, mitPlaetze, zuPlaetze);
+}
 // Liest die Auswahl und prueft sie gegen die Grenzen - dieselben Regeln wie der Server.
 // verfuegbar = wie viele Mitschueler:innen es ueberhaupt gibt (die Mindestzahl Zuhoerende ist
 // hoechstens so gross). Beim Nachladen (schon gesetzt) gilt nur das Maximum.
@@ -5723,6 +5743,10 @@ function talkAuswahlLesen(praefix, g, verfuegbar, schon) {
     .filter(b => b.checked).map(b => parseInt(b.value));
   const mit = ids('mit');
   const zu = ids('zu').filter(id => !mit.includes(id));
+  // Haken bei "nicht alleine", aber niemand gewaehlt: nachfragen statt still allein zu buchen.
+  const schalter = document.getElementById(praefix + '-nicht-allein');
+  if (schalter && schalter.checked && !mit.length)
+    return { fehler: 'Wähle, mit wem du vorträgst – oder nimm den Haken bei „Ich möchte nicht alleine vortragen“ heraus.' };
   if (schon) {
     if (!mit.length && !zu.length) return { fehler: 'Bitte mindestens eine Person auswählen.' };
     if (1 + schon.mit + mit.length > g.maxV) return { fehler: `Höchstens ${g.maxV} Personen tragen gemeinsam vor.` };
@@ -5995,13 +6019,15 @@ function openSubjectSettingsModal() {
   // vorkommen, plus das laufende Halbjahr und bereits gepflegte Abweichungen.
   const hjSel = document.getElementById('ssettings-hj');
   if (hjSel) {
-    const known = new Set([currentHalbjahrGuess()]);
+    const aktuell = currentHalbjahrGuess();
+    const known = new Set([aktuell]);
     (talkingAdminSlots || []).forEach(s => { if (s.halbjahr) known.add(String(s.halbjahr).trim()); });
     Object.keys(subj.halbjahrTargets || {}).forEach(hj => known.add(hj));
     const list = [...known].filter(Boolean).sort().reverse();
     hjSel.innerHTML = '<option value="">Standard (alle Halbjahre)</option>' +
-      list.map(hj => `<option value="${escHtml(hj)}">Halbjahr ${escHtml(hj)}${(subj.halbjahrTargets || {})[hj] ? ' ·  abweichend' : ''}</option>`).join('');
-    hjSel.value = '';
+      list.map(hj => `<option value="${escHtml(hj)}">Halbjahr ${escHtml(hj)}${hj === aktuell ? ' (aktuell)' : ''}${(subj.halbjahrTargets || {})[hj] ? ' ·  abweichend' : ''}</option>`).join('');
+    // Vorbelegt ist das laufende Halbjahr - dort wird im Alltag nachgesteuert.
+    hjSel.value = aktuell;
   }
   fillSubjectSettingsTargets();
   document.getElementById('ssettings-error').style.display = 'none';
@@ -6022,7 +6048,7 @@ function fillSubjectSettingsTargets() {
   if (resetBtn) resetBtn.style.display = hasOverride ? '' : 'none';
   const hint = document.getElementById('ssettings-hj-hint');
   if (hint) hint.textContent = hj
-    ? (hasOverride ? ` Für ${hj} gilt aktuell eine eigene Vorgabe.` : ` Gespeichert wird eine eigene Vorgabe nur für ${hj}.`)
+    ? (hasOverride ? ` Für ${hj} gilt aktuell eine eigene Vorgabe.` : ` Änderst du die Zahlen, gilt das nur für ${hj}.`)
     : ' Gilt für alle Halbjahre ohne eigene Vorgabe.';
 }
 function onSubjectSettingsHalbjahrChange() { fillSubjectSettingsTargets(); }
@@ -6057,7 +6083,7 @@ async function submitSubjectSettings() {
   const pflichtZuhoeren = parseInt(document.getElementById('ssettings-pz').value);
   const optionalPraesentieren = parseInt(document.getElementById('ssettings-op').value);
   const optionalZuhoeren = parseInt(document.getElementById('ssettings-oz').value);
-  const halbjahr = document.getElementById('ssettings-hj').value;
+  let halbjahr = document.getElementById('ssettings-hj').value;
   const zahl = id => parseInt(document.getElementById(id).value);
   const grenzen = { minVortragende: zahl('ssettings-minv'), maxVortragende: zahl('ssettings-maxv'),
                     minZuhoerende: zahl('ssettings-minz'), maxZuhoerende: zahl('ssettings-maxz') };
@@ -6067,6 +6093,15 @@ async function submitSubjectSettings() {
     return fehler('Vortragende: mindestens 1, höchstens 4 – und min nicht über max.');
   if (grenzen.minZuhoerende < 1 || grenzen.minZuhoerende > grenzen.maxZuhoerende)
     return fehler('Zuhörende: mindestens 1 – und min nicht über max.');
+  // Vorbelegt ist das laufende Halbjahr. Hat es noch keine eigene Vorgabe und sind die Zahlen
+  // unveraendert (z.B. nur Ort oder Grenzen geaendert), bleibt es beim Fach-Standard - sonst
+  // legte schon dieses Speichern eine eigene Vorgabe an, und spaetere Aenderungen am Standard
+  // kaemen in diesem Halbjahr nicht mehr an.
+  if (halbjahr && !(subj.halbjahrTargets || {})[halbjahr]
+      && pflichtPraesentieren === subjPflichtP(subj, '') && pflichtZuhoeren === subjPflichtZ(subj, '')
+      && optionalPraesentieren === subjOptionalP(subj, '') && optionalZuhoeren === subjOptionalZ(subj, '')) {
+    halbjahr = '';
+  }
   const r = await fetch(`/api/admin/subjects/${subj.id}`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ defaultOrt, defaultDauer, pflichtPraesentieren, pflichtZuhoeren,

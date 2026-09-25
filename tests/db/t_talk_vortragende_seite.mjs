@@ -62,11 +62,24 @@ const liesKaestchen = id => {
   return kaestchen;
 };
 const kasten = (klasse, name) => kaestchen.find(k => k.klasse === klasse && k.value === String(P[name]));
+const sichtbar = id => { const e = seite.element(id); return !!e && e.style.display !== 'none'; };
 const klick = (klasse, name) => {
   const k = kasten(klasse, name);
   if (!k || k.disabled) throw new Error('nicht anklickbar: ' + klasse + ' ' + name);
+  // Die Liste "mit wem" kann hinter "Ich möchte nicht alleine vortragen" zugeklappt sein.
+  const box = klasse.replace('-mit-cb', '-mit-box');
+  if (box !== klasse && seite.element(box) && !sichtbar(box)) throw new Error('Liste ist zu: ' + klasse);
   k.checked = !k.checked;
   if (k.onchange) lauf(k.onchange.replace(/&#39;|&quot;/g, "'"));
+};
+// Ein einzelnes Kaestchen mit id (z.B. "Ich möchte nicht alleine vortragen") setzen - samt onchange.
+const schalte = (id, an) => {
+  const el = seite.element(id);
+  if (!el) throw new Error('kein Element ' + id);
+  el.checked = an;
+  const quelle = Object.values(seite.elemente).map(e => e.innerHTML).find(h => h.includes('id="' + id + '"'));
+  const ab = quelle.indexOf('onchange="', quelle.indexOf('id="' + id + '"')) + 'onchange="'.length;
+  lauf(quelle.slice(ab, quelle.indexOf('"', ab)).replace('this.checked', String(an)));
 };
 const kalender = async (datum) => {
   await lauf(`(async () => { calData = await (await fetch('/api/calendar')).json();
@@ -80,16 +93,29 @@ await als('dan');
 await lauf('loadTalkingStudent()'); await ruhe();
 lauf('openBookSessionModal()');
 liesKaestchen('tbook-classmates');
-pruefe('A1 beim Anmelden zwei Listen: mit wem vortragen (optional, hoechstens 1), wer zuhoert (2-5)',
-  html('tbook-classmates').includes('Mit wem trägst du vor?') && html('tbook-classmates').includes('optional, höchstens 1')
-  && html('tbook-classmates').includes('(2–5)') && kaestchen.filter(k => k.klasse === 'tbook-mit-cb').length === 5
-  && kaestchen.filter(k => k.klasse === 'tbook-zu-cb').length === 5, html('tbook-classmates'));
+pruefe('A1 beim Anmelden erst die Frage "Ich möchte nicht alleine vortragen" - die Liste dazu ist noch zu; darunter wer zuhoert (2-5)',
+  html('tbook-classmates').includes('Ich möchte nicht alleine vortragen') && !seite.element('tbook-nicht-allein').checked
+  && !sichtbar('tbook-mit-box') && html('tbook-classmates').includes('(2–5)')
+  && kaestchen.filter(k => k.klasse === 'tbook-mit-cb').length === 5 && kaestchen.filter(k => k.klasse === 'tbook-zu-cb').length === 5,
+  html('tbook-classmates'));
+schalte('tbook-nicht-allein', true);
+pruefe('A1b mit dem Haken erscheint "Mit wem trägst du vor? (höchstens 1)"', sichtbar('tbook-mit-box')
+  && html('tbook-classmates').includes('Mit wem trägst du vor? <span style="font-weight:500;">(höchstens 1)</span>'), html('tbook-classmates'));
 klick('tbook-mit-cb', 'gil');
 pruefe('A2 wer mit vortraegt, ist bei den Zuhoerenden gesperrt - und mehr Mit-Vortragende gehen nicht',
   kasten('tbook-zu-cb', 'gil').disabled && kasten('tbook-mit-cb', 'eli').disabled && !kasten('tbook-zu-cb', 'eli').disabled);
-klick('tbook-zu-cb', 'eli');
+schalte('tbook-nicht-allein', false);
+pruefe('A2b Haken wieder raus: Liste zu, gil nicht mehr gewaehlt und kann wieder zuhoeren',
+  !sichtbar('tbook-mit-box') && !kasten('tbook-mit-cb', 'gil').checked && !kasten('tbook-zu-cb', 'gil').disabled);
+schalte('tbook-nicht-allein', true);
+klick('tbook-zu-cb', 'eli'); klick('tbook-zu-cb', 'fay');
 seite.element('tbook-slot').value = String(s1);
 seite.element('tbook-thema').value = 'Pythagoras';
+await lauf('submitBookSession()'); await ruhe();
+pruefe('A2c Haken gesetzt, aber niemand gewaehlt: nachfragen statt allein buchen',
+  /Wähle, mit wem du vorträgst/.test(meldungen.pop() || '') && !(await eins(`SELECT 1 FROM talking_sessions WHERE slot_id=$1`, [s1])));
+klick('tbook-mit-cb', 'gil');
+klick('tbook-zu-cb', 'fay');
 await lauf('submitBookSession()'); await ruhe();
 pruefe('A3 nur eine Zuhoerende: die Seite sagt es, bevor etwas gebucht wird',
   /mindestens 2 Personen zum Zuhören/.test(meldungen.pop() || '') && !(await eins(`SELECT 1 FROM talking_sessions WHERE slot_id=$1`, [s1])));
@@ -163,8 +189,14 @@ pruefe('D6 Halbjahr-Uebersicht: "gehalten mit dan"', hjGil.includes('gehalten mi
 // ── E) Grenzen einstellen, nachladen, absagen ────────────────────────────────
 lauf('openSubjectSettingsModal()');
 const feld = id => seite.element(id);
+const hjJetzt = lauf('currentHalbjahrGuess()');
 pruefe('E1 Fach-Einstellungen zeigen die Grenzen je Talk (Standard 1/2/2/5)',
   [feld('ssettings-minv').value, feld('ssettings-maxv').value, feld('ssettings-minz').value, feld('ssettings-maxz').value].join() === '1,2,2,5');
+pruefe('E1b "Gilt für" steht auf dem laufenden Halbjahr (als "aktuell" markiert)',
+  hjJetzt && feld('ssettings-hj').value === hjJetzt && html('ssettings-hj').includes(`Halbjahr ${hjJetzt} (aktuell)`)
+  && feld('ssettings-hj-hint').textContent.includes(`gilt das nur für ${hjJetzt}`), [feld('ssettings-hj').value, html('ssettings-hj')]);
+const standardVorher = await eins(`SELECT pflicht_praesentieren AS pp, pflicht_zuhoeren AS pz, optional_praesentieren AS op, optional_zuhoeren AS oz
+                                   FROM subjects WHERE key='mathe'`);
 feld('ssettings-maxv').value = '3';
 feld('ssettings-minz').value = '6';
 await lauf('submitSubjectSettings()'); await ruhe();
@@ -173,9 +205,23 @@ pruefe('E2 min ueber max: Hinweis, nichts gespeichert', /Zuhörende/.test(feld('
 feld('ssettings-minz').value = '2';
 await lauf('submitSubjectSettings()'); await ruhe();
 const mathe = await eins(`SELECT * FROM subjects WHERE key='mathe'`);
-pruefe('E3 gespeichert - fuer das ganze Fach, die Halbjahr-Vorgaben unberuehrt',
+pruefe('E3 gespeichert - fuer das ganze Fach; obwohl das Halbjahr vorbelegt war, entsteht ohne geaenderte Zahlen keine Halbjahr-Vorgabe',
   mathe.talk_max_vortragende === 3 && mathe.talk_min_zuhoerende === 2 && mathe.talk_max_zuhoerende === 5
-  && !(await eins(`SELECT 1 FROM subject_halbjahr_targets WHERE subject_id=$1`, [F.mathe])), mathe);
+  && !(await eins(`SELECT 1 FROM subject_halbjahr_targets WHERE subject_id=$1`, [F.mathe]))
+  && mathe.pflicht_praesentieren === standardVorher.pp && mathe.optional_zuhoeren === standardVorher.oz, mathe);
+lauf('openSubjectSettingsModal()');
+const ppNeu = standardVorher.pp + 1;
+feld('ssettings-pp').value = String(ppNeu);
+await lauf('submitSubjectSettings()'); await ruhe();
+const vorgabe = await eins(`SELECT * FROM subject_halbjahr_targets WHERE subject_id=$1`, [F.mathe]);
+pruefe('E3b geaenderte Zahlen gelten nur fuer das laufende Halbjahr, der Fach-Standard bleibt',
+  vorgabe && vorgabe.halbjahr === hjJetzt && vorgabe.pflicht_praesentieren === ppNeu
+  && (await eins(`SELECT pflicht_praesentieren AS pp FROM subjects WHERE key='mathe'`)).pp === standardVorher.pp, vorgabe);
+await lauf(`subjectsMeta = []; loadSubjectsMeta()`);
+lauf('openSubjectSettingsModal()');
+pruefe('E3c beim naechsten Oeffnen: laufendes Halbjahr "abweichend", mit der eigenen Zahl und "Standard verwenden"',
+  feld('ssettings-pp').value == ppNeu && html('ssettings-hj').includes(`Halbjahr ${hjJetzt} (aktuell) ·  abweichend`)
+  && feld('ssettings-reset').style.display === '', [feld('ssettings-pp').value, html('ssettings-hj')]);
 
 await als('dan');
 await lauf('loadTalkingStudent()'); await ruhe();
@@ -185,6 +231,8 @@ const mitWerte = kaestchen.filter(k => k.klasse === 'tinvite-mit-cb').map(k => +
 pruefe('E4 weitere einladen: nur wer noch nicht dabei ist; Mit-Vortrag noch hoechstens 1, Zuhoeren noch hoechstens 3',
   mitWerte.join() === [P.hal, P.ida].sort().join() && html('tinvite-classmates').includes('noch höchstens 1')
   && html('tinvite-classmates').includes('noch höchstens 3'), html('tinvite-classmates'));
+pruefe('E4b es traegt schon jemand mit vor - dann ohne die Frage "nicht alleine", die Liste steht gleich da',
+  !html('tinvite-classmates').includes('nicht alleine') && !seite.element('tinvite-mit-box'), html('tinvite-classmates'));
 klick('tinvite-mit-cb', 'hal');
 await lauf('submitInviteMore()'); await ruhe();
 const halE = await einladungVon(sess1, 'hal');
@@ -213,6 +261,8 @@ liesKaestchen('calbook-talk-auswahl');
 pruefe('K1 Englisch: "mind. 1, hoechstens 1" beim Mit-Vortrag, "1-3" beim Zuhoeren; die Fachbuero-Liste ist aus',
   html('calbook-talk-auswahl').includes('mind. 1, höchstens 1') && html('calbook-talk-auswahl').includes('(1–3)')
   && seite.element('calbook-cm-gruppe').style.display === 'none' && html('calbook-classmates') === '', html('calbook-talk-auswahl'));
+pruefe('K1b allein geht hier nicht - also keine Frage "nicht alleine", die Liste steht gleich da',
+  !html('calbook-talk-auswahl').includes('nicht alleine') && !seite.element('calbook-mit-box'), html('calbook-talk-auswahl'));
 seite.element('calbook-thema').value = 'My town';
 klick('calbook-zu-cb', 'fay');
 await lauf('submitCalBook()'); await ruhe();
