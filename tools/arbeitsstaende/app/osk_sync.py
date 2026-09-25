@@ -109,6 +109,13 @@ class AppClient:
         with self.opener.open(req, timeout=30) as antwort:
             return json.loads(antwort.read().decode("utf-8"))
 
+    def _patch(self, pfad: str, daten: dict) -> dict:
+        body = json.dumps(daten).encode("utf-8")
+        req = request.Request(self.base + pfad, data=body, method="PATCH",
+                              headers={"Content-Type": "application/json"})
+        with self.opener.open(req, timeout=30) as antwort:
+            return json.loads(antwort.read().decode("utf-8"))
+
     def _get(self, pfad: str) -> dict:
         req = request.Request(self.base + pfad, method="GET")
         with self.opener.open(req, timeout=60) as antwort:
@@ -163,6 +170,24 @@ class AppClient:
             "status": status or "ausstehend",
             "pokale": int(pokale or 0),
         })
+
+    def lzk_aendern(self, lzk_id, datum=None, status=None, pokale=None) -> dict:
+        """Aendert eine LZK ueber ihre ID - NUR die uebergebenen Felder.
+
+        Der Weg fuer FREIE LZK (ohne Lerntheke); Lerntheken-LZK laufen weiter ueber
+        lzk_setzen. Der Server aendert bei diesem Aufruf nichts, was nicht
+        mitgeschickt wird - ein fehlendes Datum loescht also kein Datum.
+        """
+        felder = {}
+        if datum is not None:
+            felder["datum"] = datum.strftime("%Y-%m-%d") if isinstance(datum, (date, datetime)) else str(datum)
+        if status is not None:
+            felder["status"] = status
+        if pokale is not None:
+            felder["pokale"] = int(pokale)
+        if not lzk_id or not felder:
+            raise ValueError("lzk_id und mindestens ein Feld sind Pflicht.")
+        return self._patch(f"/api/admin/lzk/{int(lzk_id)}", felder)
 
     def kurs_setzen(self, user_id, kurs: str) -> None:
         """Setzt die MATHE-Kursung (E/G) eines Kontos auf dem Server.

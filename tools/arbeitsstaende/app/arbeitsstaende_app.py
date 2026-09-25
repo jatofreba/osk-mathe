@@ -18,6 +18,7 @@ from arbeitsstaende_data import (
     Arbeitsstaende, Student, Baustein, alias_vorschlag,
     halbjahr_fuer_datum, halbjahr_optionen, lt_zeilen_aktualisieren, ist_json_pfad,
     lt_lzk_aenderungen, lt_lzk_ergebnis_unterschiede, lzk_ergebnis_zum_server,
+    lt_freie_lzk_abgleich,
     LZK_ERGEBNIS_TEXT, LZK_ERGEBNIS_SYMBOL,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
@@ -424,6 +425,81 @@ class VorlageDialog(tk.Toplevel):
 
     def _speichern(self):
         self.result = list(self.box.get(0, "end"))
+        self.destroy()
+
+
+class FreieLzkDialog(tk.Toplevel):
+    """Freie Mathe-LZK (online ohne Lerntheke angelegt) den Bausteinen zuordnen.
+
+    Zeigt je zugeordneter LZK, wo sich hier und online unterscheiden, und darunter
+    die LZK, die sich nicht zuordnen liessen. Dann die Richtung waehlen - wie bei
+    den Kursungen. `result`: None, "server_zu_liste" oder "liste_zu_server".
+    """
+
+    def __init__(self, parent, paare: list, offen: list, klasse: str):
+        super().__init__(parent)
+        self.title("Freie Mathe-LZK zuordnen")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+        unterschiede = [x for x in paare if not x["gleich"]]
+        gleich = len(paare) - len(unterschiede)
+
+        ttk.Label(self,
+                  text=f"Tandem {klasse} · Mathe-LZK, die online ohne Lerntheke angelegt wurden.\n"
+                       "Zugeordnet wird über den Titel: Thema der LZK = Name des Bausteins.\n"
+                       "LZK 2 bekommt eine Aufbau-LZK, alle anderen LZK 1.",
+                  justify="left", wraplength=600).pack(padx=12, pady=(12, 8), anchor="w")
+        kopf = f"Zuordnungen mit Unterschied ({len(unterschiede)})"
+        if gleich:
+            kopf += f" · {gleich} weitere stimmen schon überein"
+        ttk.Label(self, text=kopf).pack(padx=12, anchor="w")
+
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=12, pady=(2, 6))
+        self.liste = tk.Listbox(rahmen, height=14, width=100, activestyle="none")
+        self.liste.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.liste.yview)
+        sb.pack(side="right", fill="y")
+        self.liste.config(yscrollcommand=sb.set)
+
+        def wert(datum, erg):
+            teile = [fmt_datum(datum) or "–"]
+            if erg:
+                teile.append(LZK_ERGEBNIS_TEXT.get(erg, erg))
+            return " / ".join(teile)
+
+        for x in unterschiede:
+            self.liste.insert("end", f"{x['person']} · {x['baustein'].name} (LZK {x['nummer']}):"
+                                     f"   hier {wert(x['hier_datum'], x['hier_erg'])}"
+                                     f"   ·   online {wert(x['online_datum'], x['online_erg'])}")
+        if offen:
+            self.liste.insert("end", "")
+            self.liste.insert("end", f"Nicht zugeordnet – bleiben unverändert ({len(offen)}):")
+            for zeile in offen:
+                self.liste.insert("end", f"   {zeile}")
+
+        ttk.Label(self,
+                  text="Die gewählte Richtung überschreibt die andere Seite. Leere Felder\n"
+                       "(kein Datum, nicht bewertet) überschreiben dabei nie etwas Eingetragenes.",
+                  foreground="#b3261e", justify="left", wraplength=600).pack(padx=12, anchor="w")
+
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=12, pady=(8, 12))
+        self.btn_holen = ttk.Button(btns, text="← Vom Server in diese Liste",
+                                    command=lambda: self._waehlen("server_zu_liste"))
+        self.btn_holen.pack(side="left")
+        self.btn_senden = ttk.Button(btns, text="Aus dieser Liste zum Server →",
+                                     command=lambda: self._waehlen("liste_zu_server"))
+        self.btn_senden.pack(side="left", padx=6)
+        ttk.Button(btns, text="Schließen", command=self.destroy).pack(side="right")
+        if not unterschiede:
+            self.btn_holen.config(state="disabled")
+            self.btn_senden.config(state="disabled")
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _waehlen(self, richtung):
+        self.result = richtung
         self.destroy()
 
 
@@ -852,6 +928,8 @@ class App(tk.Tk):
                                    command=self.kursungen_abgleichen)
         lerntheke_menu.add_command(label="LZK-Ergebnisse abgleichen…",
                                    command=self.lzk_ergebnisse_abgleichen)
+        lerntheke_menu.add_command(label="Freie Mathe-LZK zuordnen…",
+                                   command=self.freie_lzk_zuordnen)
         lerntheke_menu.add_command(label="Aliasse auf dem Server umbenennen…",
                                    command=self.alias_umbenennen)
         lerntheke_menu.add_separator()
@@ -1787,6 +1865,111 @@ class App(tk.Tk):
                 hinweis += f"\n... und {len(ohne) - 10} weitere"
         self._bericht("Aliasse exportieren", hinweis)
 
+    def freie_lzk_zuordnen(self):
+        """Freie Mathe-LZK (online ohne Lerntheke) den Bausteinen zuordnen.
+
+        Ziel sind von Hand gepflegte Bausteine - die fasst der Abruf bewusst nie an.
+        Deshalb geschieht hier nichts stillschweigend: erst die Unterschiede, dann
+        die Richtung. Leere Felder ueberschreiben in keiner Richtung etwas
+        Eingetragenes; alte Werte stehen im Bericht, damit nichts spurlos verschwindet.
+        """
+        titel_fenster = "Freie Mathe-LZK zuordnen"
+        if not self.az.students:
+            messagebox.showinfo(titel_fenster, "Keine Personen vorhanden.")
+            return
+        if self._dubletten_melden(titel_fenster):
+            return
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            konten, _titel = self._lt_serverstand(client, neu_laden=True)
+        except Exception as e:
+            messagebox.showerror(titel_fenster, f"Abruf fehlgeschlagen:\n{e}")
+            return
+
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+        paare, offen = [], []
+        for student in self.az.students:
+            konto = je_konto.get(student.alias.strip().lower()) if student.alias.strip() else None
+            if not konto:
+                continue
+            p, o = lt_freie_lzk_abgleich(student, konto)
+            paare += p
+            offen += o
+
+        dlg = FreieLzkDialog(self, paare, offen, klasse)
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+        unterschiede = [x for x in paare if not x["gleich"]]
+        text_erg = lambda w: LZK_ERGEBNIS_TEXT.get(w, "–") if w else "–"
+        zeile = lambda x: f"{x['person']} · {x['baustein'].name} (LZK {x['nummer']})"
+
+        if dlg.result == "server_zu_liste":
+            geaendert, leer = [], []
+            for x in unterschiede:
+                b, nr, teile = x["baustein"], x["nummer"], []
+                if x["online_datum"] and x["online_datum"] != x["hier_datum"]:
+                    setattr(b, f"lzk_datum_{nr}", x["online_datum"])
+                    teile.append(f"Datum {fmt_datum(x['hier_datum']) or '–'} → {fmt_datum(x['online_datum'])}")
+                if x["online_erg"] and x["online_erg"] != x["hier_erg"]:
+                    setattr(b, f"lzk_ergebnis_{nr}", x["online_erg"])
+                    teile.append(f"Ergebnis {text_erg(x['hier_erg'])} → {text_erg(x['online_erg'])}")
+                if teile:
+                    geaendert.append(f"{zeile(x)}: " + ", ".join(teile))
+                else:
+                    leer.append(f"{zeile(x)}: online leer – hier bleibt alles")
+            if geaendert:
+                self._markiere_ungespeichert()
+                self._detail_anzeigen()
+            text = f"{len(geaendert)} LZK in die Bausteine übernommen."
+            if geaendert:
+                text += "\n\n" + "\n".join(geaendert) + "\n\nNoch speichern nicht vergessen."
+            if leer:
+                text += "\n\nÜbersprungen:\n" + "\n".join(leer)
+            self._bericht(titel_fenster, text)
+            return
+
+        gesendet, fehler, leer = [], [], []
+        for x in unterschiede:
+            felder, teile = {}, []
+            if x["hier_datum"] and x["hier_datum"] != x["online_datum"]:
+                felder["datum"] = x["hier_datum"]
+                teile.append(f"Datum {fmt_datum(x['online_datum']) or '–'} → {fmt_datum(x['hier_datum'])}")
+            ziel = lzk_ergebnis_zum_server(x["hier_erg"])
+            if ziel and x["hier_erg"] != x["online_erg"]:
+                felder["status"], felder["pokale"] = ziel
+                teile.append(f"Ergebnis {text_erg(x['online_erg'])} → {text_erg(x['hier_erg'])}")
+            if not felder:
+                leer.append(f"{zeile(x)}: hier leer – online bleibt alles")
+                continue
+            try:
+                client.lzk_aendern(x["id"], **felder)
+            except Exception as e:
+                fehler.append(f"{zeile(x)}: {e}")
+                continue
+            gesendet.append(f"{zeile(x)}: " + ", ".join(teile))
+            # Gemerkten Serverstand nachziehen.
+            eintrag = x["eintrag"]
+            if "datum" in felder:
+                eintrag["datum"] = felder["datum"].isoformat()
+            if "status" in felder:
+                eintrag["status"], eintrag["pokale"] = felder["status"], felder["pokale"]
+
+        text = f"{len(gesendet)} LZK auf dem Server geändert (Tandem {klasse})."
+        if gesendet:
+            text += "\n\n" + "\n".join(gesendet)
+        if leer:
+            text += "\n\nÜbersprungen:\n" + "\n".join(leer)
+        if fehler:
+            text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
+            messagebox.showwarning(titel_fenster, text)
+        else:
+            self._bericht(titel_fenster, text)
+
     def lzk_ergebnisse_abgleichen(self):
         """LZK-Ergebnisse (bestanden/Flammen) zwischen Liste und Lerntheken-App.
 
@@ -2251,6 +2434,7 @@ class App(tk.Tk):
         nach_alias = {st.alias.strip().lower(): st
                       for st in self.az.students if st.alias.strip()}
         neu = akt = besuche = 0
+        frei_abweichend = frei_offen = 0
         ohne_daten = []
         for _, _, _, alias in treffer:
             student = nach_alias.get(alias)
@@ -2268,6 +2452,11 @@ class App(tk.Tk):
             neu += n
             akt += a
             besuche += b
+            # Freie Mathe-LZK ordnet der Abruf bewusst NICHT selbst zu (Ziel sind von
+            # Hand gepflegte Bausteine) - er zaehlt nur, was darauf wartet.
+            p_frei, o_frei = lt_freie_lzk_abgleich(student, konto)
+            frei_abweichend += sum(1 for x in p_frei if not x["gleich"])
+            frei_offen += len(o_frei)
         self._detail_anzeigen()
         # Neue FB-Besuche aendern den Farbindikator in der Liste (🟢/🟡/🔴) und
         # das "Letzter Besuch"-Feld - ohne Neuaufbau bliebe die alte Farbe stehen.
@@ -2287,6 +2476,9 @@ class App(tk.Tk):
                 f"In den Bausteinlisten: {neu} neu, {akt} aktualisiert.\n")
         if besuche:
             text += f"Fachbüro-Besuche übernommen: {besuche}.\n"
+        if frei_abweichend or frei_offen:
+            text += (f"Freie Mathe-LZK: {frei_abweichend} zum Übernehmen, {frei_offen} ohne passenden "
+                     f"Baustein – Menü „Lerntheken-App → Freie Mathe-LZK zuordnen…“.\n")
         if zeilen:
             text += f"Rohdaten im Blatt 'App-Daten': {zeilen} Zeilen.\n"
         text += "\nNoch speichern nicht vergessen."

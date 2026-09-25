@@ -164,6 +164,11 @@ def lt_lerntheke_zeilen(progress: dict, lzk_liste, lerntheken, aktuelles_hj: str
                 continue
             stand = {"bestanden": "bestanden",
                      "nicht_bestanden": "nicht bestanden"}.get(l.get("status"), "geplant")
+            # Wunschtermine von Schueler:innen sind noch keine Termine.
+            if l.get("anfrage") == "offen":
+                stand = "angefragt"
+            elif l.get("anfrage") == "abgelehnt":
+                stand = "Anfrage abgelehnt"
             pk = l.get("pokale") or 0
             teile.append(f"{l.get('typ')}-LZK {stand}"
                          + (f", {pk} Flammen" if pk else "")
@@ -176,15 +181,17 @@ def lt_lerntheke_zeilen(progress: dict, lzk_liste, lerntheken, aktuelles_hj: str
         else:
             status = "In Bearbeitung"
 
-        # Halbjahr aus dem juengsten LZK-Datum, sonst das laufende Halbjahr.
-        daten = [_to_date(l.get("datum")) for l in lzks if l.get("datum")]
+        # Halbjahr aus dem juengsten FESTEN LZK-Datum, sonst das laufende Halbjahr.
+        daten = [_to_date(l.get("datum")) for l in lzks if l.get("datum") and not l.get("anfrage")]
         halbjahr = halbjahr_fuer_datum(max(d for d in daten if d)) if any(daten) else aktuelles_hj
 
         zeilen.append({
             "name": lt.get("title") or key,
             "halbjahr": halbjahr,
-            "lzk_datum_1": _to_date(basis.get("datum")) if basis else None,
-            "lzk_datum_2": _to_date(aufbau.get("datum")) if aufbau else None,
+            # Nur bestaetigte Termine kommen in die Datumsspalten; ein Wunschtermin
+            # laesst ein vorhandenes Datum hier unangetastet.
+            "lzk_datum_1": _to_date(basis.get("datum")) if basis and not basis.get("anfrage") else None,
+            "lzk_datum_2": _to_date(aufbau.get("datum")) if aufbau and not aufbau.get("anfrage") else None,
             "status": status,
             "bemerkung": " · ".join(teile),
         })
@@ -263,6 +270,8 @@ def lt_lzk_ergebnis_unterschiede(student, konto: dict, titel_je_key: dict):
         for nummer, typ in LZK_TYP_JE_NUMMER.items():
             hier = getattr(b, f"lzk_ergebnis_{nummer}") or ""
             eintrag = server.get((key, typ))
+            if (eintrag or {}).get("anfrage"):
+                continue      # eine Anfrage ist noch kein Termin, also auch nicht zu bewerten
             online = lzk_ergebnis_von_server(eintrag)
             if hier == online:
                 continue
@@ -280,6 +289,93 @@ def lt_lzk_ergebnis_unterschiede(student, konto: dict, titel_je_key: dict):
                 "baustein": b,
             })
     return unterschiede
+
+
+# Freie LZK (ohne Lerntheke) kennt das Tool nur fuer Mathe - wie alles andere hier.
+FREIE_LZK_FACH = "mathe"
+
+
+def _titel_norm(text) -> str:
+    """Fuer den Titelvergleich: Gross/klein und Leerzeichen egal."""
+    return " ".join(str(text or "").lower().split())
+
+
+def lt_freie_lzk(konto: dict) -> list:
+    """Die freien Mathe-LZK eines Kontos: ohne Lerntheke, fester Termin (keine
+    offene oder abgelehnte Anfrage), mit Datum. Eintraege ohne ID stammen von einem
+    aelteren Server und lassen sich nicht gezielt aendern - sie bleiben aussen vor."""
+    return [e for e in (konto.get("lzk") or [])
+            if not e.get("lerntheke") and e.get("id")
+            and (e.get("fach") or FREIE_LZK_FACH) == FREIE_LZK_FACH
+            and not e.get("anfrage") and e.get("datum")]
+
+
+def lt_freie_lzk_abgleich(student, konto: dict):
+    """Ordnet die freien Mathe-LZK einer Person ihren Bausteinen zu - ueber den Titel.
+
+    Thema der LZK == Baustein-Name (Gross/klein und Leerzeichen egal); eine
+    "Aufbau"-LZK kommt in LZK-Platz 2, alle anderen in Platz 1. Ziel sind nur VON
+    HAND gepflegte Bausteine: die App-Zeilen gehoeren den Lerntheken-LZK, sonst
+    stritten sich zwei LZK um denselben Platz.
+
+    Rueckgabe (paare, offen): je zugeordneter LZK ein dict mit Baustein, Platz,
+    Datum/Ergebnis hier und online und 'gleich'; `offen` beschreibt jede LZK, die
+    sich nicht eindeutig zuordnen liess. Hier wird nichts veraendert.
+    """
+    person = student.voller_name
+    paare, offen = [], []
+    je_platz = {}
+    for e in lt_freie_lzk(konto):
+        datum = _to_date(e.get("datum"))
+        typ = e.get("typ") or "LZK"
+        wann = _fmt_kurz(datum)
+        thema = (e.get("thema") or "").strip()
+        teil = f"{typ}-LZK" if typ in ("Basis", "Aufbau") else "LZK"
+        if not thema:
+            offen.append(f"{person}: {teil} am {wann} ohne Titel – online ein Thema eintragen")
+            continue
+        kandidaten = [b for b in student.bausteine
+                      if not _ist_app_zeile(b) and _titel_norm(b.name) == _titel_norm(thema)]
+        if len(kandidaten) > 1:
+            # Gleicher Name in mehreren Halbjahren: das Halbjahr der LZK entscheidet,
+            # sonst eine Zeile ohne Halbjahr. Bleibt es mehrdeutig, wird nichts geraten.
+            hj = halbjahr_fuer_datum(datum) if datum else ""
+            passend = [b for b in kandidaten if b.halbjahr == hj] or [b for b in kandidaten if not b.halbjahr]
+            kandidaten = passend if len(passend) == 1 else kandidaten
+        if not kandidaten:
+            app = any(_ist_app_zeile(b) and _titel_norm(b.name) == _titel_norm(thema)
+                      for b in student.bausteine)
+            offen.append(f"{person}: „{thema}“ ({teil}, {wann}) – "
+                         + ("das ist eine Lerntheken-Zeile; diese LZK bitte in der Lerntheke eintragen"
+                            if app else "kein Baustein mit diesem Namen"))
+            continue
+        if len(kandidaten) > 1:
+            offen.append(f"{person}: „{thema}“ ({teil}, {wann}) – mehrere Bausteine mit diesem Namen")
+            continue
+        b = kandidaten[0]
+        nummer = 2 if typ == "Aufbau" else 1
+        schluessel = (id(b), nummer)
+        # Zwei LZK fuer denselben Platz (z.B. nachgeschrieben): die juengste gilt.
+        vorher = je_platz.get(schluessel)
+        if vorher is not None:
+            alt, neu = sorted((vorher, e), key=lambda x: _to_date(x.get("datum")) or date.min)
+            offen.append(f"{person}: „{thema}“ ({teil}, {_fmt_kurz(_to_date(alt.get('datum')))}) – "
+                         f"für diesen Platz gibt es eine neuere LZK")
+            if neu is vorher:
+                continue
+            paare[:] = [x for x in paare if x["eintrag"] is not vorher]
+        je_platz[schluessel] = e
+        hier_datum = getattr(b, f"lzk_datum_{nummer}")
+        hier_erg = getattr(b, f"lzk_ergebnis_{nummer}") or ""
+        online_erg = lzk_ergebnis_von_server(e)
+        paare.append({
+            "person": person, "alias": student.alias.strip().lower(), "eintrag": e, "id": e.get("id"),
+            "baustein": b, "nummer": nummer, "thema": thema, "teil": teil,
+            "hier_datum": hier_datum, "online_datum": datum,
+            "hier_erg": hier_erg, "online_erg": online_erg,
+            "gleich": hier_datum == datum and hier_erg == online_erg,
+        })
+    return paare, offen
 
 
 def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
@@ -311,6 +407,14 @@ def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
             vorhanden = server.get((key, typ))
             auf_server = _to_date((vorhanden or {}).get("datum"))
             if lokal == auf_server:
+                continue
+            if (vorhanden or {}).get("anfrage"):
+                # Eine Anfrage entscheidet die Lernbegleitung in OSKlar - das Tool
+                # ueberschreibt den Wunschtermin nicht (auch nicht automatisch).
+                uebersprungen.append({
+                    "person": student.voller_name, "titel": b.name, "typ": typ,
+                    "grund": f"online angefragt ({_fmt_kurz(auf_server) or 'ohne Datum'}) – erst in OSKlar entscheiden",
+                })
                 continue
             if lokal is None:
                 # Loeschen waere nicht rueckholbar -- das bleibt der
