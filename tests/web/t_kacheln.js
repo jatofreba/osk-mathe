@@ -13,13 +13,29 @@ const stubs = `
   const formatTeacherShort = u => u; const lwIcon = () => ''; const lwTimeRange = u => u || '';
 `;
 const code = schneide('const LW_TALK_TEXT') + schneide('function lwBadge(typ, buchstabe, farbe) {') + schneide('function invEingeteilt(iv) {') + schneide('const AW_NAMEN_MAX')
-           + schneide('function awPersonenHtml(leute) {') + schneide('function awChip(s) {');
+           + schneide('function awPersonenHtml(leute) {') + schneide('function slotVorbei(s) {')
+           + schneide('function lwBuchbar(s) {') + schneide('function lwFreiKlasse(s) {') + schneide('function awChip(s) {');
 const bau = (me, s) => new Function('FAECHER', 'me', stubs + code + '\nreturn awChip;')(FAECHER, me)(s);
 const LB = { role: 'admin', userId: 7, username: 'herf' };
 const slot = inv => ({ id: 5, subjectId: 1, typ: 'input', datum: '2026-09-18', uhrzeit: '08:45',
   booked: true, teacherUsername: 'herf', thema: 'Begrüßung', invitees: inv });
 const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenommen',
   herkunft: 'zugewiesen', gesehen: true }, z);
+
+// --- frei = gruen, vergeben/vorbei = grau -----------------------------------
+{
+  const zukunft = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  const frei = bau(LB, { id: 6, subjectId: 1, typ: 'talk', datum: zukunft, uhrzeit: '10:00', booked: false, invitees: [] });
+  pruefe('F1 freier, kuenftiger Termin ist gruen und sagt "frei"',
+    frei.includes('ist-frei') && frei.includes('lw-frei">frei<'), frei);
+  const vorbei = bau(LB, { id: 7, subjectId: 1, typ: 'talk', datum: '2020-01-01', uhrzeit: '10:00', booked: false, invitees: [] });
+  pruefe('F2 frei, aber vorbei: grau und nicht "frei"',
+    vorbei.includes('ist-vergeben') && !vorbei.includes('>frei<') && vorbei.includes('nicht gebucht'), vorbei);
+  const zu = bau(LB, { id: 8, subjectId: 1, typ: 'input', datum: zukunft, uhrzeit: '10:00', booked: false, geschlossen: true, invitees: [] });
+  pruefe('F3 geschlossen: grau', zu.includes('ist-vergeben') && !zu.includes('ist-frei'), zu);
+  const gebucht = bau(LB, slot([p('merle')]));
+  pruefe('F4 gebucht: grau, Namen bleiben lesbar', gebucht.includes('ist-vergeben') && gebucht.includes('merle'), gebucht);
+}
 
 // --- klein: Namen als Text -------------------------------------------------
 {

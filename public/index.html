@@ -158,6 +158,19 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
   font-size:10.5px;line-height:1.35;
 }
 .lw-chip-time{font-weight:700;color:var(--md-on-surface);display:flex;align-items:center;gap:3px;flex-wrap:wrap;}
+/* Buchbar oder nicht (2026-09-30): ein zweites, bewusst LEISES Signal neben der
+   Fachfarbe. Gruen heisst genau "noch frei und buchbar" (nicht vorbei, nicht
+   geschlossen); alles Vergebene steht grau hinterlegt da - lesbar und antippbar
+   wie vorher, nur zurueckgenommen. Eigene Termine, Einladungen und Anfragen
+   behalten ihre eigene Kennzeichnung. */
+.lw-chip.ist-frei{background:#f0fdf4;}
+.lw-chip.ist-frei .lw-frei{color:#15803d;font-weight:700;}
+.lw-chip.ist-vergeben{background:var(--md-surface-container);}
+.lw-chip.ist-vergeben .lw-frei{color:var(--md-on-surface-variant);font-weight:600;}
+.lw-legende-feld{display:inline-block;width:14px;height:10px;border-radius:3px;vertical-align:-1px;
+  border:1px solid var(--md-outline-variant);}
+.lw-legende-feld.ist-frei{background:#f0fdf4;border-color:#86efac;}
+.lw-legende-feld.ist-vergeben{background:var(--md-surface-container);}
 .lw-chip-type{color:var(--md-on-surface-variant);font-weight:500;}
 /* Fach-Badge (Anfangsbuchstabe, z.B. "M"/"E"/"D") - auf einen Blick erkennbar statt auf den
    ausgeschriebenen Fachnamen angewiesen zu sein (der volle Name steckt weiterhin im title-Tooltip). */
@@ -2195,6 +2208,16 @@ function lwBadge(typ, buchstabe, farbe) {
     + `style="background:${farbe};">${escHtml(buchstabe)}</span>`;
 }
 
+// Buchbar = noch frei: niemand hat gebucht, der Termin nimmt Anmeldungen an und
+// ist nicht vorbei. Das ist die EINE Frage, die das Gruen beantwortet.
+function lwBuchbar(s) {
+  return !s.booked && !s.geschlossen && !slotVorbei(s);
+}
+// Klasse fuer die Kachel: gruen, wenn buchbar - sonst grau.
+function lwFreiKlasse(s) {
+  return lwBuchbar(s) ? 'ist-frei' : 'ist-vergeben';
+}
+
 function lwChip(s) {
   const color = s.subjectColor || '#94a3b8';
   const typLabel = s.typ === 'input' ? 'Fachbüro' : 'Talk';
@@ -2202,10 +2225,11 @@ function lwChip(s) {
   // Gebucht: Thema statt "gebucht" zeigen (kein Personenbezug, nur der Inhalt) - fällt auf
   // "gebucht" zurück, falls (theoretisch) kein Thema gesetzt ist.
   const freiThema = lwThemaOhneFrei(s.slotThema);
-  const metaText = s.booked ? (s.thema ? escHtml(s.thema) : 'gebucht')
-                           : (freiThema ? escHtml(freiThema) + ' · frei' : 'frei');
-  const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : 'frei buchbar'];
-  return `<div class="lw-chip" style="border-left-color:${color};"
+  const stand = lwBuchbar(s) ? 'frei' : s.booked ? 'vergeben' : 'nicht mehr buchbar';
+  const metaText = s.booked ? (s.thema ? escHtml(s.thema) + ' · ' : '') + `<span class="lw-frei">${stand}</span>`
+                           : (freiThema ? escHtml(freiThema) + ' · ' : '') + `<span class="lw-frei">${stand}</span>`;
+  const titleParts = [s.subjectName, typLabel, s.uhrzeit, s.ort, s.booked ? (s.thema || 'schon gebucht') : (lwBuchbar(s) ? 'frei buchbar' : 'nicht mehr buchbar')];
+  return `<div class="lw-chip ${lwFreiKlasse(s)}" style="border-left-color:${color};"
     title="${escHtml(titleParts.filter(Boolean).join(' · '))}">
     <div class="lw-chip-time">${lwBadge(s.typ, subjLetter, color)}<span style="color:${color};">${lwIcon(s.typ)}</span>${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
     <div class="lw-chip-meta">${metaText}</div>
@@ -2650,8 +2674,8 @@ function mwChip(s) {
     mine:     '✓ von dir gebucht',
     invited:  '✉ Einladung offen',
     requested:'⏳ Anfrage läuft',
-    free:     'frei',
-    taken:    'gebucht',
+    free:     slotVorbei(s) ? 'vorbei' : 'frei',
+    taken:    'vergeben',
     zu:       '🔒 keine Anmeldung mehr',
     conflict: '✕ Terminkonflikt',
   }[state];
@@ -2686,11 +2710,15 @@ function mwChip(s) {
   ].filter(Boolean).join(' · ');
 
   const chipStyle = (neutral || state === 'taken' || state === 'zu') ? '' : ` style="border-left-color:${color};color:${color};"`;
-  return `<div class="lw-chip mw-${state}"${chipStyle} ${desc}
+  // Gruen/grau nur fuer "frei" und "fremd vergeben" - eigene, eingeladene und
+  // angefragte Termine haben ihre eigene Kennzeichnung, der Konflikt ist ohnehin grau.
+  const freiKlasse = state === 'free' ? ' ' + lwFreiKlasse(s)
+    : ['taken', 'zu', 'conflict'].includes(state) ? ' ist-vergeben' : '';
+  return `<div class="lw-chip mw-${state}${freiKlasse}"${chipStyle} ${desc}
     data-mw="${s.id}" role="button" tabindex="0" onclick="mwSelect(${s.id})"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSelect(${s.id});}">
     <div class="lw-chip-time" style="color:${neutral ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
-    <div class="lw-chip-meta"><span class="mw-chip-status" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
+    <div class="lw-chip-meta"><span class="mw-chip-status${state === 'free' || state === 'taken' ? ' lw-frei' : ''}" style="color:${state === 'mine' ? color : ''};">${label}</span>${thema}</div>
     ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
   </div>`;
 }
@@ -2763,14 +2791,14 @@ function lwSerieChip(g, opt) {
   // "frei" heisst hier schlicht: noch nicht gebucht. Termine, die fuer die
   // anschauende Person aus anderen Gruenden nicht in Frage kommen (Konflikt,
   // eigene Anfrage laeuft), werden gar nicht erst gebuendelt.
-  const frei = g.slots.filter(x => !x.booked).length;
+  const frei = g.slots.filter(lwBuchbar).length;
   const dauer = parseInt(s.dauer, 10) || 45;
   const zeit = `${lwFmtMin(g.start)}–${lwFmtMin(g.ende)}`;
   const themaText = lwThemaOhneFrei((s.booked ? s.thema : s.slotThema) || '');
   const thema = themaText ? ` · „${escHtml(themaText)}“` : '';
   const gleichLang = g.slots.every(x => (parseInt(x.dauer, 10) || 45) === dauer);
   const anzahl = gleichLang ? `${g.slots.length} × ${dauer} Min` : `${g.slots.length} Termine`;
-  const stand = frei ? `${frei} frei` : 'alle vergeben';
+  const stand = frei ? `${frei} frei` : (g.slots.some(x => x.booked) ? 'alle vergeben' : 'nicht mehr buchbar');
   const meta = [escHtml(opt.ort ? opt.ort(s) : lwOrtAbweichend(s)),
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : ''].filter(Boolean).join(' · ');
   const full = [subj.name, typLabel, zeit, anzahl, stand, s.ort,
@@ -2779,13 +2807,13 @@ function lwSerieChip(g, opt) {
     .filter(Boolean).join(' · ');
   const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
   return `<div class="mw-serie">
-    <div class="lw-chip mw-serie-kopf" style="border-left-color:${color};color:${color};" ${desc}
+    <div class="lw-chip mw-serie-kopf ${frei ? 'ist-frei' : 'ist-vergeben'}" style="border-left-color:${color};color:${color};" ${desc}
       role="button" tabindex="0" aria-expanded="false" onclick="mwSerieToggle(this)"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();mwSerieToggle(this);}">
       <div class="lw-chip-time" style="color:var(--md-on-surface);">
         ${lwBadge(s.typ, subjLetter, color)}
         <span style="color:${color};">${lwIcon(s.typ)}</span>${zeit}${lwTypText(s.typ)}</div>
-      <div class="lw-chip-meta"><span class="mw-chip-status">${anzahl} · ${stand}</span>${thema}<span class="mw-serie-pfeil">▸</span></div>
+      <div class="lw-chip-meta"><span class="mw-chip-status">${anzahl} · <span class="lw-frei">${stand}</span></span>${thema}<span class="mw-serie-pfeil">▸</span></div>
       ${meta ? `<div class="lw-chip-meta lw-chip-sub">${meta}</div>` : ''}
     </div>
     <div class="mw-serie-kinder" hidden>${g.slots.map(kindChip).join('')}</div>
@@ -3205,13 +3233,15 @@ function plChip(s) {
   const color = subj.color || '#94a3b8';
   const letter = (subj.name || '?').trim().charAt(0).toUpperCase();
   const leute = plPersonen(s);
-  const klassen = ['lw-chip'];
+  const klassen = ['lw-chip', lwFreiKlasse(s)];
   if (_plSuche) klassen.push(plPasst(s) ? 'pl-treffer' : 'pl-blass');
   if (_plPicked === s.id) klassen.push('mw-picked');
   const thema = s.thema || s.slotThema || '';
-  const stand = leute.length ? `👥 ${leute.length}` : (s.booked ? 'gebucht' : 'frei');
+  const stand = leute.length ? `👥 ${leute.length}`
+    : `<span class="lw-frei">${lwBuchbar(s) ? 'frei' : s.booked ? 'vergeben' : 'nicht gebucht'}</span>`;
   const tip = escHtml([subj.name, s.typ === 'input' ? 'Fachbüro' : 'Talk', s.uhrzeit, s.ort,
-    thema, stand, 'antippen zeigt, wer eingetragen ist'].filter(Boolean).join(' · '));
+    thema, leute.length ? leute.length + ' eingetragen' : (lwBuchbar(s) ? 'frei' : 'nicht buchbar'),
+    'antippen zeigt, wer eingetragen ist'].filter(Boolean).join(' · '));
   return `<div class="${klassen.join(' ')}" style="border-left-color:${color};"
     title="${tip}" aria-label="${tip}" role="button" tabindex="0"
     onclick="plSelect(${s.id})"
@@ -3606,7 +3636,7 @@ async function loadMyWeek() {
   cells.forEach(row => row.forEach(list => list.sort((a, b) => (lwMin(a.uhrzeit) ?? 0) - (lwMin(b.uhrzeit) ?? 0))));
 
   const mineCount = visible.filter(s => ['mine','invited'].includes(mwState(s))).length;
-  const freeCount = visible.filter(s => mwState(s) === 'free').length;
+  const freeCount = visible.filter(s => mwState(s) === 'free' && !slotVorbei(s)).length;
   const conflictCount = visible.filter(s => mwState(s) === 'conflict').length;
 
   const headRow = '<div></div>' + LW_DAY_NAMES.map((name, i) =>
@@ -3665,8 +3695,8 @@ async function loadMyWeek() {
       <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
       <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
       <span><b>✓ von dir gebucht</b></span>
-      <span>frei = noch buchbar</span>
-      <span>gebucht = schon vergeben – bei einem Fachbüro kannst du mitmachen anfragen</span>
+      <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar</span>
+      <span><span class="lw-legende-feld ist-vergeben"></span> vergeben – bei einem Fachbüro kannst du mitmachen anfragen</span>
       ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
       ${weekLzk.length ? '<span>📝 LZK – ganztägig, antippen öffnet den Tag im Kalender</span>' : ''}
       <span>Termin antippen, dann erscheint unten, was damit geht.</span>
@@ -6534,13 +6564,13 @@ function awChip(s) {
   const icon = `<span style="color:${neutral ? 'var(--md-on-surface-variant)' : color};">${lwIcon(s.typ)}</span>`;
   const statusHtml = isMine
     ? `<span class="mw-chip-status" style="color:${color};">von dir</span>`
-    : (!s.booked ? '<span class="mw-chip-status">frei</span>' : '');
+    : (!s.booked ? `<span class="mw-chip-status lw-frei">${lwBuchbar(s) ? 'frei' : 'nicht gebucht'}</span>` : '');
   // Thema mit anzeigen (nicht nur im Tooltip): es sagt auf einen Blick, worum es
   // in dem Termin geht - und danach fragen Schueler:innen, wenn sie dazu wollen.
   const themaHtml = s.booked && s.thema ? `„${escHtml(s.thema)}“` : '';
   const line2 = [statusHtml, themaHtml].filter(Boolean).join(' · ');
 
-  return `<div class="lw-chip mw-${state}"${chipStyle} title="${tip}" aria-label="${tip}"
+  return `<div class="lw-chip mw-${state} ${lwFreiKlasse(s)}"${chipStyle} title="${tip}" aria-label="${tip}"
     data-aw="${s.id}" role="button" tabindex="0" onclick="awSelect(${s.id})"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();awSelect(${s.id});}">
     <div class="lw-chip-time" style="color:var(--md-on-surface);">${badge}${icon}${lwTimeRange(s.uhrzeit, s.dauer)}${lwTypText(s.typ)}</div>
@@ -6788,6 +6818,8 @@ function renderAdminWeek() {
            <span>Buchstabe/Farbe = Fach</span>
            <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
            <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
+           <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar</span>
+           <span><span class="lw-legende-feld ist-vergeben"></span> vergeben oder vorbei</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>Name ohne Zeichen = alles erledigt</span>
            <span>❓ wartet auf DEINE Antwort (möchte mitmachen)</span>

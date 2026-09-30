@@ -49,6 +49,10 @@
   .chip-type{font-weight:500;color:#5f6368;}
   .chip-meta{color:#5f6368;font-size:12px;}
   .chip-subj{font-weight:600;}
+  /* Buchbar = noch frei: leise gruen; vergeben grau hinterlegt (wie in der App). */
+  .chip.ist-frei{background:#f0fdf4;}
+  .chip.ist-frei .frei{color:#15803d;font-weight:700;}
+  .chip.ist-vergeben{background:#f0f0f0;}
   /* Piktogramme (Mikrofon = Talk, Buch = Fachbüro): erben per currentColor die
      Fach-Farbe - Emoji lassen sich dagegen nicht einfaerben. */
   .ico{
@@ -65,6 +69,9 @@
     body{background:#141218;color:#e6e0e9;}
     .day span,.meta,.block-head,.chip-type,.chip-meta{color:#cac4d0;}
     .chip{background:#211f26;box-shadow:none;}
+    .chip.ist-frei{background:#15261c;}
+    .chip.ist-frei .frei{color:#86efac;}
+    .chip.ist-vergeben{background:#1a181d;}
     .extra{border-top-color:#49454f;}
     .none,.legend{color:#938f99;}
   }
@@ -132,18 +139,26 @@ function icon(typ) {
   return '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">' + inner + '</svg>';
 }
 
+// Buchbar = noch frei: niemand gebucht, nicht geschlossen, nicht vorbei.
+function buchbar(s) {
+  var heute = new Date(); heute.setHours(0, 0, 0, 0);
+  var vorbei = s.datum && new Date(s.datum + 'T00:00:00') < heute;
+  return !s.booked && !s.geschlossen && !vorbei;
+}
+
 function chip(s) {
   var color = s.subjectColor || '#94a3b8';
+  var frei = buchbar(s);
   var typ = s.typ === 'input' ? 'Fachbüro' : 'Talk';
   var ort = s.ort ? ' · ' + esc(s.ort) : '';
-  return '<div class="chip" style="border-left-color:' + esc(color) + ';">' +
+  return '<div class="chip ' + (frei ? 'ist-frei' : 'ist-vergeben') + '" style="border-left-color:' + esc(color) + ';">' +
     '<div class="chip-time"><span style="color:' + esc(color) + ';">' + icon(s.typ) + '</span>' +
       timeRange(s.uhrzeit, s.dauer) + ' <span class="chip-type">' + typ + '</span></div>' +
     '<div class="chip-meta"><span class="chip-subj" style="color:' + esc(color) + ';">' +
       esc(s.subjectName || '') + '</span>' + ort +
       // Ein ausgeschriebenes Thema steht auch bei noch freien Terminen schon dabei.
       (s.slotThema && !s.booked ? ' · ' + esc(s.slotThema) : '') +
-      (s.booked ? ' · gebucht' : ' · frei') + '</div>' +
+      ' · <span class="frei">' + (frei ? 'frei' : s.booked ? 'vergeben' : 'nicht mehr buchbar') + '</span></div>' +
   '</div>';
 }
 
