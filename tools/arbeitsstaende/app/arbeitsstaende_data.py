@@ -287,6 +287,8 @@ def lt_lzk_ergebnis_unterschiede(student, konto: dict, titel_je_key: dict):
                 "online": online,
                 "datum_server": (eintrag or {}).get("datum"),
                 "baustein": b,
+                "id": (eintrag or {}).get("id"),
+                "ueber_thema": bool((eintrag or {}).get("ueber_thema")),
             })
     return unterschiede
 
@@ -298,6 +300,73 @@ FREIE_LZK_FACH = "mathe"
 def _titel_norm(text) -> str:
     """Fuer den Titelvergleich: Gross/klein und Leerzeichen egal."""
     return " ".join(str(text or "").lower().split())
+
+
+def verknuepfte_lzk_ids(students) -> set:
+    """IDs der LZK, die schon mit einem von Hand gepflegten Baustein verknuepft sind."""
+    ids = set()
+    for st in students or []:
+        for b in st.bausteine:
+            if _ist_app_zeile(b):
+                continue
+            for link in (b.lzk_online_1, b.lzk_online_2):
+                if link and link.get("id"):
+                    ids.add(link["id"])
+    return ids
+
+
+def eigene_baustein_namen(student) -> set:
+    """Namen der von Hand gepflegten Bausteine einer Person, fuer den Titelvergleich."""
+    return {_titel_norm(b.name) for b in student.bausteine if not _ist_app_zeile(b) and (b.name or "").strip()}
+
+
+def lzk_lerntheken_zuordnen(konto: dict, titel_je_key: dict, verknuepfte_ids=(), eigene_namen=()) -> int:
+    """Freie Mathe-LZK, deren THEMA eine Lerntheke benennt, der Lerntheke zuordnen.
+
+    Im LZK-Reiter und im Kalender von OSKlar entstehen LZK ohne Lerntheke, nur
+    mit Thema. Heisst das Thema wie eine Lerntheke ("Kreise und Zylinder"), ist
+    es deren LZK -- ohne diese Zuordnung kam der Termin nie in der Lerntheken-
+    Zeile an (die freie LZK suchte einen von Hand gepflegten Baustein, und die
+    Lerntheken-Zeile wartete auf eine LZK mit Lerntheken-Schluessel).
+
+    Der Eintrag bekommt "lerntheke" gesetzt und "ueber_thema": True -- so behandeln
+    ihn alle Abgleiche wie eine Lerntheken-LZK, und beim Zuruecksenden wird GENAU
+    diese LZK geaendert (ueber ihre ID), statt eine zweite anzulegen.
+    Vorrang haben eine echte Lerntheken-LZK desselben Typs, eine schon mit
+    einem Baustein verknuepfte LZK und ein VON HAND gepflegter Baustein mit genau
+    diesem Namen (`eigene_namen`) -- der bekam die LZK schon bisher; sonst stuende
+    sie an zwei Stellen, und das Senden legte sie womoeglich doppelt an. Bei
+    mehreren gilt ein fester Termin vor einer Anfrage, dann der juengste. "Basis" und
+    "Aufbau" bleiben, alles andere zaehlt als Basis. Gibt die Zahl der neu
+    zugeordneten zurueck; mehrfaches Aufrufen aendert nichts mehr.
+    """
+    norm = {}
+    for key, titel in (titel_je_key or {}).items():
+        if key:
+            norm[_titel_norm(key)] = key
+            if titel:
+                norm[_titel_norm(titel)] = key
+    liste = konto.get("lzk") or []
+    belegt = {(e.get("lerntheke"), e.get("typ")) for e in liste if e.get("lerntheke")}
+    kandidaten = [e for e in liste
+                  if not e.get("lerntheke") and e.get("id") not in verknuepfte_ids
+                  and (e.get("fach") or FREIE_LZK_FACH) == FREIE_LZK_FACH
+                  and e.get("anfrage") != "abgelehnt"
+                  and _titel_norm(e.get("thema")) in norm
+                  and _titel_norm(e.get("thema")) not in eigene_namen]
+    # Feste Termine vor Anfragen, dann der juengste.
+    kandidaten.sort(key=lambda e: (e.get("anfrage") is None, _to_date(e.get("datum")) or date.min),
+                    reverse=True)
+    neu = 0
+    for e in kandidaten:
+        key = norm[_titel_norm(e.get("thema"))]
+        typ = e.get("typ") if e.get("typ") in ("Basis", "Aufbau") else "Basis"
+        if (key, typ) in belegt:
+            continue
+        e["lerntheke"], e["typ"], e["ueber_thema"] = key, typ, True
+        belegt.add((key, typ))
+        neu += 1
+    return neu
 
 
 def lt_freie_lzk(konto: dict) -> list:
@@ -435,7 +504,8 @@ def lt_freie_lzk_abgleich(student, konto: dict):
             app = any(_ist_app_zeile(b) and _titel_norm(b.name) == _titel_norm(thema)
                       for b in student.bausteine)
             offen.append(f"{person}: „{thema}“ ({teil}, {wann}) – "
-                         + ("das ist eine Lerntheken-Zeile; diese LZK bitte in der Lerntheke eintragen"
+                         + ("gehört zur gleichnamigen Lerntheken-Zeile, dort steht aber schon "
+                            "eine LZK dieses Typs – doppelt angelegt?"
                             if app else "kein Baustein mit diesem Namen"))
             continue
         if len(kandidaten) > 1:
@@ -502,8 +572,8 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
         if not _ist_app_zeile(b):
             eigene |= {l["id"] for l in (b.lzk_online_1, b.lzk_online_2) if l}
     txt = lambda w: LZK_ERGEBNIS_TEXT.get(w, w) if w else "nicht bewertet"
-    zuordnen = "über „Freie Mathe-LZK zuordnen…“"
-    abruf = "„Ergebnisse abrufen…“ übernimmt das"
+    zuordnen = "über „Einzelne Schritte → Freie Mathe-LZK zuordnen…“"
+    abruf = "„⟳ Synchronisieren“ („Ergebnisse abrufen…“) übernimmt das"
     auftraege, uebersprungen, vergangen = [], [], 0
 
     for b in student.bausteine:
@@ -717,6 +787,9 @@ def lt_lzk_aenderungen(student, konto: dict, titel_je_key: dict):
                 "neu": lokal,
                 "status": (vorhanden or {}).get("status") or "ausstehend",
                 "pokale": (vorhanden or {}).get("pokale") or 0,
+                # Ueber das Thema zugeordnete freie LZK: GENAU diese aendern.
+                "id": (vorhanden or {}).get("id"),
+                "ueber_thema": bool((vorhanden or {}).get("ueber_thema")),
             })
     return aenderungen, uebersprungen
 
@@ -1081,6 +1154,9 @@ def lt_talks_uebernehmen(student, eintraege: list) -> dict:
             continue
         t.session_id, t.datum, t.uhrzeit = e["session_id"], e["datum"], e["uhrzeit"]
         t.halbjahr, t.mit, t.online_fehlt = e["halbjahr"], e["mit"], False
+        # Dieselbe Einladung kann online die Rolle wechseln (erst Zuhoeren, dann
+        # zum Mit-Vortrag eingeladen) -- und mit ihr die Flammen-Obergrenze.
+        t.rolle = e["rolle"]
         alt = t.online or {}
         srv_bew = {k: srv[k] for k in TALK_BEWERTUNG}
         alt_bew = {k: alt.get(k) for k in TALK_BEWERTUNG}
@@ -1194,11 +1270,15 @@ def hj_note_setzen(student, hj: str, note: str):
         student.hj_note = note
 
 
-def hj_noten_angleichen(student, heute: Optional[date] = None):
+def hj_noten_angleichen(student, heute: Optional[date] = None, alte_note: bool = True):
     """Aeltere Dateien (und Excel) kennen nur EINE HJ-Note -- sie gilt fuers
-    laufende Halbjahr. Danach ist hj_note immer die Note dieses Halbjahres."""
+    laufende Halbjahr. Danach ist hj_note immer die Note dieses Halbjahres.
+
+    `alte_note=False` fuer Dateien, die schon hj_noten fuehren: dort ist hj_note
+    nur der Spiegel des Halbjahres, in dem gespeichert wurde. Nach einem
+    Halbjahreswechsel wanderte die Note sonst ins neue Halbjahr mit."""
     hj = halbjahr_fuer_datum(heute)
-    if (student.hj_note or "").strip() and hj not in student.hj_noten:
+    if alte_note and (student.hj_note or "").strip() and hj not in student.hj_noten:
         student.hj_noten[hj] = student.hj_note.strip()
     student.hj_note = student.hj_noten.get(hj, "")
 
@@ -1468,7 +1548,7 @@ def student_aus_dict(d: dict) -> "Student":
     s.talks = [talk_aus_dict(t) for t in d.get("mathe_talks") or [] if isinstance(t, dict)]
     noten = d.get("hj_noten") if isinstance(d.get("hj_noten"), dict) else {}
     s.hj_noten = {str(k): str(v).strip() for k, v in noten.items() if str(v or "").strip()}
-    hj_noten_angleichen(s)
+    hj_noten_angleichen(s, alte_note="hj_noten" not in d)
     return s
 
 

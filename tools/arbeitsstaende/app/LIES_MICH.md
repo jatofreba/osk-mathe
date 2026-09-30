@@ -107,7 +107,22 @@ Namen ändern sich.
 - **Lerntheken-App → Einstellungen…**: Adresse der App und Admin-Benutzername.
   Das Passwort wird nicht gespeichert, sondern einmal pro Programmstart
   abgefragt (siehe „Passwort und Offline-Arbeiten").
-- **Lerntheken-App → Ergebnisse abrufen…**: holt Talks, Fachbüro, Flammen,
+- **⟳ Synchronisieren** (Knopf unter der Personenliste, Menü *Lerntheken-App*,
+  Strg+R): der Normalweg. Holt alles (wie *Ergebnisse abrufen…*, dazu die
+  Mathe-Talks) und zeigt danach **ein** Fenster mit allem, was noch deine
+  Bestätigung braucht: ⬇ LZK aus OSKlar, die in einen noch leeren LZK-Platz
+  eines Bausteins gehören, ⬆ hier geänderte LZK-Termine und Talk-Bewertungen.
+  Jede Zeile lässt sich per Klick an- oder abwählen. Was sich nicht von selbst
+  klären lässt (beide Seiten verschieden geändert, kein passender Baustein),
+  steht darunter zum Lesen. Die Einzelschritte liegen unter *Lerntheken-App →
+  Einzelne Schritte*.
+- **LZK einer Lerntheke aus dem LZK-Reiter oder Kalender**: dort angelegte LZK
+  haben keine Lerntheke, nur ein Thema. Heißt das Thema wie eine Lerntheke
+  (Groß/klein egal), gilt sie als deren LZK und steht in der Lerntheken-Zeile;
+  verschiebst du sie dort, wird genau diese LZK online geändert (keine zweite).
+  Ausnahme: gibt es einen **eigenen** Baustein mit genau diesem Namen, bekommt
+  der die LZK, wie bisher.
+- **Einzelne Schritte → Ergebnisse abrufen…**: holt Talks, Fachbüro, Flammen,
   Stationen und LZK in die Bausteinlisten -- je Halbjahr eine Zeile pro
   bearbeiteter Lerntheke und eine für Talks/Fachbüro. Freie Mathe-LZK, die mit
   einem eigenen Baustein verknüpft sind, bringt er auf den Stand von online
@@ -196,9 +211,9 @@ Kalender, wer wann eine LZK schreibt.
   der Arbeitsdatei -- also speichern). Verschiebst du den Termin hier oder
   trägst ein Ergebnis ein, zieht das Senden die LZK online nach. Wurde sie
   **online** verschoben oder bewertet, wird das nie mit dem alten Stand
-  überschrieben: *Ergebnisse abrufen…* übernimmt es in den Baustein, sofern du
+  überschrieben: *Synchronisieren* übernimmt es in den Baustein, sofern du
   die LZK hier seitdem nicht geändert hast. Haben sich beide Seiten
-  verschieden geändert, entscheidest du über *Lerntheken-App → Freie
+  verschieden geändert, entscheidest du über *Einzelne Schritte → Freie
   Mathe-LZK zuordnen…*. Eine online zurückgenommene Bewertung löscht hier
   nichts -- das wird nur gemeldet.
 - **Automatisch**: sobald du in einem Baustein ein LZK-Datum änderst, geht es
@@ -207,7 +222,8 @@ Kalender, wer wann eine LZK schreibt.
   Versuch mit. Sind es mehr als fünf Termine auf einmal, zeigt die Anwendung
   vorher die Liste. Abschaltbar unter *Lerntheken-App → Neue LZK-Termine
   automatisch senden*.
-- **Von Hand**: *Lerntheken-App → LZK-Termine zum Server schicken…* zeigt
+- **Von Hand**: *Synchronisieren* (oder *Einzelne Schritte → LZK-Termine zum
+  Server schicken…*) zeigt
   vorher eine Liste mit **Person, Lerntheke/Baustein, LZK, altem und neuem
   Stand** und schickt erst nach Bestätigung. Was nicht gesendet wird, steht
   mit Grund dabei.
@@ -234,7 +250,7 @@ kopieren“ legt die Zusammenfassung in die Zwischenablage.
 
 Die HJ-Note wird jetzt pro Halbjahr gespeichert. Das Feld „HJ-Note (lfd. HJ)“ im
 Personenkopf ist die Note des laufenden Halbjahres. Eine Note aus einer älteren
-Datei zählt fürs laufende Halbjahr.
+Datei (vor den Noten je Halbjahr) oder aus Excel zählt fürs laufende Halbjahr.
 
 ## Mathe-Talks
 
@@ -242,14 +258,15 @@ Unter den Bausteinen jeder Person steht die Liste ihrer **Mathe-Talks**, je Halb
 zusammengefasst (gehalten, mit vorgetragen, zugehört, Flammen, noch unbewertet). Das
 laufende Halbjahr ist aufgeklappt.
 
-- **Abrufen:** „Lerntheken-App → Mathe-Talks abrufen" (passiert auch bei „Ergebnisse
-  abrufen"). Neue Talks kommen dazu; Datum, Uhrzeit und wer dabei ist, kommen immer
-  vom Server.
+- **Abrufen:** beim Synchronisieren (einzeln: „Einzelne Schritte → Mathe-Talks
+  abrufen"). Neue Talks kommen dazu; Datum, Uhrzeit, Rolle und wer dabei ist, kommen
+  immer vom Server.
 - **Bewerten:** Doppelklick auf einen Talk oder „Bewerten…": ok / nicht ok, Flammen
   (Zuhören bis 2, Vortrag bis 3), Emoji, eine Bemerkung (bleibt nur hier). Beim
   gehaltenen Talk lässt sich auch das Thema schärfen.
-- **Hochladen:** „Lerntheken-App → Mathe-Talk-Bewertungen hochladen…" zeigt vorher
-  jede Änderung (online / neu). Gelb markierte Talks warten noch darauf.
+- **Hochladen:** beim Synchronisieren (einzeln: „Einzelne Schritte →
+  Mathe-Talk-Bewertungen hochladen…"), jeweils mit Vorschau. Gelb markierte Talks
+  warten noch darauf.
 
 Hochgeladen wird nur, was hier seit dem letzten Abruf geändert wurde, und nie
 „noch nicht bewertet" oder ein leeres Thema. Beim Abruf gilt umgekehrt: Was hier
@@ -268,7 +285,7 @@ Die Talks stehen nur in der Arbeitsdatei (.json), nicht im Excel-Export.
   senden)*. In diesem Modus nimmt die Anwendung garantiert keine Verbindung
   auf; Personen, Bausteine, Termine, FB-Besuche — alles lässt sich normal
   bearbeiten und speichern. Schaltest du später wieder online, holt ein
-  *LZK-Termine zum Server schicken…* alles Liegengebliebene auf einmal nach.
+  *Synchronisieren* alles Liegengebliebene auf einmal nach.
 - Ist der Server nicht erreichbar, sagt die Anwendung das **einmal** und
   arbeitet dann still weiter -- es geht nichts verloren, und du wirst nicht
   bei jeder Eingabe erneut gefragt.

@@ -136,6 +136,17 @@ pruefe("B8c beim naechsten Abruf nicht noch einmal gemeldet", not b["fehlen"], b
 d.lt_talks_uebernehmen(anna, online)
 pruefe("B8d taucht er wieder auf, ist die Markierung weg", not zuhoeren.online_fehlt)
 
+# Dieselbe Einladung wechselt online die Rolle (erst Zuhoeren, dann zum Mit-Vortrag eingeladen)
+ben = d.Student(vorname="Ben", nachname="J", alias="be.ja")
+zu = dict(rolle="zugehoert", online_id=301, session_id=11, datum=None, uhrzeit="", halbjahr="2627_1",
+          thema="X", mit="an.be", status="ausstehend", flammen=0, emoji="",
+          online={"status": "ausstehend", "flammen": 0, "emoji": "", "thema": "X"})
+d.lt_talks_uebernehmen(ben, [zu])
+d.lt_talks_uebernehmen(ben, [dict(zu, rolle="mitvortrag")])
+pruefe("B9 Rollenwechsel online kommt an (und mit ihm 3 statt 2 Flammen)",
+       len(ben.talks) == 1 and ben.talks[0].rolle == "mitvortrag" and ben.talks[0].max_flammen == 3,
+       ben.talks)
+
 # ===========================================================================
 # C) Hochladen: nie Leeres
 # ===========================================================================

@@ -25,6 +25,7 @@ from arbeitsstaende_data import (
     lt_mathe_talks, lt_talks_uebernehmen, lt_talks_hochladen_liste, talk_hochgeladen,
     talk_wartet, talks_je_halbjahr, talks_zusammenfassung,
     hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
+    verknuepfte_lzk_ids, lzk_lerntheken_zuordnen, eigene_baustein_namen,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -399,7 +400,7 @@ class TalkDialog(tk.Toplevel):
     """Einen Mathe-Talk bewerten (und beim gehaltenen Talk das Thema schaerfen).
 
     Aendert nur die Liste hier. Zum Server geht es erst ueber
-    "Lerntheken-App -> Mathe-Talk-Bewertungen hochladen…".
+    "⟳ Synchronisieren" (oder Einzelne Schritte -> Mathe-Talk-Bewertungen hochladen…).
     """
 
     def __init__(self, parent, talk: MatheTalk, person: str):
@@ -613,6 +614,100 @@ class HjZusammenfassungDialog(tk.Toplevel):
 
     def _schliessen(self):
         self._note_uebernehmen()
+        self.destroy()
+
+
+class SyncDialog(tk.Toplevel):
+    """Vorschau beim Synchronisieren: was hereinkommt, was hinausgeht, was offen ist.
+
+    `posten` ist eine Liste von dicts {"gruppe", "person", "text", "an"}; jede Zeile
+    laesst sich per Klick an- und abwaehlen. `hinweise` sind nur zum Lesen.
+    `result` ist danach die Menge der gewaehlten Indizes (oder None bei Abbruch).
+    """
+
+    GRUPPEN = (("herein", "⬇ Kommt in diese Liste"), ("raus", "⬆ Geht zum Server"))
+
+    def __init__(self, parent, posten: list, hinweise: list, klasse: str, abruf_text: str):
+        super().__init__(parent)
+        self.title("Synchronisieren")
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+        self.posten = posten
+        self.an = {i for i, p in enumerate(posten) if p.get("an", True)}
+
+        ttk.Label(self, text=f"Tandem {klasse} — abgerufen ist schon alles. "
+                             "Noch zu bestätigen:" if posten else
+                             f"Tandem {klasse} — alles abgerufen, nichts weiter zu bestätigen.",
+                  font=("", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 4))
+        # Der Abruf-Bericht kann lang sein (Listen je Person) -- in einem kleinen,
+        # scrollbaren Feld, sonst rutschen die Knoepfe unter den Bildschirmrand.
+        bericht = ttk.Frame(self)
+        bericht.pack(fill="x", padx=10)
+        feld = tk.Text(bericht, height=6, width=100, wrap="word", relief="flat",
+                       foreground="#555", background=self.cget("background"))
+        feld.insert("1.0", abruf_text)
+        feld.config(state="disabled")
+        feld.pack(side="left", fill="x", expand=True)
+        sb_bericht = ttk.Scrollbar(bericht, command=feld.yview)
+        sb_bericht.pack(side="right", fill="y")
+        feld.config(yscrollcommand=sb_bericht.set)
+
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=10, pady=6)
+        self.baum = ttk.Treeview(rahmen, columns=("text",), show="tree headings", height=16)
+        self.baum.heading("#0", text="Person")
+        self.baum.heading("text", text="Was")
+        self.baum.column("#0", width=230)
+        self.baum.column("text", width=520)
+        sb = ttk.Scrollbar(rahmen, command=self.baum.yview)
+        self.baum.config(yscrollcommand=sb.set)
+        self.baum.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        for gruppe, titel in self.GRUPPEN:
+            zeilen = [(i, p) for i, p in enumerate(posten) if p["gruppe"] == gruppe]
+            if not zeilen:
+                continue
+            self.baum.insert("", "end", iid=gruppe, text=f"{titel} ({len(zeilen)})", open=True)
+            for i, p in zeilen:
+                self.baum.insert(gruppe, "end", iid=str(i), text=self._marke(i) + p["person"],
+                                 values=(p["text"],))
+        if hinweise:
+            self.baum.insert("", "end", iid="hinweise",
+                             text=f"ℹ Nicht automatisch – bitte ansehen ({len(hinweise)})", open=False)
+            for j, h in enumerate(hinweise):
+                self.baum.insert("hinweise", "end", iid=f"h{j}", text=h[0], values=(h[1],))
+        self.baum.bind("<Button-1>", self._klick)
+        self.baum.bind("<space>", lambda e: self._umschalten(self.baum.focus()))
+
+        ttk.Label(self, text="Klick auf eine Zeile wählt sie an oder ab. Nichts wird gelöscht; "
+                             "leere Felder überschreiben auf keiner Seite etwas.",
+                  foreground="#555").pack(anchor="w", padx=10)
+        btns = ttk.Frame(self)
+        btns.pack(pady=10)
+        self.btn_ok = ttk.Button(btns, text="Ausgewählte übernehmen", command=self._ok)
+        self.btn_ok.pack(side="left", padx=4)
+        ttk.Button(btns, text="Schließen" if not posten else "Nichts davon",
+                   command=self.destroy).pack(side="left", padx=4)
+        if not posten:
+            self.btn_ok.config(state="disabled")
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _marke(self, i) -> str:
+        return "☑ " if i in self.an else "☐ "
+
+    def _umschalten(self, iid):
+        if not iid or not iid.isdigit():
+            return
+        i = int(iid)
+        self.an.symmetric_difference_update({i})
+        self.baum.item(iid, text=self._marke(i) + self.posten[i]["person"])
+
+    def _klick(self, event):
+        self._umschalten(self.baum.identify_row(event.y))
+
+    def _ok(self):
+        self.result = set(self.an)
         self.destroy()
 
 
@@ -1186,21 +1281,27 @@ class App(tk.Tk):
         menu.add_cascade(label="Bearbeiten", menu=bearbeiten_menu)
 
         lerntheke_menu = tk.Menu(menu, tearoff=0)
-        lerntheke_menu.add_command(label="Ergebnisse abrufen…", command=self.app_ergebnisse_abrufen)
-        lerntheke_menu.add_command(label="LZK-Termine zum Server schicken…",
-                                   command=self.app_lzk_senden)
-        lerntheke_menu.add_separator()
-        lerntheke_menu.add_command(label="Mathe-Talks abrufen", command=self.talks_abrufen)
-        lerntheke_menu.add_command(label="Mathe-Talk-Bewertungen hochladen…",
-                                   command=self.talks_hochladen)
+        # Der Normalweg: EIN Schritt holt alles und zeigt vor dem Schreiben, was
+        # hinein- und hinausgeht. Die Einzelschritte bleiben fuer Sonderfaelle.
+        lerntheke_menu.add_command(label="⟳ Synchronisieren…", command=self.synchronisieren,
+                                   accelerator=f"{strg}+R")
+        einzeln = tk.Menu(lerntheke_menu, tearoff=0)
+        einzeln.add_command(label="Ergebnisse abrufen…", command=self.app_ergebnisse_abrufen)
+        einzeln.add_command(label="LZK-Termine zum Server schicken…",
+                            command=self.app_lzk_senden)
+        einzeln.add_command(label="Mathe-Talks abrufen", command=self.talks_abrufen)
+        einzeln.add_command(label="Mathe-Talk-Bewertungen hochladen…",
+                            command=self.talks_hochladen)
+        einzeln.add_separator()
+        einzeln.add_command(label="Freie Mathe-LZK zuordnen…",
+                            command=self.freie_lzk_zuordnen)
+        einzeln.add_command(label="LZK-Ergebnisse abgleichen…",
+                            command=self.lzk_ergebnisse_abgleichen)
+        einzeln.add_command(label="Kursungen abgleichen…",
+                            command=self.kursungen_abgleichen)
+        lerntheke_menu.add_cascade(label="Einzelne Schritte", menu=einzeln)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
-        lerntheke_menu.add_command(label="Kursungen abgleichen…",
-                                   command=self.kursungen_abgleichen)
-        lerntheke_menu.add_command(label="LZK-Ergebnisse abgleichen…",
-                                   command=self.lzk_ergebnisse_abgleichen)
-        lerntheke_menu.add_command(label="Freie Mathe-LZK zuordnen…",
-                                   command=self.freie_lzk_zuordnen)
         lerntheke_menu.add_command(label="Aliasse auf dem Server umbenennen…",
                                    command=self.alias_umbenennen)
         lerntheke_menu.add_separator()
@@ -1229,6 +1330,8 @@ class App(tk.Tk):
         # Stand im Menue, war aber nie belegt.
         self.bind_all("<Command-n>", lambda e: self.neu())
         self.bind_all("<Control-n>", lambda e: self.neu())
+        self.bind_all("<Command-r>", lambda e: self._sync_per_taste())
+        self.bind_all("<Control-r>", lambda e: self._sync_per_taste())
 
         self.protocol("WM_DELETE_WINDOW", self._beenden)
 
@@ -1287,6 +1390,7 @@ class App(tk.Tk):
         self.btn_person_entfernen = ttk.Button(listen_btns, text="− Entfernen",
                                                command=self.schueler_entfernen)
         self.btn_person_entfernen.pack(side="left", padx=6)
+        ttk.Button(listen_btns, text="⟳ Synchronisieren", command=self.synchronisieren).pack(side="right")
 
         fb_btns = ttk.Frame(links)
         fb_btns.pack(fill="x", pady=(6, 0))
@@ -1942,13 +2046,14 @@ class App(tk.Tk):
                                      values=("", "", "", talks_zusammenfassung(talks), ""),
                                      tags=("halbjahr",))
             for t in talks:
+                pos = next(i for i, x in enumerate(s.talks) if x is t)
                 tags = []
                 if t.online_fehlt:
                     tags.append("fehlt")
                 elif talk_wartet(t):
                     tags.append("wartet")
                 self.talk_tabelle.insert(
-                    knoten, "end", iid=f"t:{s.talks.index(t)}", text=t.thema or "Talk",
+                    knoten, "end", iid=f"t:{pos}", text=t.thema or "Talk",
                     values=(f"{fmt_datum(t.datum)} {t.uhrzeit}".strip(),
                             TALK_ROLLEN_TEXT.get(t.rolle, t.rolle), t.mit,
                             talk_bewertung_text(t) + (" · online nicht mehr da" if t.online_fehlt else ""),
@@ -2011,7 +2116,7 @@ class App(tk.Tk):
         text = f"Mathe-Talks: {neu} neu eingetragen, {len(uebernommen)} von online übernommen."
         if warten:
             text += (f"\n{warten} hier geänderte Bewertung(en) warten aufs Hochladen "
-                     "(„Mathe-Talk-Bewertungen hochladen…“).")
+                     "(„⟳ Synchronisieren“ bietet sie an).")
         for titel, liste in (("Hier und online verschieden geändert -- hier bleibt", konflikte),
                              ("Online nicht mehr vorhanden -- hier markiert, nicht gelöscht", fehlen),
                              ("Von online übernommen", uebernommen)):
@@ -2503,7 +2608,10 @@ class App(tk.Tk):
                 continue
             status, pokale = ziel
             try:
-                client.lzk_setzen(u["user_id"], u["lerntheke"], u["typ"], u["datum_server"], status, pokale)
+                if u.get("ueber_thema") and u.get("id"):
+                    client.lzk_aendern(u["id"], status=status, pokale=pokale)
+                else:
+                    client.lzk_setzen(u["user_id"], u["lerntheke"], u["typ"], u["datum_server"], status, pokale)
             except Exception as e:
                 fehler.append(f"{zeile(u)}: {e}")
                 continue
@@ -2822,7 +2930,7 @@ class App(tk.Tk):
         return [(s.vorname, s.nachname, s.alias.strip().lower())
                 for s in self.az.students if s.alias.strip()]
 
-    def app_ergebnisse_abrufen(self):
+    def app_ergebnisse_abrufen(self, bericht: bool = True):
         """Holt die Auswertung aus der Lerntheken-App und legt sie als Blatt
         'App-Daten' in die geöffnete Datei.
         """
@@ -2881,6 +2989,9 @@ class App(tk.Tk):
             # davon lebt der Abgleich der LZK-Termine. Die Lerntheken-Titel
             # braucht der Abruf nicht; die holt der Abgleich bei Bedarf.
             konten = self._lt_konten = client.studierende()
+            # LZK aus dem LZK-Reiter mit dem Namen einer Lerntheke gehoeren in deren Zeile.
+            self._konten_zuordnen(konten, {lt.get("key"): lt.get("title")
+                                           for lt in lerntheken or [] if lt.get("key")})
         except Exception as e:
             messagebox.showerror("Ergebnisse abrufen", f"Abruf fehlgeschlagen:\n{e}")
             return
@@ -2950,7 +3061,7 @@ class App(tk.Tk):
         if frei_abweichend or frei_offen:
             text += (f"Freie Mathe-LZK: {frei_abweichend} mit Unterschied (nicht von selbst übernommen), "
                      f"{frei_offen} ohne passenden Baustein – "
-                     f"Menü „Lerntheken-App → Freie Mathe-LZK zuordnen…“.\n")
+                     f"„⟳ Synchronisieren“ bzw. „Einzelne Schritte → Freie Mathe-LZK zuordnen…“.\n")
         if zeilen:
             text += f"Rohdaten im Blatt 'App-Daten': {zeilen} Zeilen.\n"
         # Die Mathe-Talks gleich mit: der Abgleich ist drei-Wege-sicher (hier
@@ -2977,7 +3088,159 @@ class App(tk.Tk):
         text += _liste("Konto passiv gesetzt -- uebersprungen", ohne_daten)
         text += _liste("App-Konten ohne Person in der Liste -- nicht ausgewertet",
                        [v for v in verwaist if v not in inaktiv])
+        if not bericht:
+            return text
         self._bericht("Ergebnisse abrufen", text)
+
+    def _sync_per_taste(self):
+        # Nicht, waehrend ein Dialog offen ist: der haelt womoeglich einen Baustein,
+        # den der Abgleich gerade aendern wuerde (und schriebe ihn danach zurueck).
+        if self.grab_current() not in (None, self):
+            return
+        self.synchronisieren()
+
+    def synchronisieren(self):
+        """Alles in einem Schritt: abrufen (wie "Ergebnisse abrufen", sicher im
+        Drei-Wege-Abgleich), dann EINE Vorschau fuer alles, was bestaetigt werden
+        muss -- LZK aus OSKlar, die in noch leere Plaetze gehoeren, hier geaenderte
+        LZK-Termine und Talk-Bewertungen. Widersprueche stehen nur zum Lesen da."""
+        titel_fenster = "Synchronisieren"
+        # Ein noch anstehender automatischer LZK-Versand liefe sonst mitten in die
+        # Vorschau hinein; was er senden wollte, steht dort ohnehin zur Auswahl.
+        job = self.__dict__.get("_lzk_auto_job")
+        if job:
+            self.after_cancel(job)
+            self._lzk_auto_job = None
+        abruf_text = self.app_ergebnisse_abrufen(bericht=False)
+        if abruf_text is None:
+            return                          # abgebrochen oder Fehler (schon gemeldet)
+        angemeldet = self._lt_anmelden()
+        if not angemeldet:
+            return
+        client, klasse = angemeldet
+        try:
+            konten, titel = self._lt_serverstand(client)
+        except Exception as e:
+            messagebox.showerror(titel_fenster, f"Abruf fehlgeschlagen:\n{e}")
+            return
+        je_konto = {(k.get("username") or "").lower(): k
+                    for k in konten if k.get("aktiv", True)}
+
+        posten, hinweise = [], []
+        # 1) Freie LZK aus OSKlar, die zu einem Baustein passen, dessen Platz hier noch leer ist
+        herein = []
+        for st in self.az.students:
+            konto = je_konto.get(st.alias.strip().lower()) if st.alias.strip() else None
+            if not konto:
+                continue
+            paare, offen = lt_freie_lzk_abgleich(st, konto)
+            for x in paare:
+                if x["gleich"] or x["link"] is not None:
+                    continue
+                if x["hier_datum"] is None and not x["hier_erg"]:
+                    herein.append(x)
+                    teile = [fmt_datum(x["online_datum"]) or "ohne Datum"]
+                    if x["online_erg"]:
+                        teile.append(LZK_ERGEBNIS_TEXT.get(x["online_erg"], x["online_erg"]))
+                    posten.append({"gruppe": "herein", "art": "frei_herein", "x": x,
+                                   "person": st.voller_name,
+                                   "text": f"{x['baustein'].name}, LZK {x['nummer']}: " + ", ".join(teile)})
+            for o in offen:
+                person, _, rest = o.partition(": ")
+                hinweise.append((person, rest))
+        # 2) Hier geaenderte LZK-Termine
+        aenderungen, uebersprungen, _ = self._lzk_offene_aenderungen(konten, titel)
+        frei, frei_uebersprungen, _ = self._lzk_frei_plan(konten, titel)
+        for a in aenderungen:
+            posten.append({"gruppe": "raus", "art": "lzk", "a": a, "person": a["person"],
+                           "text": f"{a['titel']} ({a['typ']}-LZK): "
+                                   f"{fmt_datum(a['alt']) or '—'} → {fmt_datum(a['neu'])}"})
+        for a in frei:
+            if a["art"] == "verknuepfen":
+                continue
+            wie = "neu anlegen" if a["art"] == "anlegen" else "ändern"
+            posten.append({"gruppe": "raus", "art": "frei", "a": a, "person": a["person"],
+                           "text": f"{a['titel']} (LZK {a['nummer']}), {wie}: "
+                                   f"{fmt_datum(a.get('alt')) or '—'} → {fmt_datum(a.get('neu'))}"})
+        for u in uebersprungen + frei_uebersprungen:
+            hinweise.append((u["person"], f"{u['titel']} ({u['typ']}): {u['grund']}"))
+        # 3) Talk-Bewertungen
+        for st in self.az.students:
+            for t, was, hier, online in lt_talks_hochladen_liste(st):
+                ziel = (talk_bewertung_text(MatheTalk(status=hier["status"], flammen=hier["flammen"],
+                                                      emoji=hier["emoji"]))
+                        if was == "bewertung" else f"Thema „{hier}“")
+                posten.append({"gruppe": "raus", "art": "talk", "st": st, "t": t, "was": was, "hier": hier,
+                               "person": st.voller_name,
+                               "text": f"Talk {fmt_datum(t.datum)} „{t.thema}“: {ziel}"})
+
+        dlg = SyncDialog(self, posten, hinweise, klasse, abruf_text.replace("\nNoch speichern nicht vergessen.", ""))
+        self.wait_window(dlg)
+        gewaehlt = [p for i, p in enumerate(posten) if dlg.result and i in dlg.result]
+
+        erledigt, fehler, lokal = [], [], False
+        # herein
+        uebernehmen = [p["x"] for p in gewaehlt if p["art"] == "frei_herein"]
+        for x in uebernehmen:
+            b, nr = x["baustein"], x["nummer"]
+            if x["online_datum"]:
+                setattr(b, f"lzk_datum_{nr}", x["online_datum"])
+            if x["online_erg"]:
+                setattr(b, f"lzk_ergebnis_{nr}", x["online_erg"])
+            erledigt.append(f"⬇ {x['person']} · {b.name} (LZK {nr})")
+        if uebernehmen and self._lzk_frei_verknuepfen(uebernehmen):
+            lokal = True
+        # raus: LZK
+        # Einzeln, damit der Bericht genau sagt, was durchging und was nicht.
+        for a in (p["a"] for p in gewaehlt if p["art"] == "lzk"):
+            g, f = self._lzk_uebertragen(client, [a])
+            fehler += f
+            if g:
+                erledigt.append(f"⬆ {a['person']} · {a['titel']} ({a['typ']}-LZK): {fmt_datum(a['neu'])}")
+        for a in (p["a"] for p in gewaehlt if p["art"] == "frei"):
+            g, f, l, _ = self._lzk_frei_uebertragen(client, [a])
+            fehler += f
+            lokal = lokal or l
+            if g:
+                erledigt.append(f"⬆ {a['person']} · {a['titel']} (LZK {a['nummer']}): {fmt_datum(a.get('neu'))}")
+        # Verknuepfungen ohne Serverzugriff gehoeren immer dazu (nur hier).
+        verknuepfen = [a for a in frei if a["art"] == "verknuepfen"]
+        if verknuepfen and self._lzk_frei_uebertragen(client, verknuepfen)[2]:
+            lokal = True
+        # raus: Talks
+        for p in gewaehlt:
+            if p["art"] != "talk":
+                continue
+            t, hier = p["t"], p["hier"]
+            try:
+                if p["was"] == "bewertung":
+                    client.talk_bewerten(t.rolle, t.online_id, hier["status"], hier["flammen"], hier["emoji"])
+                else:
+                    client.talk_thema(t.session_id, hier)
+            except Exception as e:
+                fehler.append(f"{p['person']} · Talk {fmt_datum(t.datum)}: {e}")
+                continue
+            talk_hochgeladen(t, p["was"])
+            lokal = True
+            erledigt.append(f"⬆ {p['person']} · Talk {fmt_datum(t.datum)} „{t.thema}“")
+
+        if lokal or erledigt:
+            self._markiere_ungespeichert()
+        self._detail_anzeigen()
+        self._liste_aktualisieren()
+        if not dlg.result and posten:
+            self._melde("Synchronisiert (nur abgerufen) – bestätigt wurde nichts.")
+            return
+        text = abruf_text
+        if erledigt:
+            text += f"\n\nÜbernommen bzw. gesendet ({len(erledigt)}):\n" + "\n".join(erledigt)
+        if fehler:
+            text += f"\n\nNicht geklappt ({len(fehler)}):\n" + "\n".join(fehler)
+            messagebox.showwarning(titel_fenster, text)
+        elif erledigt:
+            self._bericht(titel_fenster, text)
+        else:
+            self._melde(f"Synchronisiert um {datetime.now().strftime('%H:%M')} Uhr – alles auf dem gleichen Stand.")
 
     def _lt_serverstand(self, client, neu_laden: bool = False):
         """Kontenliste und Lerntheken-Titel der Sitzung, bei Bedarf geholt."""
@@ -2985,7 +3248,19 @@ class App(tk.Tk):
             self._lt_konten = client.studierende()
         if neu_laden or self._lt_titel is None:
             self._lt_titel = client.lerntheken_titel()
+        self._konten_zuordnen(self._lt_konten, self._lt_titel)
         return self._lt_konten, self._lt_titel
+
+    def _konten_zuordnen(self, konten, titel):
+        """Freie LZK, deren Thema eine Lerntheke benennt, der Lerntheke zuordnen
+        (siehe lzk_lerntheken_zuordnen) -- bei jedem frisch geholten Stand."""
+        ids = verknuepfte_lzk_ids(self.az.students)
+        je_alias = {st.alias.strip().lower(): st for st in self.az.students if st.alias.strip()}
+        for konto in konten or []:
+            st = je_alias.get((konto.get("username") or "").strip().lower())
+            lzk_lerntheken_zuordnen(konto, titel or {}, ids,
+                                    eigene_baustein_namen(st) if st else ())
+        return konten
 
     def _lzk_offene_aenderungen(self, konten, titel):
         """(aenderungen, uebersprungen, ohne_konto) fuer alle Personen."""
@@ -3014,8 +3289,13 @@ class App(tk.Tk):
         gesendet, fehler = 0, []
         for a in aenderungen:
             try:
-                client.lzk_setzen(a["user_id"], a["lerntheke"], a["typ"],
-                                  a["neu"], a["status"], a["pokale"])
+                if a.get("ueber_thema") and a.get("id"):
+                    # Eine freie LZK mit dem Namen der Lerntheke: GENAU diese
+                    # verschieben, sonst stuende die LZK danach zweimal da.
+                    client.lzk_aendern(a["id"], datum=a["neu"])
+                else:
+                    client.lzk_setzen(a["user_id"], a["lerntheke"], a["typ"],
+                                      a["neu"], a["status"], a["pokale"])
             except Exception as e:
                 fehler.append(f"{a['person']} · {a['titel']} ({a['typ']}): {e}")
                 continue
@@ -3087,8 +3367,12 @@ class App(tk.Tk):
             neu = je_id.get(konto.get("id"))
             if neu is None:
                 continue
-            konto["lzk"] = ([e for e in (konto.get("lzk") or []) if e.get("lerntheke")]
-                            + [e for e in (neu.get("lzk") or []) if not e.get("lerntheke")])
+            # Ueber das Thema zugeordnete sind freie LZK: sie kommen frisch mit.
+            konto["lzk"] = ([e for e in (konto.get("lzk") or [])
+                             if e.get("lerntheke") and not e.get("ueber_thema")]
+                            + [e for e in (neu.get("lzk") or [])
+                               if not e.get("lerntheke") or e.get("ueber_thema")])
+        self._konten_zuordnen(self._lt_konten, self.__dict__.get("_lt_titel") or {})
 
     @staticmethod
     def _lzk_frei_verknuepfen(paare, ausser=()):
@@ -3194,6 +3478,7 @@ class App(tk.Tk):
             except Exception as e:
                 self.status_leiste.config(text=f"⚠ LZK-Abgleich nicht möglich: {e}")
                 return
+            self._konten_zuordnen(frisch, titel)
             self._lzk_cache_frei_auffrischen(frisch)
             frei, frei_uebersprungen, _ = self._lzk_frei_plan(frisch, titel)
         schreiben = aenderungen + [a for a in frei if a["art"] != "verknuepfen"]
@@ -3223,7 +3508,7 @@ class App(tk.Tk):
         if fehler:
             self.status_leiste.config(
                 text=f"⚠ {gesendet} von {len(schreiben)} LZK-Terminen gesendet, "
-                     f"{len(fehler)} nicht -- über „LZK-Termine zum Server "
+                     f"{len(fehler)} nicht -- über „⟳ Synchronisieren“ "
                      f"schicken…“ erneut versuchen.")
         elif gesendet:
             zeit = datetime.now().strftime("%H:%M")

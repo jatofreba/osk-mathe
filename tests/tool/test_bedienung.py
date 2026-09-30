@@ -34,8 +34,10 @@ def block(kopf, ende="\n    def "):
 menue = block("def _menu_aufbauen", "\n    def _layout_aufbauen")
 pruefe("T1 die Beschriftung richtet sich nach dem System, statt fest 'Cmd' zu sein",
        'strg = "Cmd" if sys.platform == "darwin" else "Strg"' in menue, menue[:400])
-pruefe("T1b und wird fuer alle drei Eintraege benutzt",
-       menue.count('accelerator=f"{strg}+') == 3, menue)
+pruefe("T1b und wird fuer alle vier Eintraege benutzt (Neu, Oeffnen, Speichern, Synchronisieren)",
+       menue.count('accelerator=f"{strg}+') == 4, menue)
+pruefe("T1d Strg+R synchronisiert und ist auch belegt",
+       '<Control-r>' in menue and '<Command-r>' in menue and 'command=self.synchronisieren' in menue, menue[-600:])
 pruefe("T1c nirgends mehr ein fest verdrahtetes Cmd im Menue",
        'accelerator="Cmd' not in quelle)
 pruefe("T2 Strg+N ist jetzt auch wirklich belegt (stand nur im Menue)",

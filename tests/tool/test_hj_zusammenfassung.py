@@ -101,6 +101,13 @@ alt.aus_dict({"format": d.JSON_FORMAT, "version": 1,
 pruefe("B6 aeltere Datei mit nur EINER Note: gilt fuers laufende Halbjahr",
        alt.students[0].hj_noten == {HJ: "4"} and alt.students[0].hj_note == "4", alt.students[0].hj_noten)
 
+neu_alt = d.Arbeitsstaende()
+neu_alt.aus_dict({"format": d.JSON_FORMAT, "version": 1, "personen": [
+    {"vorname": "A", "nachname": "B", "hj_note": "2", "hj_noten": {HJ_ALT: "2"}}]})
+pruefe("B6b Datei aus dem VORIGEN Halbjahr: die Note bleibt dort und wandert nicht ins laufende",
+       neu_alt.students[0].hj_noten == {HJ_ALT: "2"} and neu_alt.students[0].hj_note == "",
+       (neu_alt.students[0].hj_noten, neu_alt.students[0].hj_note))
+
 pruefe("B7 Auswahl enthaelt alle Halbjahre der Person",
        HJ in d.hj_auswahl(p) and HJ_ALT in d.hj_auswahl(p))
 
