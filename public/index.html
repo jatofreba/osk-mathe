@@ -1583,7 +1583,10 @@ textarea.form-input{
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-act btn-outline" onclick="talkBeteiligteSetzen('vortrag')">🎤 trägt vor</button>
       <button class="btn-act btn-outline" onclick="talkBeteiligteSetzen('zuhoeren')">👂 hört zu</button>
+      <button class="btn-act btn-outline" onclick="talkBuchendeSetzen()">⭐ bucht</button>
     </div>
+    <label id="tbet-alt-zeile" style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">
+      <input type="checkbox" id="tbet-alt-bleibt" checked><span id="tbet-alt-text">Bisherige buchende Person trägt weiter mit vor</span></label>
     <div id="tbet-hinweis" style="font-size:12px;color:var(--md-on-surface-variant);line-height:1.4;margin-bottom:8px;"></div>
     <div id="tbet-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
@@ -8044,9 +8047,11 @@ function talkBeteiligteRender() {
   document.getElementById('tbet-person').innerHTML = '<option value="">– Person wählen –</option>' +
     d.roster.filter(p => p.username !== d.presenter).map(p =>
       `<option value="${p.id}">${escHtml(p.username)}${rolleVon[p.username] ? ' (' + rolleVon[p.username] + ')' : ''}</option>`).join('');
+  document.getElementById('tbet-alt-zeile').style.display = d.presenter ? 'flex' : 'none';
+  document.getElementById('tbet-alt-text').textContent = `Beim Austauschen der buchenden Person trägt ${d.presenter || 'sie'} weiter mit vor`;
   const drueber = nV > g.maxV || dabeiZu.length > g.maxZ;
   document.getElementById('tbet-hinweis').textContent =
-    'Wer schon dabei ist, wechselt mit „trägt vor“ / „hört zu“ die Rolle. Neu Eingetragene gelten als dabei und sehen den Termin mit dem Hinweis „Deine Lernbegleitung hat dich eingeladen“.'
+    'Wer schon dabei ist, wechselt mit „trägt vor“ / „hört zu“ die Rolle; „bucht“ macht die Person zur buchenden (sie verwaltet dann die Einladungen). Neu Eingetragene gelten als dabei und sehen den Termin mit dem Hinweis „Deine Lernbegleitung hat dich eingeladen“.'
     + (drueber ? ' Mehr als im Fach vorgesehen – für die Lernbegleitung ist das erlaubt.' : '');
 }
 function talkBeteiligteFehler(t) {
@@ -8069,6 +8074,18 @@ async function talkBeteiligteSetzen(rolle) {
   if (!r.ok) return talkBeteiligteFehler(d.error || 'Fehler beim Eintragen.');
   await talkBeteiligteNeuLaden();
   if ((d.conflicts || []).length) talkBeteiligteFehler(d.conflicts.map(c => `${c.username}: ${c.reason}`).join(' · '));
+}
+async function talkBuchendeSetzen() {
+  talkBeteiligteFehler('');
+  const id = parseInt(document.getElementById('tbet-person').value);
+  if (!id) return talkBeteiligteFehler('Bitte erst eine Person wählen.');
+  const r = await fetch(`/api/admin/talking-sessions/${_tbet.sessionId}/presenter`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId: id, altBleibt: document.getElementById('tbet-alt-bleibt').checked })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return talkBeteiligteFehler(d.error || 'Fehler beim Austauschen.');
+  await talkBeteiligteNeuLaden();
 }
 async function talkBeteiligteEntfernen(invitationId) {
   talkBeteiligteFehler('');

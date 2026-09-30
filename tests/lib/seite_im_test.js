@@ -70,25 +70,30 @@ function ladeSeite(optionen = {}) {
       },
     };
   };
+  // Zustand eines Elements aus seinem Tag (checked, display:none, value) - wie im Browser.
+  const tagVon = (quelle, id) => String(quelle).match(new RegExp('<[^>]*\\bid="' + alsMuster(id) + '"[^>]*>'));
+  const mitZustand = (id, tag) => {
+    const el = neuesElement(id);
+    if (!tag) return el;
+    if (/\schecked\b/.test(tag[0])) el.checked = true;
+    if (/display:\s*none/.test(tag[0])) el.style.display = 'none';
+    const wert = tag[0].match(/\svalue="([^"]*)"/);
+    if (wert) el.value = wert[1];
+    return el;
+  };
+  const markupOhneSkripte = html.replace(/<script[\s\S]*?<\/script>/g, '');
   // Von der Seite gerendertes Element: Zustand aus seinem Tag im innerHTML eines anderen Elements.
   const ausGerendertem = id => {
-    const muster = new RegExp('<[^>]*\\bid="' + alsMuster(id) + '"[^>]*>');
     for (const e of Object.values(elemente)) {
-      const tag = String(e.innerHTML).match(muster);
-      if (!tag) continue;
-      const el = neuesElement(id);
-      if (/\schecked\b/.test(tag[0])) el.checked = true;
-      if (/display:\s*none/.test(tag[0])) el.style.display = 'none';
-      const wert = tag[0].match(/\svalue="([^"]*)"/);
-      if (wert) el.value = wert[1];
-      return el;
+      const tag = tagVon(e.innerHTML, id);
+      if (tag) return mitZustand(id, tag);
     }
     return null;
   };
   let qsa = () => [];
   const element = id => {
     if (elemente[id]) return elemente[id];
-    const el = idsImMarkup.has(id) ? neuesElement(id) : ausGerendertem(id);
+    const el = idsImMarkup.has(id) ? mitZustand(id, tagVon(markupOhneSkripte, id)) : ausGerendertem(id);
     return el ? (elemente[id] = el) : null;
   };
   const documentAttrappe = new Proxy({}, {

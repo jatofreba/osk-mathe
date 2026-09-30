@@ -345,5 +345,33 @@ await kalender(t1);
 // Die Leiste steht sonst in der gerenderten Wochenansicht (die zeigt nur die laufende Woche).
 lauf(`document.getElementById('cal-adminweek').innerHTML = '<div id="aw-actionbar"></div>'; _awPicked = ${s1}; awRenderBar();`);
 pruefe('L9 auch in der Wochenleiste: "👥 Beteiligte"', html('aw-actionbar').includes(`openTalkBeteiligte(${sess1}, 'kalender')`), html('aw-actionbar'));
+// ── P) die Lernbegleitung tauscht die buchende Person aus ─────────────────────
+await als('lb');
+await lauf('loadTalkingAdmin()'); await ruhe();
+lauf(`openTalkBeteiligte(${sess1}, 'talks')`);
+const praesentierend = async () => (await eins(`SELECT presenter_id AS p FROM talking_sessions WHERE id=$1`, [sess1])).p;
+waehle('eli');
+await lauf('talkBuchendeSetzen()'); await ruhe();
+pruefe('P1 Vortrag schon bewertet: nicht austauschen (die Bewertung ginge sonst auf die neue Person ueber)',
+  (await praesentierend()) === P.dan && /schon bewertet/.test(seite.element('tbet-error').textContent), seite.element('tbet-error').textContent);
+await srv.rufe('post', '/api/admin/talking-sessions/:id/confirm-presented', { session: { userId: LB, role: 'admin', klasse: 'M3M4' },
+  params: { id: sess1 }, body: { status: 'ausstehend', pokale: 0, qualityEmoji: null } });
+await lauf('loadTalkingAdmin()'); await ruhe();
+waehle('eli');
+await lauf('talkBuchendeSetzen()'); await ruhe();
+const danAlsMit = await einladungVon(sess1, 'dan');
+pruefe('P2 eli bucht jetzt; dan traegt weiter mit vor; eli steht nicht mehr bei den Zuhoerenden',
+  (await praesentierend()) === P.eli && danAlsMit && danAlsMit.rolle === 'vortrag' && danAlsMit.status === 'angenommen'
+  && !(await einladungVon(sess1, 'eli')) && html('tbet-liste').includes('eli') && seite.element('tbet-alt-text').textContent.includes('eli'),
+  [danAlsMit, html('tbet-liste')]);
+seite.element('tbet-alt-bleibt').checked = false;
+waehle('dan');
+await lauf('talkBuchendeSetzen()'); await ruhe();
+pruefe('P3 zurueck zu dan, diesmal ohne "weiter mit vortragen": eli ist ganz raus, dans Mit-Vortrags-Zeile weg',
+  (await praesentierend()) === P.dan && !(await einladungVon(sess1, 'eli')) && !(await einladungVon(sess1, 'dan')));
+await als('dan');
+await lauf('loadTalkingStudent()'); await ruhe();
+pruefe('P4 dan verwaltet den Talk wieder (weitere einladen)', html('talking-student').includes(`openInviteMoreModal(${sess1})`));
+
 console.log('\n' + ok + ' Pruefungen bestanden.');
 process.exit(0);
