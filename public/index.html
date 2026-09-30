@@ -7039,7 +7039,9 @@ function renderHalbjahr() {
         <thead><tr>${nurTeilnahme
           ? th('name', 'Name') + th('fabue', '✓ Teilgenommen')
           : th('name', 'Name') + th('gehalten', '🎤 Gehalten') + th('zugehoert', '👂 Zugehört') + th('fabue', '📘 FaBü') + headCols}</tr></thead>
-        <tbody>${rows || `<tr><td colspan="2" style="color:var(--md-on-surface-variant);font-style:italic;">Niemand war in diesem Halbjahr eingeteilt.</td></tr>`}</tbody>
+        <tbody>${rows || (nurTeilnahme
+          ? `<tr><td colspan="2" style="color:var(--md-on-surface-variant);font-style:italic;">Niemand war in diesem Halbjahr eingeteilt.</td></tr>`
+          : '')}</tbody>
       </table></div>`;
   }).join('');
 
