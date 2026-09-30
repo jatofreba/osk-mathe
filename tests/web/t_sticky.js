@@ -76,4 +76,22 @@ pruefe('S6 das Loesungs-Panel behaelt seine rise-Animation',
   /animation:\s*rise/.test(decl('.sol-panel.open')), decl('.sol-panel.open'));
 pruefe('S6b und die rise-Keyframes gibt es noch', /@keyframes\s+rise\s*\{/.test(css), '');
 
+// --- 5) iPad: die Seite um den iframe darf die Leiste nicht wegschieben ----
+// (iOS-Verhalten laesst sich hier nicht nachstellen - geprueft wird, dass die Sicherungen stehen.)
+pruefe('S7 am Ende der Station wird nicht an die Seite drumherum weitergewischt',
+  /overscroll-behavior:\s*contain/.test(decl('#view-st.active')), decl('#view-st.active'));
+const haupt = lies('public/index.html');
+const vollbild = (haupt.match(/html\.lt-vollbild, html\.lt-vollbild body\{([^}]*)\}/) || [, ''])[1];
+pruefe('S8 Lerntheke offen: die Hauptseite scrollt nicht und ist nicht hoeher als der sichtbare Bereich',
+  /overflow:hidden/.test(vollbild) && /min-height:0/.test(vollbild) && /height:100%/.test(vollbild), vollbild);
+pruefe('S8b die Klasse haengt an der Lerntheken-Ansicht',
+  haupt.includes("document.documentElement.classList.toggle('lt-vollbild', v === 'lerntheke');"), '');
+pruefe('S9 geht die Tastatur zu, rueckt die Hauptseite nach oben (nicht waehrend sie offen ist)',
+  /visualViewport\.addEventListener\('resize', ltSeiteNachOben\)/.test(haupt)
+  && /vv\.height < window\.innerHeight - 1\) return;/.test(haupt), '');
+const ltJs = lies('public/lerntheken/lerntheke.js');
+const fokus = ltJs.slice(ltJs.indexOf("document.addEventListener('focusout'"), ltJs.indexOf('function toggleSol(btn){'));
+pruefe('S10 nach dem Tippen in einer Station bittet die Lerntheke die Hauptseite nach oben',
+  fokus.includes("type: 'SCROLL_TOP'") && fokus.includes("st.classList.contains('active')"), fokus.slice(0, 200));
+
 console.log('\n' + ok + ' Pruefungen bestanden.');

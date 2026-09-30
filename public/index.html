@@ -502,6 +502,11 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 /* ── App Shell ───────────────────────────────────────────────────────────── */
 #app{display:none;flex-direction:column;min-height:100vh;}
 #app.view-lerntheke{display:flex;flex-direction:column;height:100dvh;overflow:hidden;min-height:unset;}
+/* Lerntheke (iframe) im Vollbild: die Seite drumherum darf nicht scrollen. Sonst war body
+   (min-height:100vh) auf dem iPad um die Safari-Leiste hoeher als der sichtbare Bereich
+   (100dvh) - Wischen am Ende einer Station oder die Tastatur schoben die ganze Seite ein
+   Stueck hoch, und die Stationsleiste mit "← Übersicht" verschwand oben aus dem Bild. */
+html.lt-vollbild, html.lt-vollbild body{height:100%;min-height:0;overflow:hidden;overscroll-behavior:none;}
 #app.view-lerntheke #view-lerntheke{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 #app.view-lerntheke.station-open .topbar,
 #app.view-lerntheke.station-open .tabs,
@@ -3994,6 +3999,19 @@ window.addEventListener('message', async (e) => {
   }
 });
 
+// iPad: Nach dem Tippen (Tastatur geht zu) laesst iOS die Seite manchmal hochgeschoben stehen -
+// dann fehlt oben die Stationsleiste. Waehrend die Lerntheke offen ist, gehoert die Seite
+// immer ganz nach oben; der iframe scrollt seinen Inhalt selbst. Nur wenn die Tastatur wieder
+// zu ist (sichtbarer Bereich wieder so hoch wie das Fenster) - waehrend sie offen ist, schiebt
+// iOS absichtlich, damit das Eingabefeld sichtbar bleibt.
+function ltSeiteNachOben() {
+  const vv = window.visualViewport;
+  if (!document.documentElement.classList.contains('lt-vollbild')) return;
+  if (vv && vv.height < window.innerHeight - 1) return;
+  if (window.scrollY || window.pageYOffset) window.scrollTo(0, 0);
+}
+if (window.visualViewport) window.visualViewport.addEventListener('resize', ltSeiteNachOben);
+
 
 // ══ View switching ═══════════════════════════════════════════════════════════
 function updateShellHeight() {
@@ -4020,6 +4038,7 @@ function updateShellHeight() {
 function showView(v) {
   const appEl = document.getElementById('app');
   if (appEl) appEl.className = `view-${v}`;
+  document.documentElement.classList.toggle('lt-vollbild', v === 'lerntheke');
   if (v === 'lerntheke') updateShellHeight();
   ['lerntheke','home','picker','admin','talking','calendar','lzk','halbjahr','klasse','plenum','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);

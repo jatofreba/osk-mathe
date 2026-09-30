@@ -539,6 +539,20 @@ async function showSt(id){
   },50);
 }
 
+// iPad: Die Tastatur schiebt beim Tippen die Hauptseite (um den iframe herum) hoch und laesst
+// sie danach manchmal so stehen - dann ist die Leiste mit "← Übersicht" weg. Wenn kein Feld
+// mehr aktiv ist, die Hauptseite zuruecksetzen. Der Inhalt der Station (#view-st scrollt selbst)
+// bleibt, wo er ist.
+document.addEventListener('focusout', () => {
+  setTimeout(() => {
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+    const st = document.getElementById('view-st');
+    if (!st || !st.classList.contains('active')) return;
+    window.parent.postMessage({ type: 'SCROLL_TOP' }, '*');
+  }, 150);
+});
+
 function toggleSol(btn){
   const p=btn.nextElementSibling;
   const open=p.classList.toggle('open');
