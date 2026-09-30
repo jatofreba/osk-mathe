@@ -2587,12 +2587,10 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
     // Flammen, die beim Loeschen lautlos verschwaenden. Am Fachbuero gibt es keine
     // Flammen - der Haken ist reine Anwesenheit und muss korrigierbar bleiben, auch
     // wenn schon "da gewesen" oder "gefehlt" eingetragen ist.
-    if ((row.typ || 'talk') !== 'input') {
-      if (row.presented_status !== 'ausstehend')
-        return res.status(409).json({ error: 'Vortrag bereits bewertet, Teilnahme kann nicht mehr entfernt werden' });
-      if (row.attended_status !== 'ausstehend')
-        return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden' });
-    }
+    // Dass der Vortrag der buchenden Person schon bewertet ist, sperrt nichts: nachtraeglich
+    // korrigieren, wer dabei war, soll gehen - geschuetzt ist nur die eigene Bewertung der Zeile.
+    if ((row.typ || 'talk') !== 'input' && row.attended_status !== 'ausstehend')
+      return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden - erst die Bewertung auf "ausstehend" zurücksetzen' });
     await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
     // Ohne vortragende Person und ohne verbliebene Teilnehmende hängt am Termin nichts
     // mehr - dann wird er wieder frei, statt als leere Buchung stehen zu bleiben.
@@ -3007,11 +3005,51 @@ app.post('/api/admin/talking-sessions/:id/assign', requireAdmin, async (req, res
   try {
     const { studentIds } = req.body;
     const sess = await pool.query(
-      `SELECT ts.id, ts.slot_id AS "slotId" FROM talking_sessions ts
+      `SELECT ts.id, ts.slot_id AS "slotId", ts.presenter_id AS "presenterId", sl.typ
+       FROM talking_sessions ts
        JOIN talking_slots sl ON sl.id = ts.slot_id WHERE ts.id=$1 AND sl.klasse=$2`,
       [req.params.id, req.session.klasse]
     );
     if (!sess.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const istTalk = (sess.rows[0].typ || 'talk') === 'talk';
+    const rolle = req.body.rolle === 'vortrag' ? 'vortrag' : 'zuhoeren';
+    if (rolle === 'vortrag' && !istTalk) return res.status(400).json({ error: 'Vortragende gibt es nur bei Talks.' });
+
+    if (istTalk) {
+      // Talk: die Lernbegleitung legt nachtraeglich fest, wer vortraegt und wer zuhoert - die
+      // Grenzen des Fachs gelten nur fuer Schueler:innen beim Buchen. Die buchende Person bleibt,
+      // wer schon auf der Liste steht, bekommt die gewuenschte Rolle (und gilt als dabei) - ausser
+      // an der Zeile haengt schon eine Bewertung; die wird nie still umgedeutet.
+      const presenterId = sess.rows[0].presenterId;
+      const ids = (Array.isArray(studentIds) ? studentIds : []).map(Number).filter(id => id && id !== presenterId);
+      const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, sess.rows[0].slotId, ids);
+      let assigned = 0;
+      for (const uid of okIds) {
+        const alt = await pool.query(
+          `SELECT ti.id, ti.status, ti.rolle, ti.attended_status, u.username FROM talking_invitations ti
+           JOIN users u ON u.id = ti.listener_id WHERE ti.session_id=$1 AND ti.listener_id=$2`, [req.params.id, uid]);
+        if (!alt.rows.length) {
+          await pool.query(
+            `INSERT INTO talking_invitations (session_id, listener_id, status, herkunft, rolle)
+             VALUES ($1,$2,'angenommen','zugewiesen',$3)`, [req.params.id, uid, rolle]);
+          assigned++;
+          continue;
+        }
+        const z = alt.rows[0];
+        if (z.rolle === rolle && z.status === 'angenommen') continue;
+        if (z.attended_status !== 'ausstehend') {
+          conflicts.push({ userId: uid, username: z.username, reason: 'schon bewertet - erst die Bewertung auf "ausstehend" zurücksetzen' });
+          continue;
+        }
+        // Neue Rolle oder bisher nicht dabei: als von der Lernbegleitung eingeteilt markieren, damit
+        // die Person den Hinweis "Deine Lernbegleitung hat dich eingeladen" (neu) bekommt.
+        await pool.query(
+          `UPDATE talking_invitations SET rolle=$1, status='angenommen', herkunft='zugewiesen',
+                  gesehen_am=NULL, updated_at=NOW() WHERE id=$2`, [rolle, z.id]);
+        assigned++;
+      }
+      return res.json({ ok: true, assigned, conflicts });
+    }
 
     const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, sess.rows[0].slotId, studentIds);
     for (const uid of okIds) {

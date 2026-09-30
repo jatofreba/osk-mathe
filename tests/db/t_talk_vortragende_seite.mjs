@@ -297,5 +297,53 @@ pruefe('W1 Wochen-Chip: ida steht bei den Vortragenden (noch ohne Antwort)', chi
 const leute = JSON.parse(lauf(`JSON.stringify(plPersonen(calData.slots.find(s => s.id === ${s2})))`));
 pruefe('W2 Plenum: ida als Vortragende', leute.some(l => l.name === 'ida' && l.haupt), leute);
 
+// ── L) die Lernbegleitung bearbeitet nachtraeglich, wer vortraegt und wer zuhoert ──
+await als('lb');
+await lauf('loadTalkingAdmin()'); await ruhe();
+pruefe('L1 Terminkarte im Talks-Reiter: Knopf "Beteiligte bearbeiten"',
+  html('talking-admin').includes(`openTalkBeteiligte(${sess1}, 'talks')`), html('talking-admin'));
+lauf(`openTalkBeteiligte(${sess1}, 'talks')`);
+const liste = () => html('tbet-liste');
+pruefe('L2 das Fenster zeigt Vortragende (dan hat gebucht, gil bewertet - ohne ✕) und Zuhoerende mit ✕',
+  liste().includes('dan') && liste().includes('hat gebucht') && liste().includes('✓ bewertet')
+  && !liste().includes(`talkBeteiligteEntfernen(${gilE.id})`) && liste().includes(`talkBeteiligteEntfernen(${eliE.id})`), liste());
+const waehle = name => { seite.element('tbet-person').value = String(P[name]); };
+waehle('ida');
+await lauf(`talkBeteiligteSetzen('vortrag')`); await ruhe();
+let idaE = await einladungVon(sess1, 'ida');
+pruefe('L3 ida neu als Vortragende: dabei (ohne Zusage), als von der Lernbegleitung eingeteilt',
+  idaE && idaE.rolle === 'vortrag' && idaE.status === 'angenommen' && idaE.herkunft === 'zugewiesen'
+  && liste().includes('Vortragende (3)'), [idaE, liste()]);
+waehle('eli');
+await lauf(`talkBeteiligteSetzen('vortrag')`); await ruhe();
+pruefe('L4 eli wechselt vom Zuhoeren zum Vortragen - ueber die Fach-Grenze (3) hinaus erlaubt, mit Hinweis',
+  (await einladungVon(sess1, 'eli')).rolle === 'vortrag' && liste().includes('Vortragende (4)')
+  && seite.element('tbet-hinweis').textContent.includes('Mehr als im Fach vorgesehen'), liste());
+waehle('eli');
+await lauf(`talkBeteiligteSetzen('zuhoeren')`); await ruhe();
+pruefe('L5 und wieder zurueck zum Zuhoeren', (await einladungVon(sess1, 'eli')).rolle === 'zuhoeren');
+waehle('gil');
+await lauf(`talkBeteiligteSetzen('zuhoeren')`); await ruhe();
+pruefe('L6 gils bewerteter Vortrag wird nicht still zum Zuhoeren umgedeutet - Hinweis im Fenster',
+  (await einladungVon(sess1, 'gil')).rolle === 'vortrag' && /schon bewertet/.test(seite.element('tbet-error').textContent),
+  seite.element('tbet-error').textContent);
+await als('ida');
+await kalender(t1);
+pruefe('L7a ida bekommt den Hinweis der Lernbegleitung - mit "du trägst mit vor"',
+  html('cal-invites').includes('Deine Lernbegleitung hat dich eingeladen') && html('cal-invites').includes('du trägst mit vor'), html('cal-invites'));
+await als('lb');
+await srv.rufe('post', '/api/admin/talking-sessions/:id/confirm-presented', { session: { userId: LB, role: 'admin', klasse: 'M3M4' },
+  params: { id: sess1 }, body: { status: 'erledigt', pokale: 2, qualityEmoji: null } });
+const fayE = await einladungVon(sess1, 'fay');
+await lauf('loadTalkingAdmin()'); await ruhe();
+await lauf(`talkBeteiligteEntfernen(${fayE.id})`); await ruhe();
+pruefe('L7 auch nach der Bewertung des Vortrags laesst sich eine unbewertete Zuhoerende herausnehmen',
+  !(await einladungVon(sess1, 'fay')) && !liste().includes('fay'), liste());
+const r409 = await srv.rufe('delete', '/api/admin/talking-invitations/:id', { session: { userId: LB, role: 'admin', klasse: 'M3M4' }, params: { id: gilE.id } });
+pruefe('L8 eine bewertete Zeile (gil) bleibt geschuetzt -> 409', r409.code === 409 && !!(await einladungVon(sess1, 'gil')), r409.body);
+await kalender(t1);
+// Die Leiste steht sonst in der gerenderten Wochenansicht (die zeigt nur die laufende Woche).
+lauf(`document.getElementById('cal-adminweek').innerHTML = '<div id="aw-actionbar"></div>'; _awPicked = ${s1}; awRenderBar();`);
+pruefe('L9 auch in der Wochenleiste: "👥 Beteiligte"', html('aw-actionbar').includes(`openTalkBeteiligte(${sess1}, 'kalender')`), html('aw-actionbar'));
 console.log('\n' + ok + ' Pruefungen bestanden.');
 process.exit(0);

@@ -1557,6 +1557,28 @@ textarea.form-input{
   </div>
 </div>
 
+<!-- ══ MODAL: Beteiligte eines Talks bearbeiten (Lernbegleitung) ═════════════ -->
+<div class="overlay" id="modal-talk-beteiligte">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title">👥 Beteiligte bearbeiten</div>
+    <div id="tbet-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:12px;"></div>
+    <div id="tbet-liste"></div>
+    <div class="form-group">
+      <label class="form-label" for="tbet-person">Person hinzufügen oder umsetzen</label>
+      <select class="form-input" id="tbet-person"></select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn-act btn-outline" onclick="talkBeteiligteSetzen('vortrag')">🎤 trägt vor</button>
+      <button class="btn-act btn-outline" onclick="talkBeteiligteSetzen('zuhoeren')">👂 hört zu</button>
+    </div>
+    <div id="tbet-hinweis" style="font-size:12px;color:var(--md-on-surface-variant);line-height:1.4;margin-bottom:8px;"></div>
+    <div id="tbet-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-act btn-blue" onclick="closeModal('modal-talk-beteiligte')">Fertig</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: Mathe-Talk bewerten (Admin) ═══════════════════════════════════ -->
 <div class="overlay" id="modal-talking-rate">
   <div class="modal" style="max-width:400px;">
@@ -6295,7 +6317,7 @@ function eingeladenHtml(nachDatum) {
       const dl = new Date(s.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' });
       return `<div class="stat-card" style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-          <div>${icon} ${escHtml(s.thema || s.slotThema || '')}<br>
+          <div>${icon} ${escHtml(s.thema || s.slotThema || '')}${s.myInvitationRolle === 'vortrag' ? ' · <strong>du trägst mit vor</strong>' : ''}<br>
             <span style="color:var(--md-on-surface-variant);font-size:12px;">${dl} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')}${s.teacherUsername ? ' · ' + escHtml(formatTeacherShort(s.teacherUsername)) : ''}</span></div>
           <button class="btn-act btn-green" onclick="calGesehen(${s.myInvitationId})">Alles klar</button>
         </div></div>`;
@@ -6654,6 +6676,7 @@ function awRenderBar() {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       ${einladbar ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openInputAssignModal(${s.id})">${s.booked ? '+ weitere einladen' : '+ einladen'}</button>` : ''}
+      ${(darf && s.typ === 'talk' && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openTalkBeteiligte(${s.session_id}, 'kalender')">👥 Beteiligte</button>` : ''}
       ${schliessbar ? `<button class="mw-bar-btn" onclick="calSlotGeschlossen(${s.id}, ${!s.geschlossen})">${s.geschlossen ? 'Wieder öffnen' : 'Keine weiteren Anmeldungen'}</button>` : ''}
       ${darf ? `<button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>` : ''}
       ${(darf && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-rot" onclick="calCancelSession(${s.session_id})">Stornieren</button>` : ''}
@@ -7732,6 +7755,7 @@ function renderTalkingAdmin() {
             <span class="pill ${presentCls}" style="cursor:pointer;" title="Vortrag bewerten" onclick="openTalkingRateModal('presented', ${s.session_id}, 3, ${s.pokale || 0}, ${s.qualityEmoji ? `'${s.qualityEmoji}'` : 'null'}, '${s.presentedStatus || 'ausstehend'}')">
               ${presentTxt}${presentRating}
             </span>
+            <button class="btn-icon" onclick="openTalkBeteiligte(${s.session_id}, 'talks')" title="Beteiligte bearbeiten" aria-label="Beteiligte bearbeiten">👥</button>
             <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
           </div>
           ${(s.coPresenters || []).length ? `<div style="margin-top:6px;">${(s.coPresenters || []).map(c => {
@@ -7929,6 +7953,98 @@ async function cancelTalkingSession(sessionId) {
   if (!confirm('Buchung wirklich stornieren? Der Termin wird wieder frei.')) return;
   await fetch(`/api/admin/talking-sessions/${sessionId}`, { method: 'DELETE' });
   loadTalkingAdmin();
+}
+
+// ── Talk: Beteiligte nachtraeglich bearbeiten (Lernbegleitung) ────────────────
+// Die buchende Person bleibt; weitere Vortragende und Zuhoerende setzt die Lernbegleitung frei.
+// Die Grenzen des Fachs gelten nur fuer Schueler:innen beim Buchen - hier stehen sie als Hinweis.
+// quelle 'talks' = Terminkarten im Talks-Reiter (talkingAdminSlots), 'kalender' = Wochenleiste (calData).
+let _tbet = null;
+function talkBeteiligteDaten() {
+  if (!_tbet) return null;
+  if (_tbet.quelle === 'kalender') {
+    const s = (calData.slots || []).find(x => x.session_id === _tbet.sessionId);
+    return s && { subj: subjectById(s.subjectId), datum: s.datum, uhrzeit: s.uhrzeit, thema: s.thema || s.slotThema || '',
+      presenter: s.presenterUsername || '', coPresenters: s.coPresenters || [], invitees: s.invitees || [],
+      roster: calClassmates || [] };
+  }
+  const s = (talkingAdminSlots || []).find(x => x.session_id === _tbet.sessionId);
+  return s && { subj: subjectByKey(activeSubject), datum: s.datum, uhrzeit: s.uhrzeit, thema: s.thema || '',
+    presenter: s.presenter_username || '', coPresenters: s.coPresenters || [], invitees: s.invitees || [],
+    roster: talkingAdminRoster || [] };
+}
+function openTalkBeteiligte(sessionId, quelle) {
+  _tbet = { sessionId, quelle };
+  document.getElementById('tbet-error').style.display = 'none';
+  talkBeteiligteRender();
+  openModal('modal-talk-beteiligte');
+}
+function talkBeteiligteRender() {
+  const d = talkBeteiligteDaten();
+  if (!d) { closeModal('modal-talk-beteiligte'); return; }
+  const g = talkGrenzen(d.subj);
+  document.getElementById('tbet-info').textContent =
+    [fmtTalkingDatum(d.datum), d.uhrzeit, d.thema ? '„' + d.thema + '“' : ''].filter(Boolean).join(' · ');
+  const zustand = x => x.attendedStatus === 'erledigt' ? '✓ bewertet' : x.attendedStatus === 'nicht_erledigt' ? '✗ gefehlt'
+    : x.status === 'angenommen' ? '' : x.status === 'abgelehnt' ? 'abgesagt' : x.status === 'angefragt' ? 'fragt an' : '⏳ noch keine Antwort';
+  // Bewertete Zeilen nicht entfernen - daran haengen Flammen (erst die Bewertung zuruecksetzen).
+  const weg = x => x.attendedStatus === 'ausstehend'
+    ? ` <button class="btn-icon red" title="Aus dem Talk nehmen" aria-label="${escHtml(x.username)} aus dem Talk nehmen" onclick="talkBeteiligteEntfernen(${x.id})">✕</button>` : '';
+  const zeile = (name, text, knopf) => `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;">
+      <span>${escHtml(name)}</span>${text ? `<span style="color:var(--md-on-surface-variant);font-size:12px;">${escHtml(text)}</span>` : ''}${knopf || ''}</div>`;
+  const dabeiZu = d.invitees.filter(iv => iv.status !== 'abgelehnt' && iv.status !== 'angefragt');
+  const nV = (d.presenter ? 1 : 0) + d.coPresenters.length;
+  const kopf = (t, n, von, bis) => `<div class="form-label" style="margin-top:6px;">${t} (${n}) <span style="font-weight:500;">· im Fach ${von}–${bis}</span></div>`;
+  document.getElementById('tbet-liste').innerHTML = `
+    <div class="form-group">
+      ${kopf('🎤 Vortragende', nV, g.minV, g.maxV)}
+      ${d.presenter ? zeile(d.presenter, 'hat gebucht') : ''}
+      ${d.coPresenters.map(c => zeile(c.username, zustand(c), weg(c))).join('')}
+    </div>
+    <div class="form-group">
+      ${kopf('👂 Zuhörende', dabeiZu.length, g.minZ, g.maxZ)}
+      ${d.invitees.map(iv => zeile(iv.username, zustand(iv), weg(iv))).join('')
+        || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Noch niemand.</span>'}
+    </div>`;
+  const rolleVon = {};
+  d.coPresenters.forEach(c => { rolleVon[c.username] = 'trägt vor'; });
+  d.invitees.forEach(iv => { rolleVon[iv.username] = iv.status === 'abgelehnt' ? 'hat abgesagt' : 'hört zu'; });
+  document.getElementById('tbet-person').innerHTML = '<option value="">– Person wählen –</option>' +
+    d.roster.filter(p => p.username !== d.presenter).map(p =>
+      `<option value="${p.id}">${escHtml(p.username)}${rolleVon[p.username] ? ' (' + rolleVon[p.username] + ')' : ''}</option>`).join('');
+  const drueber = nV > g.maxV || dabeiZu.length > g.maxZ;
+  document.getElementById('tbet-hinweis').textContent =
+    'Wer schon dabei ist, wechselt mit „trägt vor“ / „hört zu“ die Rolle. Neu Eingetragene gelten als dabei und sehen den Termin mit dem Hinweis „Deine Lernbegleitung hat dich eingeladen“.'
+    + (drueber ? ' Mehr als im Fach vorgesehen – für die Lernbegleitung ist das erlaubt.' : '');
+}
+function talkBeteiligteFehler(t) {
+  const el = document.getElementById('tbet-error');
+  el.textContent = t; el.style.display = t ? 'block' : 'none';
+}
+async function talkBeteiligteNeuLaden() {
+  if (_tbet.quelle === 'kalender') await loadCalendar(); else await loadTalkingAdmin();
+  talkBeteiligteRender();
+}
+async function talkBeteiligteSetzen(rolle) {
+  talkBeteiligteFehler('');
+  const id = parseInt(document.getElementById('tbet-person').value);
+  if (!id) return talkBeteiligteFehler('Bitte erst eine Person wählen.');
+  const r = await fetch(`/api/admin/talking-sessions/${_tbet.sessionId}/assign`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ studentIds: [id], rolle })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return talkBeteiligteFehler(d.error || 'Fehler beim Eintragen.');
+  await talkBeteiligteNeuLaden();
+  if ((d.conflicts || []).length) talkBeteiligteFehler(d.conflicts.map(c => `${c.username}: ${c.reason}`).join(' · '));
+}
+async function talkBeteiligteEntfernen(invitationId) {
+  talkBeteiligteFehler('');
+  if (!confirm('Diese Person aus dem Talk nehmen?')) return;
+  const r = await fetch(`/api/admin/talking-invitations/${invitationId}`, { method: 'DELETE' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return talkBeteiligteFehler(d.error || 'Fehler beim Entfernen.');
+  await talkBeteiligteNeuLaden();
 }
 
 let _talkingRateModal = {};
