@@ -3029,10 +3029,13 @@ app.post('/api/admin/talking-sessions/:id/assign', requireAdmin, async (req, res
           `SELECT ti.id, ti.status, ti.rolle, ti.attended_status, u.username FROM talking_invitations ti
            JOIN users u ON u.id = ti.listener_id WHERE ti.session_id=$1 AND ti.listener_id=$2`, [req.params.id, uid]);
         if (!alt.rows.length) {
-          await pool.query(
+          // ON CONFLICT: kommt dieselbe Zuweisung doppelt (Doppelklick), gewinnt die erste -
+          // die zweite endete sonst an der UNIQUE-Sperre mit "Serverfehler".
+          const ein = await pool.query(
             `INSERT INTO talking_invitations (session_id, listener_id, status, herkunft, rolle)
-             VALUES ($1,$2,'angenommen','zugewiesen',$3)`, [req.params.id, uid, rolle]);
-          assigned++;
+             VALUES ($1,$2,'angenommen','zugewiesen',$3)
+             ON CONFLICT (session_id, listener_id) DO NOTHING`, [req.params.id, uid, rolle]);
+          if (ein.rowCount) assigned++;
           continue;
         }
         const z = alt.rows[0];
@@ -3078,21 +3081,23 @@ app.post('/api/admin/talking-sessions/:id/presenter', requireAdmin, async (req, 
       `SELECT ts.id, ts.slot_id AS "slotId", ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus", sl.typ
        FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
        WHERE ts.id=$1 AND sl.klasse=$2 FOR UPDATE OF ts`, [req.params.id, req.session.klasse]);
+    // Immer mit "return await fehler(...)" - sonst liefe das finally (release) vor dem ROLLBACK,
+    // und ein Fehler beim ROLLBACK ginge am catch vorbei (unbehandelt -> Server-Prozess weg).
     const fehler = async (code, text) => { await client.query('ROLLBACK'); return res.status(code).json({ error: text }); };
-    if (!sess.rows.length) return fehler(404, 'Nicht gefunden');
+    if (!sess.rows.length) return await fehler(404, 'Nicht gefunden');
     const s = sess.rows[0];
-    if ((s.typ || 'talk') !== 'talk') return fehler(400, 'Nur bei Talks.');
+    if ((s.typ || 'talk') !== 'talk') return await fehler(400, 'Nur bei Talks.');
     if (s.presenterId === neuId) { await client.query('ROLLBACK'); return res.json({ ok: true }); }
     if (s.presentedStatus !== 'ausstehend')
-      return fehler(409, 'Der Vortrag ist schon bewertet - erst die Bewertung auf "ausstehend" zurücksetzen, sonst ginge sie auf die neue Person über.');
+      return await fehler(409, 'Der Vortrag ist schon bewertet - erst die Bewertung auf "ausstehend" zurücksetzen, sonst ginge sie auf die neue Person über.');
     const neu = await client.query(`SELECT id FROM users WHERE id=$1 AND role='student' AND klasse=$2`, [neuId, req.session.klasse]);
-    if (!neu.rows.length) return fehler(400, 'Ungültige Person');
+    if (!neu.rows.length) return await fehler(400, 'Ungültige Person');
     const zeile = await client.query(
       `SELECT id, attended_status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2`, [s.id, neuId]);
     if (zeile.rows.length && zeile.rows[0].attended_status !== 'ausstehend')
-      return fehler(409, 'Für diese Person ist hier schon eine Bewertung eingetragen - erst zurücksetzen.');
+      return await fehler(409, 'Für diese Person ist hier schon eine Bewertung eingetragen - erst zurücksetzen.');
     if (!zeile.rows.length && await hasScheduleConflict(neuId, s.slotId))
-      return fehler(409, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.');
+      return await fehler(409, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.');
     // Die neue Person steht jetzt an der Buchung, nicht mehr auf der Liste.
     if (zeile.rows.length) await client.query('DELETE FROM talking_invitations WHERE id=$1', [zeile.rows[0].id]);
     await client.query('UPDATE talking_sessions SET presenter_id=$1 WHERE id=$2', [neuId, s.id]);

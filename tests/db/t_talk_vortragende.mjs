@@ -197,4 +197,50 @@ pruefe('Z1 ein alter Talk mit nur 1 Zuhoerenden bleibt nutzbar: nachladen geht',
 r = await srv.rufe('post', '/api/admin/talking-sessions/:id/confirm-presented', { session: A, params: { id: alt }, body: { status: 'erledigt', pokale: 3 } });
 pruefe('Z2 ... und bewerten', r.code === 200 && (await eins(`SELECT pokale FROM talking_sessions WHERE id=$1`, [alt])).pokale === 3);
 
+// ── R) Robustheit der Wege fuer die Lernbegleitung ───────────────────────────
+// R1: Beim Presenter-Tausch scheitert das ROLLBACK (z.B. Verbindung weg). Der Fehler darf nicht
+// am try/catch vorbeilaufen - in Express waere das eine unbehandelte Ablehnung, die den ganzen
+// Server-Prozess beendet -, und die Verbindung geht erst zurueck, wenn das ROLLBACK durch ist.
+{
+  const sR = await slot();
+  const b = await buche(P.ada, sR, [P.bo, P.cleo]);
+  await srv.rufe('post', '/api/admin/talking-sessions/:id/confirm-presented', { session: A, params: { id: b.body.sessionId }, body: { status: 'erledigt', pokale: 1 } });
+  const echt = srv.pool.connect;
+  const ablauf = [];
+  srv.pool.connect = async () => {
+    const c = await echt();
+    return {
+      query: async (sql, p) => {
+        if (/^\s*ROLLBACK/i.test(sql)) {
+          ablauf.push('rollback'); await c.query('ROLLBACK'); ablauf.push('rollback-ende');
+          throw new Error('Verbindung weg');
+        }
+        return c.query(sql, p);
+      },
+      release() { ablauf.push('release'); c.release(); },
+    };
+  };
+  let antwort = null, geworfen = null;
+  try {
+    antwort = await srv.rufe('post', '/api/admin/talking-sessions/:id/presenter',
+      { session: A, params: { id: b.body.sessionId }, body: { userId: P.dan } });
+  } catch (e) { geworfen = e; }
+  srv.pool.connect = echt;
+  pruefe('R1 scheitert das ROLLBACK beim Presenter-Tausch, antwortet die Route (kein Fehler am catch vorbei)',
+    !geworfen && antwort && antwort.code >= 400, geworfen ? String(geworfen) : antwort);
+  pruefe('R1b die Verbindung geht erst nach dem ROLLBACK zurueck', ablauf.indexOf('release') > ablauf.indexOf('rollback-ende'), ablauf);
+  pruefe('R1c und die Buchung ist unveraendert', (await eins(`SELECT presenter_id AS p FROM talking_sessions WHERE id=$1`, [b.body.sessionId])).p === P.ada);
+}
+// R2: Doppelklick auf "trägt vor" im Fenster der Lernbegleitung - zwei Anfragen gleichzeitig.
+{
+  const sR2 = await slot();
+  const b2 = await buche(P.ada, sR2, [P.bo, P.cleo]);
+  const zuweisen = () => srv.rufe('post', '/api/admin/talking-sessions/:id/assign',
+    { session: A, params: { id: b2.body.sessionId }, body: { studentIds: [P.dan], rolle: 'vortrag' } });
+  const [x, y] = await Promise.all([zuweisen(), zuweisen()]);
+  const zeilen = await alle(`SELECT rolle FROM talking_invitations WHERE session_id=$1 AND listener_id=$2`, [b2.body.sessionId, P.dan]);
+  pruefe('R2 Doppelklick beim Eintragen: beide Anfragen gehen gut, genau eine Zeile',
+    x.code === 200 && y.code === 200 && zeilen.length === 1 && zeilen[0].rolle === 'vortrag', [x, y, zeilen]);
+}
+
 console.log('\n' + ok + ' Pruefungen bestanden.');

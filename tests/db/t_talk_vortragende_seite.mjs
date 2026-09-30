@@ -372,6 +372,11 @@ pruefe('P3 zurueck zu dan, diesmal ohne "weiter mit vortragen": eli ist ganz rau
 await als('dan');
 await lauf('loadTalkingStudent()'); await ruhe();
 pruefe('P4 dan verwaltet den Talk wieder (weitere einladen)', html('talking-student').includes(`openInviteMoreModal(${sess1})`));
+await als('lb');
+await lauf('loadTalkingAdmin()'); await ruhe();
+lauf(`openTalkBeteiligte(${sess1}, 'talks')`);
+pruefe('P5 beim naechsten Oeffnen ist "trägt weiter mit vor" wieder vorbelegt (nicht vom letzten Mal ausgeschaltet)',
+  seite.element('tbet-alt-bleibt').checked === true);
 
 console.log('\n' + ok + ' Pruefungen bestanden.');
 process.exit(0);

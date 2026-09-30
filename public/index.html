@@ -8030,6 +8030,9 @@ function talkBeteiligteDaten() {
 function openTalkBeteiligte(sessionId, quelle) {
   _tbet = { sessionId, quelle };
   document.getElementById('tbet-error').style.display = 'none';
+  // Das Kaestchen lebt im festen Markup - ohne Zuruecksetzen bliebe es vom letzten Talk
+  // ausgeschaltet, und beim naechsten Austausch flöge die bisherige Person ungewollt ganz raus.
+  document.getElementById('tbet-alt-bleibt').checked = true;
   talkBeteiligteRender();
   openModal('modal-talk-beteiligte');
 }
