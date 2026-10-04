@@ -47,7 +47,11 @@ k = D.Baustein(name="Kreise", lzk_datum_1=D30, lzk_note_1="Teil 2 ueben", lzk_be
 u, g = uebernehmen(person(k), {"lzk": [eintrag(70, "Kreise", datum="2026-10-05")]})
 pruefe("U1 online verschoben: das neue Datum kommt in den Baustein", k.lzk_datum_1 == date(2026, 10, 5), k)
 pruefe("U1b die Verknuepfung merkt sich den neuen Stand", k.lzk_online_1 == verkn("2026-10-05"), k.lzk_online_1)
-pruefe("U1c der Bericht nennt alt und neu", u == ["Gabriel E · Kreise (LZK 1): Datum 30.09.2026 → 05.10.2026"] and g == [], (u, g))
+pruefe("U1c der Bericht nennt alt und neu (und den neuen Status)",
+       u == ["Gabriel E · Kreise (LZK 1): Datum 30.09.2026 → 05.10.2026, Status jetzt „In Bearbeitung“"]
+       and g == [], (u, g))
+pruefe("U1d der Baustein war 'Ausstehend' und ist jetzt 'In Bearbeitung' (Halbjahr der LZK)",
+       k.status == "In Bearbeitung" and k.halbjahr == D.halbjahr_fuer_datum(date(2026, 10, 5)), k)
 pruefe("U1d Note und Bemerkung bleiben unberuehrt", k.lzk_note_1 == "Teil 2 ueben" and k.lzk_bem_1 == "Taschenrechner", k)
 
 # 2) Online bewertet

@@ -80,22 +80,31 @@ class AZ:
         return self.fristen[st.nachname], "LZK"
 
 
-fristen = {"a": heute + timedelta(days=10), "b": heute - timedelta(days=1), "c": heute + timedelta(days=1),
-           "d": heute, "e": "", "f": "Frist vereinbaren!", "g": heute - timedelta(days=30)}
+# Nutzerwunsch: streng nach Datum - 01.10. vor 02.10., auch wenn heute der 04.10. ist
+fristen = {"a": heute + timedelta(days=10), "b": heute - timedelta(days=2), "c": heute + timedelta(days=1),
+           "d": heute, "e": "", "f": "Frist vereinbaren!", "g": heute - timedelta(days=3)}
 app = A.App.__new__(A.App)
 app.az = AZ(fristen)
 leute = [D.Student(vorname="X", nachname=n) for n in fristen]
-reihe = [s.nachname for s in sorted(leute, key=lambda s: app._spalten_key(s, "aktuell"))]
-pruefe("C1 heute zuerst, dann nach Abstand (Kommendes vor Ueberfaelligem), Hinweis, ohne Frist zuletzt",
-       reihe == ["d", "c", "b", "a", "g", "f", "e"], reihe)
+reihe = [s.nachname for s in sorted(leute, key=lambda s: app._spalten_key(s, "deadline"))]
+pruefe("C1 streng nach Datum (die frueheste zuerst, auch Vergangenes), dann Hinweis, ohne Frist zuletzt",
+       reihe == ["g", "b", "d", "c", "a", "f", "e"], reihe)
+gleich = [D.Student(vorname="X", nachname=n) for n in ("zz", "aa")]
+app.az = AZ({"zz": heute, "aa": heute})
+pruefe("C1b gleicher Tag: nach Namen",
+       [s.nachname for s in sorted(gleich, key=lambda s: app._spalten_key(s, "deadline"))] == ["aa", "zz"])
 pruefe("C2 das ist der Standard beim Start", "self._liste_sortierung = self.STANDARD_SORTIERUNG" in quelle
-       and A.App.STANDARD_SORTIERUNG == "aktuell")
+       and A.App.STANDARD_SORTIERUNG == "deadline")
 app._liste_aktualisieren = lambda: None
-app._liste_sortierung, app._liste_umgekehrt = "aktuell", False
-for spalte in ("deadline", "deadline", "deadline"):
-    app._liste_sortieren(spalte)
-pruefe("C3 der dritte Klick auf einen Spaltenkopf fuehrt zurueck zum Standard",
-       app._liste_sortierung == "aktuell" and not app._liste_umgekehrt, app._liste_sortierung)
+app._liste_sortierung, app._liste_umgekehrt = A.App.STANDARD_SORTIERUNG, False
+app._liste_sortieren("deadline")
+umgekehrt = app._liste_umgekehrt
+app._liste_sortieren("deadline")
+pruefe("C3 Klick auf 'Deadline': umgekehrt, nochmal: zurueck zum Standard",
+       umgekehrt and app._liste_sortierung == "deadline" and not app._liste_umgekehrt, app._liste_sortierung)
+app._liste_sortieren("jahrgang"), app._liste_sortieren("jahrgang"), app._liste_sortieren("jahrgang")
+pruefe("C3b der dritte Klick auf eine andere Spalte fuehrt ebenfalls zurueck",
+       app._liste_sortierung == "deadline" and not app._liste_umgekehrt, app._liste_sortierung)
 
 # ===========================================================================
 # D) Ins Bild setzen (Rechnung, ohne Bildschirm)

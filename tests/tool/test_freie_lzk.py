@@ -169,6 +169,7 @@ def lauf(richtung, bausteine, lzk):
     merk = {"ungespeichert": 0, "bericht": None}
     app_._markiere_ungespeichert = lambda: merk.__setitem__("ungespeichert", merk["ungespeichert"] + 1)
     app_._detail_anzeigen = lambda: None
+    app_._liste_aktualisieren = lambda: None
     app_._bericht = lambda t, x: merk.__setitem__("bericht", x)
     app_.wait_window = lambda d: None
 
@@ -194,6 +195,8 @@ client, merk, _ = lauf("server_zu_liste", [b1, b2, b3], [
 pruefe("R1 vom Server: leerer Platz bekommt Datum und Ergebnis",
        b1.lzk_datum_1 == date(2026, 10, 1) and b1.lzk_ergebnis_1 == "3", b1)
 pruefe("R1b die freie Note bleibt unberuehrt", b1.lzk_note_1 == "Teil 2 ueben", b1)
+pruefe("R1c der Baustein war 'Ausstehend' und ist jetzt 'In Bearbeitung' (mit dem Halbjahr der LZK)",
+       b1.status == "In Bearbeitung" and b1.halbjahr == D.halbjahr_fuer_datum(date(2026, 10, 1)), b1)
 # Seit 2026-10-04: eine abgeschlossene LZK aus einem frueheren Halbjahr wird NICHT mehr
 # ueberschrieben (vorher bekam sie den neuen Termin, und ihr Ergebnis stand dann scheinbar
 # bei der neuen LZK). Die neue LZK steht offen da und wird beim Synchronisieren zugeordnet.
@@ -203,6 +206,7 @@ pruefe("R2b die neue LZK wird als offen genannt (beim Synchronisieren zuordnen)"
        any("Prozentrechnung" in o and "Synchronisieren" in o for o in merk.get("offen") or []), merk.get("offen"))
 pruefe("R2c online unbewertet loescht hier kein Ergebnis", b2.lzk_ergebnis_2 == "1", b2)
 pruefe("R3 online nicht bewertet laesst das Ergebnis hier stehen", b3.lzk_ergebnis_1 == "2", b3)
+pruefe("R3b kam nichts herein, bleibt auch der Status", b3.status == "Ausstehend", b3)
 pruefe("R4 nichts geht dabei zum Server", client.aufrufe == [], client.aufrufe)
 pruefe("R4b die Datei gilt als ungespeichert", merk["ungespeichert"] == 1, merk)
 pruefe("R4c jeder zugeordnete Platz merkt sich den Stand online (der alte bleibt unverknuepft)",

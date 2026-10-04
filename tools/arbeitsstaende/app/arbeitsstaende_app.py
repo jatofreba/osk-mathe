@@ -27,6 +27,7 @@ from arbeitsstaende_data import (
     hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
     verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_optionen, lzk_ziel_nach_name, lzk_ziel_text,
     lzk_zuordnen, lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
+    lzk_import_status,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -1618,15 +1619,15 @@ class App(tk.Tk):
         self.suche_var.trace_add("write", lambda *a: self._liste_aktualisieren())
         ttk.Entry(suchzeile, textvariable=self.suche_var).pack(side="left", fill="x", expand=True, padx=6)
 
-        ttk.Label(links, text="Sortiert nach der nächsten Frist (was heute ansteht zuerst). "
+        ttk.Label(links, text="Sortiert nach Deadline, die früheste zuerst. "
                               "Spaltenkopf anklicken sortiert danach.",
                   font=("", 10, "italic"), wraplength=520, justify="left").pack(fill="x", pady=(0, 4))
 
         self.liste = ttk.Treeview(links, columns=("jahrgang", "deadline", "anlass", "baustein", "kursung", "fb"),
                                    show="tree headings", height=20)
         # Klick auf einen Spaltenkopf sortiert die Liste danach, erneuter Klick
-        # kehrt die Richtung um, ein dritter stellt den Standard wieder her: die
-        # naechste Frist zuerst (Nutzerwunsch 2026-10-04, vorher Jahrgang + Name).
+        # kehrt die Richtung um, ein dritter stellt den Standard wieder her: nach
+        # Deadline, die frueheste zuerst (Nutzerwunsch 2026-10-04, vorher Jahrgang + Name).
         self._liste_sortierung = self.STANDARD_SORTIERUNG
         # Beim Tippen im Kopfbereich aendert sich potenziell die Frist-Spalte der Liste.
         # Sie bei JEDEM Zeichen neu zu bauen liess sie flackern, deshalb entprellt
@@ -2099,8 +2100,9 @@ class App(tk.Tk):
             return "🟡"
         return "🔴"
 
-    # Standard beim Start: wessen Frist am naechsten an heute liegt, steht oben.
-    STANDARD_SORTIERUNG = "aktuell"
+    # Standard beim Start: nach Deadline, die frueheste zuerst - streng nach Datum,
+    # 01.10. vor 02.10. auch am 04.10. (Nutzerwunsch 2026-10-04).
+    STANDARD_SORTIERUNG = "deadline"
 
     def _liste_sortieren(self, spalte):
         """Spaltenkopf angeklickt: danach sortieren, bei erneutem Klick umkehren.
@@ -2117,16 +2119,6 @@ class App(tk.Tk):
         """Sortierschluessel je Spalte. Leere Werte kommen ans Ende, damit eine
         fehlende Angabe die Reihenfolge nicht zufaellig durcheinanderbringt."""
         heute = date.today()
-        if spalte == "aktuell":
-            # Nach Naehe zu heute: was heute oder in den naechsten/letzten Tagen faellig
-            # ist, steht oben (bei gleichem Abstand das Kommende vor dem Ueberfaelligen);
-            # ein blosser Hinweis ("Frist vereinbaren!") danach, ohne Frist ans Ende.
-            deadline, _ = self.az.deadline_info(student, heute)
-            name = (student.nachname.lower(), student.vorname.lower())
-            if isinstance(deadline, date):
-                abstand = (deadline - heute).days
-                return (0, abs(abstand), abstand < 0) + name
-            return (1 if deadline else 2, 0, False) + name
         if spalte == "#0":
             return (0, student.nachname.lower(), student.vorname.lower())
         if spalte == "jahrgang":
@@ -2140,12 +2132,15 @@ class App(tk.Tk):
             baustein, _ = self.az.berechne_status(student)
             return (0, str(baustein).lower()) if baustein else (1, "")
         if spalte == "deadline":
+            # Streng nach Datum, die frueheste zuerst; dahinter ein blosser Hinweis
+            # ("Frist vereinbaren!"), ganz unten ohne Frist. Bei gleichem Tag nach Namen.
             deadline, _ = self.az.deadline_info(student, heute)
+            name = (student.nachname.lower(), student.vorname.lower())
             if isinstance(deadline, date):
-                return (0, deadline)
+                return (0, deadline) + name
             if deadline:
-                return (1, heute)      # Hinweistext direkt hinter den echten Terminen
-            return (2, date.min)
+                return (1, heute) + name      # Hinweistext direkt hinter den echten Terminen
+            return (2, date.min) + name
         if spalte == "anlass":
             _, anlass = self.az.deadline_info(student, heute)
             return (0, anlass.lower()) if anlass else (1, "")
@@ -2759,6 +2754,8 @@ class App(tk.Tk):
                     setattr(b, f"lzk_ergebnis_{nr}", x["online_erg"])
                     teile.append(f"Ergebnis {text_erg(x['hier_erg'])} → {text_erg(x['online_erg'])}")
                 if teile:
+                    if lzk_import_status(b, x["online_datum"] or x["hier_datum"]):
+                        teile.append("Status jetzt „In Bearbeitung“")
                     geaendert.append(f"{zeile(x)}: " + ", ".join(teile))
                 else:
                     leer.append(f"{zeile(x)}: online leer – hier bleibt alles")
@@ -2768,6 +2765,8 @@ class App(tk.Tk):
                 self._markiere_ungespeichert()
             if geaendert:
                 self._detail_anzeigen()
+                # Status und Termin aendern die Fristen-Spalte der Liste.
+                self._liste_aktualisieren()
             text = f"{len(geaendert)} LZK in die Bausteine übernommen."
             if geaendert:
                 text += "\n\n" + "\n".join(geaendert) + "\n\nNoch speichern nicht vergessen."

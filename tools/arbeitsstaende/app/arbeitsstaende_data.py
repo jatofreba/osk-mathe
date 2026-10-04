@@ -689,6 +689,21 @@ def lzk_ziel_nach_name(student, z: dict, name: str):
     return _lzk_vorschlag(hand, z["nummer"], z["datum"], z["halbjahr"], [name], gemerkt=name)
 
 
+def lzk_import_status(b, datum=None) -> bool:
+    """Kommt eine LZK in einen Baustein, der noch "Ausstehend" ist, wird er "In
+    Bearbeitung" (Nutzerwunsch 2026-10-04) - erst dann zaehlt sein Termin auch in der
+    Fristen-Spalte (berechne_status sieht nur Bausteine "In Bearbeitung"). Hat er noch
+    kein Halbjahr, bekommt er das der LZK. App-Zeilen fuehrt der Abruf selbst.
+    True, wenn sich der Status geaendert hat."""
+    if (b.status or "").strip() != "Ausstehend" or _ist_app_zeile(b):
+        return False
+    b.status = "In Bearbeitung"
+    d = _to_date(datum)
+    if d and not (b.halbjahr or "").strip():
+        b.halbjahr = halbjahr_fuer_datum(d)
+    return True
+
+
 def lzk_zuordnen(student, z: dict, ziel, ziele=None):
     """Traegt die LZK in den gewaehlten Baustein ein und verknuepft den Platz.
 
@@ -742,10 +757,12 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None):
                 setattr(app, f"lzk_{f}_{nummer}", "")
             setattr(app, f"lzk_datum_{nummer}", None)
     setattr(b, f"lzk_online_{nummer}", lzk_verknuepfung(e))
+    status_neu = lzk_import_status(b, datum)
     if ziele is not None:
         ziele[z["schluessel"]] = {"name": b.name, "titel": z["titel"]}
     return (f"„{z['titel']}“ {z['typ']}-LZK {_fmt_kurz(datum)} → {b.name} ({b.halbjahr or 'ohne HJ'}), "
-            f"LZK {nummer}" + (" – neuer Baustein" if ziel[0] == "neu" else "")), b
+            f"LZK {nummer}" + (" – neuer Baustein" if ziel[0] == "neu" else "")
+            + (" – jetzt „In Bearbeitung“" if status_neu else "")), b
 
 
 def lzk_falsches_halbjahr(student) -> list:
@@ -789,6 +806,7 @@ def lzk_umziehen(student, t: dict) -> str:
         setattr(ziel, f"lzk_ergebnis_{nummer}", erg)
         setattr(alt, f"lzk_ergebnis_{nummer}", "")
     setattr(ziel, f"lzk_online_{nummer}", link)
+    lzk_import_status(ziel, d)
     setattr(alt, f"lzk_datum_{nummer}", None)
     setattr(alt, f"lzk_online_{nummer}", None)
     rest = any((getattr(alt, f"lzk_{f}_{nummer}") or "").strip() for f in ("note", "bem", "ergebnis"))
@@ -1016,6 +1034,8 @@ def lt_freie_lzk_uebernehmen(student, konto: dict):
         if danach != link:
             setattr(b, f"lzk_online_{nummer}", danach)
         if teile:
+            if lzk_import_status(b, on_d or lok_d):
+                teile.append("Status jetzt „In Bearbeitung“")
             uebernommen.append(f"{wo}: " + ", ".join(teile))
     return uebernommen, gemeldet
 

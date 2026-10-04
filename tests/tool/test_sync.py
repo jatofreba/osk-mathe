@@ -317,6 +317,35 @@ pruefe("H8 zweiter Lauf: nichts mehr zuzuordnen, nichts gesendet",
        [p["art"] for p in gesehen["posten"]] == [] and aufrufe == [], ([p["art"] for p in gesehen["posten"]], aufrufe))
 
 # ===========================================================================
+# J) Kommt eine LZK in einen "Ausstehend"-Baustein, wird er "In Bearbeitung"
+# ===========================================================================
+aus = D.Baustein(name="Kreise")                                   # Standard: Ausstehend, ohne Halbjahr
+st = person(aus)
+z = D.lzk_zuordnungen(st, {"lzk": [lt_lzk(80, "kreise")]}, TITEL, {})[0]
+zeile, _ = D.lzk_zuordnen(st, z, z["vorschlag"], {})
+pruefe("J1 zugeordnet: 'In Bearbeitung', Halbjahr der LZK, und der Bericht sagt es",
+       aus.status == "In Bearbeitung" and aus.halbjahr == HJ14 and "In Bearbeitung" in zeile, (aus, zeile))
+mit_hj = D.Baustein(name="Kreise", halbjahr=HJ_ALT)
+st = person(mit_hj)
+z = D.lzk_zuordnungen(st, {"lzk": [lt_lzk(81, "kreise")]}, TITEL, {})[0]
+D.lzk_zuordnen(st, z, ("baustein", mit_hj), {})
+pruefe("J2 ein vorhandenes Halbjahr bleibt", mit_hj.status == "In Bearbeitung" and mit_hj.halbjahr == HJ_ALT, mit_hj)
+fertig = D.Baustein(name="Kreise", status="Abgeschlossen")
+st = person(fertig)
+z = D.lzk_zuordnungen(st, {"lzk": [lt_lzk(82, "kreise")]}, TITEL, {})[0]
+zeile, _ = D.lzk_zuordnen(st, z, ("baustein", fertig), {})
+pruefe("J3 andere Status bleiben, wie sie sind", fertig.status == "Abgeschlossen" and "In Bearbeitung" not in zeile, fertig)
+pruefe("J4 App-Zeilen fuehrt der Abruf selbst",
+       not D.lzk_import_status(D.Baustein(name="Baustein Kreise", bemerkung=D.LT_MARKER + " x")))
+ziel_aus = D.Baustein(name="Satz des Pythagoras", halbjahr=HJ14)
+falsch = D.Baustein(name="Satz des Pythagoras", halbjahr=HJ_ALT, lzk_datum_1=IN14, lzk_note_1="best",
+                    lzk_online_1={"id": 83, "datum": IN14.isoformat(), "ergebnis": ""})
+st = person(falsch, ziel_aus)
+D.lzk_umziehen(st, D.lzk_falsches_halbjahr(st)[0])
+pruefe("J5 Umziehen in einen vorhandenen 'Ausstehend'-Baustein: 'In Bearbeitung'",
+       ziel_aus.lzk_online_1 and ziel_aus.lzk_online_1["id"] == 83 and ziel_aus.status == "In Bearbeitung", ziel_aus)
+
+# ===========================================================================
 # I) Die echten Fenster (nur mit Bildschirm - in der CI ohne Display uebersprungen)
 # ===========================================================================
 try:

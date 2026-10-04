@@ -52,12 +52,15 @@ Danach reicht ein Doppelklick auf diese Datei.
 - **Fenster**: beim Start so groß, wie der Bildschirm unter Menüleiste und
   Dock hergibt (ganz im Bild). Die Liste links nimmt rund 40 % der Breite ein,
   die Detailansicht rechts den Rest; die Trennlinie lässt sich ziehen.
-- Links: Liste aller Schüler:innen, **sortiert nach der nächsten Frist**: wer
-  heute oder in den nächsten bzw. letzten Tagen eine LZK oder Deadline hat,
-  steht oben (bei gleichem Abstand das Kommende vor dem Überfälligen), danach
-  „Frist vereinbaren!“, ganz unten alle ohne Frist. Ein Klick auf einen
-  Spaltenkopf sortiert danach (zweiter Klick: umgekehrt, dritter Klick: zurück
-  zur Fristen-Sortierung) – nach Jahrgangsstufe z.B. über **Jgst.**.
+- Links: Liste aller Schüler:innen, **sortiert nach Deadline, die früheste
+  zuerst** – streng nach Datum (01.10. vor 02.10., auch wenn heute schon der
+  04.10. ist), danach „Frist vereinbaren!“, ganz unten alle ohne Frist. Ein
+  Klick auf einen Spaltenkopf sortiert danach (zweiter Klick: umgekehrt, dritter
+  Klick: zurück zur Deadline-Sortierung) – nach Jahrgangsstufe z.B. über **Jgst.**.
+  Eine LZK zählt dort nur in Bausteinen „In Bearbeitung“; kommt eine LZK aus
+  OSKlar in einen Baustein, der noch „Ausstehend“ ist, wechselt er deshalb von
+  selbst auf „In Bearbeitung“ (und bekommt, falls er noch keins hat, das
+  Halbjahr der LZK).
   Überfällige oder offene Deadlines sind unabhängig von der Sortierung rot bzw.
   gelb markiert (siehe Deadline-Spalte). Suchfeld filtert zusätzlich nach
   Namen. **+ Hinzufügen** / **− Entfernen** für die ganze Person.
