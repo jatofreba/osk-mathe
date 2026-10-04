@@ -49,14 +49,18 @@ Danach reicht ein Doppelklick auf diese Datei.
   **Datei → Aus Excel importieren…** (siehe unten).
 - **Datei → Öffnen…**: eine andere Arbeitsdatei (`.json`) laden -- oder eine
   Excel-Mappe, wenn du doch einmal eine ältere Datei brauchst.
-- Links: Liste aller Schüler:innen, **sortiert nach Jahrgangsstufe und
-  innerhalb der Stufe alphabetisch**. Fehlt bei jemandem die
-  Jahrgangsstufe, rutscht die Person ans Ende der Liste -- einfach im
-  Kopfbereich rechts nachtragen, dann steht sie beim nächsten Aktualisieren
-  richtig einsortiert. Überfällige oder offene Deadlines sind unabhängig
-  von der Sortierung weiterhin rot bzw. gelb markiert (siehe Deadline-
-  Spalte). Suchfeld filtert zusätzlich nach Namen. **+ Hinzufügen** /
-  **− Entfernen** für die ganze Person.
+- **Fenster**: beim Start so groß, wie der Bildschirm unter Menüleiste und
+  Dock hergibt (ganz im Bild). Die Liste links nimmt rund 40 % der Breite ein,
+  die Detailansicht rechts den Rest; die Trennlinie lässt sich ziehen.
+- Links: Liste aller Schüler:innen, **sortiert nach der nächsten Frist**: wer
+  heute oder in den nächsten bzw. letzten Tagen eine LZK oder Deadline hat,
+  steht oben (bei gleichem Abstand das Kommende vor dem Überfälligen), danach
+  „Frist vereinbaren!“, ganz unten alle ohne Frist. Ein Klick auf einen
+  Spaltenkopf sortiert danach (zweiter Klick: umgekehrt, dritter Klick: zurück
+  zur Fristen-Sortierung) – nach Jahrgangsstufe z.B. über **Jgst.**.
+  Überfällige oder offene Deadlines sind unabhängig von der Sortierung rot bzw.
+  gelb markiert (siehe Deadline-Spalte). Suchfeld filtert zusätzlich nach
+  Namen. **+ Hinzufügen** / **− Entfernen** für die ganze Person.
 - Die Spalte **FB zuletzt** hat einen eigenen Farbcode (unabhängig von der
   Zeilenfarbe für Deadlines): 🟢 vor bis zu 7 Tagen da gewesen, 🟡 8-14
   Tage her, 🔴 länger her oder noch nie. Die zwei Schwellenwerte stehen als
@@ -81,6 +85,11 @@ Danach reicht ein Doppelklick auf diese Datei.
   Datum; kommt die Frist aus einer LZK, steht dort "LZK". Angezeigt wird
   immer der nächstliegende der beiden Termine, und die Spalte **Anlass**
   lässt sich wie jede andere über ihren Kopf sortieren.
+- **Baustein-Formular**: Baustein, Status, Halbjahr, Bemerkung, dann LZK 1 und
+  LZK 2. Die Knöpfe **Übernehmen**/**Abbrechen** stehen fest unten und sind immer
+  zu sehen; reicht der Bildschirm nicht, scrollt das Formular darüber. Das frühere
+  Feld **Bausteinarbeit** gibt es nicht mehr (seit 2026-10-04): was dort stand,
+  steht verlustfrei als eigene Zeile „Bausteinarbeit: …“ am Ende der Bemerkung.
 - **Bemerkung zur LZK 1 / 2** (im Baustein-Formular): kurze Notiz zur
   jeweiligen Leistungszielkontrolle ("nur Teil 1", "Nachschreibtermin").
   Sie erscheint in der Baustein-Tabelle hinter dem jeweiligen Datum.

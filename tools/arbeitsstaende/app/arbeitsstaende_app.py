@@ -27,7 +27,7 @@ from arbeitsstaende_data import (
     hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
     verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_optionen, lzk_ziel_nach_name, lzk_ziel_text,
     lzk_zuordnen, lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
-    STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
+    STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
 # geschrieben werden LZK (Termine, Ergebnisse), Kursung und Kontonamen -- und
@@ -91,6 +91,32 @@ def talk_bewertung_text(t) -> str:
     return " ".join(teile)
 
 
+# Was Menueleiste + Titelzeile oben und Dock/Taskleiste unten an Hoehe brauchen.
+# Auf dem Mac am knappsten; lieber etwas zu grosszuegig als ein Knopf ausserhalb.
+FENSTER_RAND_OBEN = 60
+FENSTER_RAND_UNTEN = 90
+# Anteil der Personenliste an der Fensterbreite (Nutzerwunsch: ~1/3 bis 1/2).
+LISTE_ANTEIL = 0.4
+
+
+def fenster_ins_bild(fenster, eltern=None):
+    """Einen Dialog ueber dem Hauptfenster zentrieren - aber nie ueber den
+    Bildschirmrand hinaus (das Baustein-Formular ragte auf dem Mac beim Oeffnen
+    unten aus dem Bild, "Übernehmen"/"Abbrechen" waren nicht zu erreichen)."""
+    fenster.update_idletasks()
+    w, h = fenster.winfo_reqwidth(), fenster.winfo_reqheight()
+    sw, sh = fenster.winfo_screenwidth(), fenster.winfo_screenheight()
+    if eltern is not None and eltern.winfo_ismapped():
+        x = eltern.winfo_rootx() + (eltern.winfo_width() - w) // 2
+        y = eltern.winfo_rooty() + (eltern.winfo_height() - h) // 3
+    else:
+        x, y = (sw - w) // 2, (sh - h) // 3
+    x = max(0, min(x, sw - w))
+    y = max(FENSTER_RAND_OBEN, min(y, sh - FENSTER_RAND_UNTEN - h))
+    fenster.geometry(f"+{x}+{y}")
+    return x, y
+
+
 def parse_datum(text):
     text = (text or "").strip()
     if not text:
@@ -148,7 +174,6 @@ class BausteinDialog(tk.Toplevel):
     def __init__(self, parent, baustein: Baustein = None, vorlage_namen=None):
         super().__init__(parent)
         self.title("Baustein bearbeiten" if baustein else "Baustein hinzufügen")
-        self.resizable(False, False)
         self.result = None
         self.transient(parent)
         self.grab_set()
@@ -158,10 +183,22 @@ class BausteinDialog(tk.Toplevel):
         # LZK online. Ginge sie beim Bearbeiten verloren, erkennte das Senden
         # nicht mehr, auf welcher Seite ein Termin geaendert wurde.
         self._verknuepfung = (b.lzk_online_1, b.lzk_online_2)
+        # "Bausteinarbeit" steht nicht mehr im Formular (Nutzerwunsch 2026-10-04): ihr
+        # Text haengt an der Bemerkung (wie beim Laden, bausteinarbeit_in_bemerkung).
+        # App-Zeilen behalten das Feld - ihre Bemerkung schreibt jeder Abruf neu.
+        app_zeile = (b.bemerkung or "").lstrip().startswith(LT_MARKER)
+        self._bausteinarbeit = b.bausteinarbeit if app_zeile else ""
+        bemerkung = b.bemerkung or ""
+        if not app_zeile and (b.bausteinarbeit or "").strip():
+            bemerkung = ((bemerkung.rstrip() + "\n") if bemerkung.strip() else "") \
+                + f"Bausteinarbeit: {b.bausteinarbeit.strip()}"
         felder = [
             ("Baustein", "name", "entry_or_combo", vorlage_namen),
             ("Status", "status", "combo", STATUS_OPTIONEN),
-            ("Bausteinarbeit", "bausteinarbeit", "entry", None),
+            # Gleich unter dem Status: das Halbjahr folgt ihm (hj_nach_statuswechsel).
+            ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
+            # Die Bemerkung steht dort, wo frueher "Bausteinarbeit" stand.
+            ("Bemerkung", "bemerkung", "text", 10),
             ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
             ("LZK-Note 1", "lzk_note_1", "entry", None),
             ("LZK-Ergebnis 1", "lzk_ergebnis_1", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
@@ -173,15 +210,32 @@ class BausteinDialog(tk.Toplevel):
             ("LZK-Note 2", "lzk_note_2", "entry", None),
             ("LZK-Ergebnis 2", "lzk_ergebnis_2", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
             ("Bemerkung zur LZK 2", "lzk_bem_2", "text", 3),
-            ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
-            ("Bemerkung", "bemerkung", "text", 10),
         ]
+
+        # Die Knoepfe stehen fest unten und sind immer zu sehen; das Formular darueber
+        # scrollt, wenn der Bildschirm nicht reicht (vorher ragte es auf dem Mac unten
+        # aus dem Bild, und "Übernehmen"/"Abbrechen" waren nicht zu erreichen).
+        leiste = ttk.Frame(self, padding=(0, 6, 0, 10))
+        leiste.pack(side="bottom", fill="x")
+        btns = ttk.Frame(leiste)
+        btns.pack()
+        ttk.Button(btns, text="Übernehmen", command=self._uebernehmen).pack(side="left", padx=4)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="left", padx=4)
+        self._leiste = leiste
+        koerper = ttk.Frame(self)
+        koerper.pack(side="top", fill="both", expand=True)
+        self._leinwand = tk.Canvas(koerper, highlightthickness=0, borderwidth=0)
+        self._rollbalken = ttk.Scrollbar(koerper, orient="vertical", command=self._leinwand.yview)
+        self._leinwand.configure(yscrollcommand=self._rollbalken.set)
+        form = ttk.Frame(self._leinwand, padding=(4, 8, 8, 0))
+        self._form = form
+        self._leinwand.create_window((0, 0), window=form, anchor="nw")
 
         self.vars = {}
         row = 0
         for label, feld, art, optionen in felder:
-            ttk.Label(self, text=label).grid(row=row, column=0, sticky="ne", padx=8, pady=4)
-            wert = getattr(b, feld)
+            ttk.Label(form, text=label).grid(row=row, column=0, sticky="ne", padx=8, pady=4)
+            wert = bemerkung if feld == "bemerkung" else getattr(b, feld)
             if feld in ("lzk_datum_1", "lzk_datum_2"):
                 wert = fmt_datum(wert)
             if art == "ergebnis":
@@ -189,14 +243,14 @@ class BausteinDialog(tk.Toplevel):
 
             if art in ("combo", "ergebnis"):
                 var = tk.StringVar(value=wert)
-                w = ttk.Combobox(self, textvariable=var, values=optionen, width=28, state="readonly")
+                w = ttk.Combobox(form, textvariable=var, values=optionen, width=28, state="readonly")
                 w.grid(row=row, column=1, sticky="w", padx=8, pady=4)
             elif art == "entry_or_combo":
                 var = tk.StringVar(value=wert)
-                w = ttk.Combobox(self, textvariable=var, values=optionen or [], width=28)
+                w = ttk.Combobox(form, textvariable=var, values=optionen or [], width=28)
                 w.grid(row=row, column=1, sticky="w", padx=8, pady=4)
             elif art == "text":
-                text_rahmen = ttk.Frame(self)
+                text_rahmen = ttk.Frame(form)
                 text_rahmen.grid(row=row, column=1, sticky="w", padx=8, pady=4)
                 w = tk.Text(text_rahmen, width=45, height=optionen or 10, wrap="word")
                 w.pack(side="left", fill="both", expand=True)
@@ -211,7 +265,7 @@ class BausteinDialog(tk.Toplevel):
                 var = w  # Text-Widget selbst als "var" merken
             else:
                 var = tk.StringVar(value=wert)
-                w = ttk.Entry(self, textvariable=var, width=30)
+                w = ttk.Entry(form, textvariable=var, width=30)
                 w.grid(row=row, column=1, sticky="w", padx=8, pady=4)
             self.vars[feld] = var
             row += 1
@@ -224,13 +278,37 @@ class BausteinDialog(tk.Toplevel):
         self._hj_auto = None
         self.vars["status"].trace_add("write", self._status_geaendert)
 
-        btns = ttk.Frame(self)
-        btns.grid(row=row, column=0, columnspan=2, pady=10)
-        ttk.Button(btns, text="Übernehmen", command=self._uebernehmen).pack(side="left", padx=4)
-        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="left", padx=4)
-
         self.bind("<Return>", lambda e: self._uebernehmen())
         self.bind("<Escape>", lambda e: self.destroy())
+        self._groesse_anpassen(parent)
+
+    def _groesse_anpassen(self, parent):
+        """So hoch wie das Formular - hoechstens so hoch, wie der Bildschirm unter
+        Menueleiste und Dock hergibt; was nicht passt, scrollt."""
+        self.update_idletasks()
+        breite, hoehe = self._form.winfo_reqwidth(), self._form.winfo_reqheight()
+        frei = (self.winfo_screenheight() - FENSTER_RAND_OBEN - FENSTER_RAND_UNTEN
+                - self._leiste.winfo_reqheight())
+        sicht = max(160, min(hoehe, frei))
+        self._leinwand.configure(width=breite, height=sicht, scrollregion=(0, 0, breite, hoehe))
+        if hoehe > sicht:
+            self._rollbalken.pack(side="right", fill="y")
+            for ereignis in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                self.bind(ereignis, self._rad)
+        self._leinwand.pack(side="left", fill="both", expand=True)
+        fenster_ins_bild(self, parent)
+
+    def _rad(self, event):
+        """Mausrad scrollt das Formular - ausser ueber einem Textfeld (das scrollt selbst)."""
+        if isinstance(event.widget, tk.Text):
+            return
+        if getattr(event, "num", None) == 4:
+            schritt = -1
+        elif getattr(event, "num", None) == 5:
+            schritt = 1
+        else:
+            schritt = -1 if event.delta > 0 else 1
+        self._leinwand.yview_scroll(schritt, "units")
 
     @staticmethod
     def _zeilenumbruch(event):
@@ -267,6 +345,9 @@ class BausteinDialog(tk.Toplevel):
             if not werte["status"]:
                 werte["status"] = "Ausstehend"
             werte["lzk_online_1"], werte["lzk_online_2"] = self._verknuepfung
+            # Steht nicht im Formular: bei eigenen Bausteinen in der Bemerkung aufgegangen,
+            # bei App-Zeilen unveraendert (siehe __init__).
+            werte["bausteinarbeit"] = self.__dict__.get("_bausteinarbeit", "")
 
             self.result = Baustein(**werte)
             self.destroy()
@@ -1375,7 +1456,12 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_TITEL)
         self._fenstersymbol_setzen()
-        self.geometry("1450x700")
+        # Beim Start ganz im Bild (vorher fest 1450x700 - auf dem Mac ragte das
+        # Fenster hinaus): so gross, wie der Bildschirm unter Menueleiste und Dock hergibt.
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        breite = max(950, min(1600, sw - 20))
+        hoehe = max(480, sh - FENSTER_RAND_OBEN - FENSTER_RAND_UNTEN)
+        self.geometry(f"{breite}x{hoehe}+{max(0, (sw - breite) // 2)}+{FENSTER_RAND_OBEN - 30}")
         self.minsize(950, 480)
 
         self.az = Arbeitsstaende()
@@ -1388,6 +1474,17 @@ class App(tk.Tk):
         self._autosave_job = self.after(AUTOSAVE_INTERVALL_MS, self._autosave_tick)
 
     # ------------------------------------------------------------------
+    def _teilung_setzen(self, versuch: int = 0):
+        breite = self._paned.winfo_width()
+        if breite < 300:
+            if versuch < 20:
+                self.after(100, lambda: self._teilung_setzen(versuch + 1))
+            return
+        try:
+            self._paned.sashpos(0, int(breite * LISTE_ANTEIL))
+        except tk.TclError:
+            pass
+
     def _fenstersymbol_setzen(self):
         """OSKlar-Bildmarke als Fenster- und Taskleistensymbol.
 
@@ -1505,6 +1602,10 @@ class App(tk.Tk):
     def _layout_aufbauen(self):
         paned = ttk.PanedWindow(self, orient="horizontal")
         paned.pack(fill="both", expand=True)
+        self._paned = paned
+        # Liste ~40 %, Detailansicht der Rest - gesetzt, sobald das Fenster seine
+        # Breite kennt (vorher bestimmten die Spaltenbreiten der Liste die Teilung).
+        self.after(150, self._teilung_setzen)
 
         # ---------------- linke Seite: Schülerliste ----------------
         links = ttk.Frame(paned, padding=8)
@@ -1517,14 +1618,16 @@ class App(tk.Tk):
         self.suche_var.trace_add("write", lambda *a: self._liste_aktualisieren())
         ttk.Entry(suchzeile, textvariable=self.suche_var).pack(side="left", fill="x", expand=True, padx=6)
 
-        ttk.Label(links, text="Sortiert nach Jahrgangsstufe, innerhalb der Stufe alphabetisch.",
-                  font=("", 10, "italic")).pack(fill="x", pady=(0, 4))
+        ttk.Label(links, text="Sortiert nach der nächsten Frist (was heute ansteht zuerst). "
+                              "Spaltenkopf anklicken sortiert danach.",
+                  font=("", 10, "italic"), wraplength=520, justify="left").pack(fill="x", pady=(0, 4))
 
         self.liste = ttk.Treeview(links, columns=("jahrgang", "deadline", "anlass", "baustein", "kursung", "fb"),
                                    show="tree headings", height=20)
         # Klick auf einen Spaltenkopf sortiert die Liste danach, erneuter Klick
-        # kehrt die Richtung um. Standard bleibt Jahrgangsstufe + Nachname.
-        self._liste_sortierung = None       # None = Standardsortierung
+        # kehrt die Richtung um, ein dritter stellt den Standard wieder her: die
+        # naechste Frist zuerst (Nutzerwunsch 2026-10-04, vorher Jahrgang + Name).
+        self._liste_sortierung = self.STANDARD_SORTIERUNG
         # Beim Tippen im Kopfbereich aendert sich potenziell die Frist-Spalte der Liste.
         # Sie bei JEDEM Zeichen neu zu bauen liess sie flackern, deshalb entprellt
         # (_liste_timer). Dass der Neuaufbau nicht die gerade getippten Felder
@@ -1623,17 +1726,17 @@ class App(tk.Tk):
         baustein_rahmen = ttk.LabelFrame(rechts, text="Bausteine", padding=8)
         baustein_rahmen.pack(fill="both", expand=True, pady=(8, 0))
 
-        spalten = ("status", "bausteinarbeit", "lzk1", "note1", "lzk2", "note2", "halbjahr", "bemerkung")
+        spalten = ("status", "lzk1", "note1", "lzk2", "note2", "halbjahr", "bemerkung")
         self.tabelle = ttk.Treeview(baustein_rahmen, columns=spalten, show="tree headings", height=9)
         self.tabelle.heading("#0", text="Baustein",
                              command=lambda: self._bausteine_sortieren("#0"))
         self._bausteine_sortierung = None      # None = Reihenfolge wie in der Datei
         self._bausteine_umgekehrt = False
         for key, text, width in [
-            ("status", "Status", 110), ("bausteinarbeit", "Bausteinarbeit", 140),
+            ("status", "Status", 110),
             ("lzk1", "LZK 1", 90), ("note1", "Note", 80),
             ("lzk2", "LZK 2", 90), ("note2", "Note", 80),
-            ("halbjahr", "HJ", 65), ("bemerkung", "Bemerkung", 260),
+            ("halbjahr", "HJ", 65), ("bemerkung", "Bemerkung", 320),
         ]:
             self.tabelle.heading(key, text=text,
                                  command=lambda sp=key: self._bausteine_sortieren(sp))
@@ -1996,6 +2099,9 @@ class App(tk.Tk):
             return "🟡"
         return "🔴"
 
+    # Standard beim Start: wessen Frist am naechsten an heute liegt, steht oben.
+    STANDARD_SORTIERUNG = "aktuell"
+
     def _liste_sortieren(self, spalte):
         """Spaltenkopf angeklickt: danach sortieren, bei erneutem Klick umkehren.
         Ein dritter Klick stellt die Standardsortierung wieder her."""
@@ -2004,13 +2110,23 @@ class App(tk.Tk):
         elif not self._liste_umgekehrt:
             self._liste_umgekehrt = True
         else:
-            self._liste_sortierung, self._liste_umgekehrt = None, False
+            self._liste_sortierung, self._liste_umgekehrt = self.STANDARD_SORTIERUNG, False
         self._liste_aktualisieren()
 
     def _spalten_key(self, student: Student, spalte):
         """Sortierschluessel je Spalte. Leere Werte kommen ans Ende, damit eine
         fehlende Angabe die Reihenfolge nicht zufaellig durcheinanderbringt."""
         heute = date.today()
+        if spalte == "aktuell":
+            # Nach Naehe zu heute: was heute oder in den naechsten/letzten Tagen faellig
+            # ist, steht oben (bei gleichem Abstand das Kommende vor dem Ueberfaelligen);
+            # ein blosser Hinweis ("Frist vereinbaren!") danach, ohne Frist ans Ende.
+            deadline, _ = self.az.deadline_info(student, heute)
+            name = (student.nachname.lower(), student.vorname.lower())
+            if isinstance(deadline, date):
+                abstand = (deadline - heute).days
+                return (0, abs(abstand), abstand < 0) + name
+            return (1 if deadline else 2, 0, False) + name
         if spalte == "#0":
             return (0, student.nachname.lower(), student.vorname.lower())
         if spalte == "jahrgang":
@@ -2384,7 +2500,7 @@ class App(tk.Tk):
             if b.status in STATUS_FARBEN:
                 tags.append(b.status)
             self.tabelle.insert("", "end", iid=str(i), text=b.name,
-                                 values=(b.status, b.bausteinarbeit,
+                                 values=(b.status,
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_1), b.lzk_bem_1),
                                          _note_mit_ergebnis(b.lzk_note_1, b.lzk_ergebnis_1),
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_2), b.lzk_bem_2),
@@ -2405,8 +2521,6 @@ class App(tk.Tk):
             return txt(b.name)
         if spalte == "status":
             return txt(b.status)
-        if spalte == "bausteinarbeit":
-            return txt(b.bausteinarbeit)
         if spalte == "halbjahr":
             return txt(b.halbjahr)
         if spalte == "bemerkung":

@@ -1781,6 +1781,20 @@ def baustein_als_dict(b: Baustein) -> dict:
     return _ohne_leere(daten)
 
 
+def bausteinarbeit_in_bemerkung(b) -> bool:
+    """Das Feld "Bausteinarbeit" gibt es im Formular nicht mehr (Nutzerwunsch
+    2026-10-04): sein Text haengt verlustfrei als eigene Zeile "Bausteinarbeit: ..."
+    an der Bemerkung. App-Zeilen bleiben unberuehrt - ihre Bemerkung schreibt jeder
+    Abruf neu. True, wenn etwas umgezogen ist."""
+    text = (b.bausteinarbeit or "").strip()
+    if not text or _ist_app_zeile(b):
+        return False
+    bem = (b.bemerkung or "").rstrip()
+    b.bemerkung = (bem + "\n" if bem.strip() else "") + f"Bausteinarbeit: {text}"
+    b.bausteinarbeit = ""
+    return True
+
+
 def baustein_aus_dict(d: dict) -> Baustein:
     b = Baustein(
         name=d.get("name") or "",
@@ -1800,6 +1814,7 @@ def baustein_aus_dict(d: dict) -> Baustein:
         erg = str(lzk.get("ergebnis") or "")
         setattr(b, felder[3], erg if erg in LZK_ERGEBNIS_WERTE else "")
         setattr(b, f"lzk_online_{nr}", _lzk_online_sauber(lzk.get("online")))
+    bausteinarbeit_in_bemerkung(b)
     return b
 
 
@@ -2069,6 +2084,7 @@ class Arbeitsstaende:
                 lzk_bem_1=_clean(werte[9]),
                 lzk_bem_2=_clean(werte[10]),
             )
+            bausteinarbeit_in_bemerkung(b)
             bausteine.append(b)
 
         return Student(

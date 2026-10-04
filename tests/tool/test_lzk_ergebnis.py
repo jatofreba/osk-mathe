@@ -98,6 +98,10 @@ alle = {f.name for f in dataclasses.fields(D.Baustein)}
 # Nicht im Formular, aber ausdruecklich durchgereicht: die Verknuepfung mit der LZK online.
 durchgereicht = ({"lzk_online_1", "lzk_online_2"}
                  if 'werte["lzk_online_1"], werte["lzk_online_2"] = self._verknuepfung' in dialog else set())
+# Seit 2026-10-04 nicht mehr im Formular: "Bausteinarbeit" - ihr Text geht in der Bemerkung
+# auf (eigene Bausteine) bzw. wird unveraendert durchgereicht (App-Zeilen).
+if 'werte["bausteinarbeit"] = self.__dict__.get("_bausteinarbeit", "")' in dialog:
+    durchgereicht |= {"bausteinarbeit"}
 pruefe("B1 JEDES Baustein-Feld steht im Dialog oder wird durchgereicht (sonst loescht Bearbeiten es)",
        alle <= felder_im_dialog | durchgereicht, sorted(alle - felder_im_dialog - durchgereicht))
 
