@@ -436,6 +436,7 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .aw-person{white-space:nowrap;}
 .aw-person-main{font-weight:700;color:var(--md-on-surface);}
 .aw-person-pending{font-style:italic;color:var(--md-on-surface);}
+.aw-person-fehlt{color:var(--md-error);}
 /* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
    (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
 .login-taskcards{
@@ -6640,16 +6641,15 @@ const AW_NAMEN_MAX = 6;
 function awPersonenHtml(leute) {
   if (!leute.length) return '';
   const marke = p => `<span class="aw-person${p.haupt ? ' aw-person-main' : ''}`
-    + `${p.offen ? ' aw-person-pending' : ''}" title="${escHtml(p.titel)}">`
+    + `${p.offen ? ' aw-person-pending' : ''}${p.fehlt ? ' aw-person-fehlt' : ''}" title="${escHtml(p.titel)}">`
     + `${escHtml(p.name)}${p.icon ? ' ' + p.icon : ''}</span>`;
   if (leute.length <= AW_NAMEN_MAX) return leute.map(marke).join(', ');
 
-  // Zu viele Namen: die Zahl reicht. Was offen ist, wird nach Art zusammengefasst -
-  // "📋 10" heisst "zehn wissen noch nichts davon" und ist die Zeile, die zaehlt.
-  const offen = leute.filter(p => p.offen);
+  // Zu viele Namen: die Zahl reicht. Wer ein Zeichen traegt, wird nach Art zusammengefasst -
+  // "✗ 2" heisst "zwei haben unentschuldigt gefehlt", "📋 10" "zehn wissen noch nichts davon".
   const nachArt = [];
-  ['❓', '⏳', '📋'].forEach(icon => {
-    const n = offen.filter(p => p.icon === icon).length;
+  ['✗', '⏳', '📋'].forEach(icon => {
+    const n = leute.filter(p => p.icon === icon).length;
     if (n) nachArt.push(`${icon} ${n}`);
   });
   const zahl = `<span class="aw-person aw-person-main">👥 ${leute.length}</span>`;
@@ -6672,10 +6672,19 @@ function awChip(s) {
   // steht einen Tipper entfernt in der Aktionsleiste. Deshalb: ein Symbol NUR dort, wo
   // etwas aussteht. Ein Zeichen, das an jedem Namen gleich klebt, unterscheidet nichts -
   // bei 18 Personen war die Kachel dadurch eine Wand aus 18-mal demselben Symbol.
+  //
+  // Fachbuero/Lernberatung (seit 2026-10-04): wer eingetragen ist, hat ab dem Termintag
+  // teilgenommen. Ein Zeichen bekommt dort nur, wer unentschuldigt gefehlt hat (✗) - und,
+  // solange der Termin nicht vorbei ist, wer von der Lernbegleitung eingeladen wurde und es
+  // noch nicht weiss (📋). Danach aendert das nichts mehr: die Kachel zeigt, was zaehlt.
+  const fachbuero = s.typ === 'input';
+  const vorbei = slotVorbei(s);
+  const fehlte = st => fachbuero && st === 'nicht_erledigt';
   const leute = [];
   if (s.presenterUsername) {
-    leute.push({ name: s.presenterUsername, haupt: true, offen: false, icon: '',
-                 titel: s.typ === 'input' ? 'hat gebucht' : 'hält den Talk' });
+    const fehlt = fehlte(s.presentedStatus);
+    leute.push({ name: s.presenterUsername, haupt: true, offen: false, fehlt, icon: fehlt ? '✗' : '',
+                 titel: fehlt ? 'hat gebucht - hat unentschuldigt gefehlt' : fachbuero ? 'hat gebucht' : 'hält den Talk' });
   }
   (s.coPresenters || []).forEach(c => {
     const offen = c.status !== 'angenommen';
@@ -6684,21 +6693,28 @@ function awChip(s) {
   });
   (s.invitees || []).forEach(iv => {
     if (iv.status === 'abgelehnt') return; // abgesagt - nimmt nicht teil
-    const angefragt = iv.status === 'angefragt';
-    // Offen = da wartet noch etwas: eine Anfrage auf DICH, eine Einladung auf eine
-    // Antwort, oder die eingeladene Person hat den Termin noch nicht zur Kenntnis genommen.
-    const offen = iv.status !== 'angenommen' || (invEingeteilt(iv) && !iv.gesehen);
+    if (fehlte(iv.attendedStatus)) {
+      leute.push({ name: iv.username, haupt: false, offen: false, fehlt: true, icon: '✗',
+                   titel: 'hat unentschuldigt gefehlt' });
+      return;
+    }
+    // Offen = da wartet noch etwas: eine Einladung zum Talk auf eine Antwort, oder die
+    // eingeladene Person hat den Termin noch nicht zur Kenntnis genommen (beim Fachbuero
+    // nur, solange er nicht vorbei ist).
+    const offen = iv.status !== 'angenommen' || (invEingeteilt(iv) && !iv.gesehen && !(fachbuero && vorbei));
     leute.push({
       name: iv.username, haupt: false, offen,
       // Reihenfolge: erst der Status, dann die Herkunft. 📋 meint genau einen Fall -
       // eingeladen, aber noch nicht zur Kenntnis genommen. Wer noch gar nicht geantwortet
-      // hat, wartet unabhaengig davon, wer ihn eingeladen hat.
-      icon: !offen ? '' : angefragt ? '❓' : iv.status !== 'angenommen' ? '⏳' : '📋',
-      titel: angefragt ? 'möchte mitmachen - wartet auf deine Zusage'
+      // hat, wartet unabhaengig davon, wer ihn eingeladen hat. Mitmach-Anfragen (frueher ❓)
+      // gibt es seit 2026-10-04 nicht mehr; eine alte stuende hier wie eine offene Einladung.
+      icon: !offen ? '' : iv.status !== 'angenommen' ? '⏳' : '📋',
+      titel: iv.status === 'angefragt' ? 'möchte mitmachen - wartet auf deine Zusage'
         : iv.status !== 'angenommen' ? 'eingeladen, noch keine Antwort'
+        : fachbuero && vorbei ? 'hat teilgenommen'
         : invEingeteilt(iv)
           ? (iv.gesehen ? 'von dir eingeladen, hat es gesehen' : 'von dir eingeladen - weiß es vermutlich noch nicht')
-          : 'zugesagt',
+          : fachbuero ? 'macht mit' : 'zugesagt',
     });
   });
   const personenHtml = awPersonenHtml(leute);
@@ -6751,8 +6767,8 @@ function awChip(s) {
 
 // ── Auswahl in der Wochenansicht der Lernbegleitung ───────────────────────────
 // Termin antippen -> unten stehen die Teilnehmenden mit genau den Knoepfen, die
-// gerade dran sind: offene Anfragen zusagen/ablehnen und, wenn der Termin vorbei
-// ist, die Teilnahme bestaetigen oder als Fehlzeit eintragen.
+// gerade dran sind: beim Fachbuero ein- und austragen und ab dem Termintag "hat
+// unentschuldigt gefehlt" vermerken (zu bestaetigen gibt es seit 2026-10-04 nichts mehr).
 let _awPicked = null;
 
 function awApplyPick() {
@@ -7009,12 +7025,12 @@ function renderAdminWeek() {
            <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar · noch Plätze frei = Fachbüro, mitmachen geht</span>
            <span><span class="lw-legende-feld ist-vergeben"></span> vergeben, voll (keine Anmeldung mehr) oder vorbei</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
-           <span>Name ohne Zeichen = alles erledigt</span>
-           <span>❓ wartet auf DEINE Antwort (möchte mitmachen)</span>
-           <span>⏳ wartet auf die Antwort der Schüler:in (von einer Mitschüler:in eingeladen)</span>
+           <span>Name ohne Zeichen = ist dabei – beim FaBü zählt das ab dem Termintag als teilgenommen</span>
+           <span><span class="aw-person-fehlt">✗</span> hat unentschuldigt gefehlt (FaBü)</span>
            <span>📋 von dir eingeladen – weiß es noch nicht</span>
+           <span>⏳ Talk: wartet auf die Antwort der Schüler:in (von einer Mitschüler:in eingeladen)</span>
            <span>👥 = Anzahl statt Namen, wenn es viele sind</span>
-           <span>Termin antippen, um Anfragen und Teilnahmen einzutragen.</span>
+           <span>Termin antippen zeigt alle Namen – beim FaBü trägst du dort Leute ein und aus und vermerkst ab dem Termintag, wer unentschuldigt gefehlt hat.</span>
            <span>Kacheln wie „3 × 15 Min" fassen freie Termine zusammen – gebuchte stehen immer einzeln.</span>
          </div>`
       : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
@@ -7213,7 +7229,7 @@ function renderHalbjahr() {
 
   el.innerHTML = `
     <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">
-      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Spaltenkopf anklicken sortiert (nochmal klicken dreht um, ein drittes Mal zurück auf alphabetisch), Zeile anklicken zeigt Details.
+      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 📘 FaBü bzw. ✓ Teilgenommen: Zahl = teilgenommen (wer eingetragen war), ✗ = unentschuldigt gefehlt, 📅 = steht noch an. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Spaltenkopf anklicken sortiert (nochmal klicken dreht um, ein drittes Mal zurück auf alphabetisch), Zeile anklicken zeigt Details.
     </div>
     ${sections}`;
 }

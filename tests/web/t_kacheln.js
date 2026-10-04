@@ -24,6 +24,10 @@ const slot = inv => ({ id: 5, subjectId: 1, typ: 'input', datum: '2026-09-18', u
   booked: true, teacherUsername: 'herf', thema: 'Begrüßung', invitees: inv });
 const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenommen',
   herkunft: 'zugewiesen', gesehen: true }, z);
+// slot() liegt in der Vergangenheit. Ob jemand die Einladung schon gesehen hat (📋), zaehlt
+// beim Fachbuero nur bis zum Termin (2026-10-04) - dafuer ein kommender Termin.
+const ZUKUNFT = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+const kommend = inv => Object.assign(slot(inv), { datum: ZUKUNFT });
 
 // --- frei = gruen, vergeben/vorbei = grau -----------------------------------
 {
@@ -91,15 +95,17 @@ const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenomme
     !h.includes('merle 📋') && !h.includes('👥'), h);
 }
 {
-  const h = bau(LB, slot([p('merle', { gesehen: false }), p('valentyn')]));
+  const h = bau(LB, kommend([p('merle', { gesehen: false }), p('valentyn')]));
   pruefe('K2 nur wer noch nichts weiss, traegt ein Symbol',
     h.includes('merle 📋') && !h.includes('valentyn 📋'), h);
   pruefe('K2b und wird kursiv hervorgehoben', h.includes('aw-person-pending'), h);
 }
 {
-  const h = bau(LB, slot([p('be.ja', { status: 'angefragt' }), p('ma.ba', { status: 'eingeladen' })]));
-  pruefe('K3 die drei offenen Arten haben eigene Symbole',
-    h.includes('be.ja ❓') && h.includes('ma.ba ⏳'), h);
+  // Mitmach-Anfragen gibt es seit 2026-10-04 nicht mehr (❓) - eine alte stuende wie eine
+  // offene Einladung da.
+  const h = bau(LB, kommend([p('be.ja', { status: 'angefragt' }), p('ma.ba', { status: 'eingeladen' })]));
+  pruefe('K3 wer noch nicht geantwortet hat, traegt ⏳ - ❓ gibt es nicht mehr',
+    h.includes('be.ja ⏳') && h.includes('ma.ba ⏳') && !h.includes('❓'), h);
 }
 
 // --- gross: nur noch die Zahl ---------------------------------------------
@@ -110,16 +116,53 @@ const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenomme
     h.includes('👥 10') && !h.includes('vicco'), h);
   pruefe('K4b und kein Symbol, wenn nichts aussteht', !h.includes('📋'), h);
 
-  const h2 = bau(LB, slot(zehn.map(n => p(n, { gesehen: false }))));
+  const h2 = bau(LB, kommend(zehn.map(n => p(n, { gesehen: false }))));
   pruefe('K5 was aussteht, wird nach Art zusammengefasst',
     h2.includes('👥 10') && h2.includes('📋 10'), h2);
 
-  const gemischt = zehn.map((n, i) => p(n, i < 2 ? { status: 'angefragt' } : i < 5 ? { gesehen: false } : {}));
-  const h3 = bau(LB, slot(gemischt));
+  const gemischt = zehn.map((n, i) => p(n, i < 2 ? { status: 'eingeladen' } : i < 5 ? { gesehen: false } : {}));
+  const h3 = bau(LB, kommend(gemischt));
   pruefe('K6 mehrere Arten nebeneinander',
-    h3.includes('❓ 2') && h3.includes('📋 3') && h3.includes('👥 10'), h3);
-  pruefe('K6b Anfragen stehen vorn - die warten auf dich',
-    h3.indexOf('❓ 2') < h3.indexOf('📋 3'), h3);
+    h3.includes('⏳ 2') && h3.includes('📋 3') && h3.includes('👥 10') && !h3.includes('❓'), h3);
+  pruefe('K6b in der Reihenfolge der Legende: ⏳ vor 📋',
+    h3.indexOf('⏳ 2') < h3.indexOf('📋 3'), h3);
+}
+
+// --- Fachbuero ohne Bestaetigen: eingetragen = teilgenommen (2026-10-04) ---
+{
+  const vorbei = bau(LB, slot([p('merle', { gesehen: false }), p('valentyn', { herkunft: 'selbst' })]));
+  pruefe('K20 vorbei: kein 📋 mehr - ob es jemand gesehen hat, aendert nichts mehr',
+    !vorbei.includes('📋') && !vorbei.includes('aw-person-pending'), vorbei);
+  pruefe('K20b und der Tooltip sagt: hat teilgenommen',
+    vorbei.includes('title="hat teilgenommen">merle<') && vorbei.includes('title="hat teilgenommen">valentyn<'), vorbei);
+
+  const fehlt = bau(LB, slot([p('merle', { attendedStatus: 'nicht_erledigt' }), p('valentyn')]));
+  pruefe('K21 "hat unentschuldigt gefehlt" steht als ✗ an der Kachel, rot',
+    fehlt.includes('aw-person-fehlt" title="hat unentschuldigt gefehlt">merle ✗<')
+    && fehlt.includes('title="hat teilgenommen">valentyn<'), fehlt);
+
+  const buchende = bau(LB, Object.assign(slot([p('x')]), { presenterUsername: 'be.ja', presentedStatus: 'nicht_erledigt' }));
+  pruefe('K22 auch die buchende Person: fett, rot, ✗',
+    buchende.includes('aw-person-main aw-person-fehlt" title="hat gebucht - hat unentschuldigt gefehlt">be.ja ✗<'), buchende);
+
+  const zehn = ['vicco','hüseyin','joshua','nele','sophie','carl','leopold-n','liam','oliver','oskar'];
+  const viele = bau(LB, slot(zehn.map((n, i) => p(n, i < 2 ? { attendedStatus: 'nicht_erledigt' } : { gesehen: false }))));
+  pruefe('K23 bei vielen Namen: "✗ 2", und vorbei kein 📋',
+    viele.includes('👥 10') && viele.includes('✗ 2') && !viele.includes('📋'), viele);
+
+  const ohne = bau(LB, kommend([p('nele', { herkunft: 'selbst' })]));
+  pruefe('K24 kommendes Fachbuero: wer mitmacht, steht ohne Zeichen da ("macht mit")',
+    ohne.includes('title="macht mit">nele<'), ohne);
+  pruefe('K24b und ✗ kommt nur, wenn es vermerkt ist', !ohne.includes('✗'), ohne);
+}
+{
+  // Talks bleiben, wie sie sind: Flammen und Fehlen gehoeren zur Bewertung im Talks-Reiter.
+  const talk = z => Object.assign(slot([p('merle', { gesehen: false }), p('valentyn', { herkunft: 'selbst', attendedStatus: 'nicht_erledigt' })]),
+    { typ: 'talk', presenterUsername: 'be.ja', presentedStatus: 'nicht_erledigt' }, z);
+  const h = bau(LB, talk({}));
+  pruefe('K25 vergangener Talk: 📋 bleibt, kein ✗, "zugesagt" bleibt',
+    h.includes('merle 📋') && !h.includes('✗') && h.includes('title="zugesagt">valentyn<')
+    && h.includes('title="hält den Talk">be.ja<'), h);
 }
 
 // --- Grenze und Sonderfaelle ----------------------------------------------

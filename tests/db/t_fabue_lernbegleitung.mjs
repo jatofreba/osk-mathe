@@ -253,15 +253,30 @@ const fbC = (o, name, thema) => (((o.students.find(x => x.username === name).byH
   .filter(d => d.thema === thema);
 pruefe('Z14b "hat unentschuldigt gefehlt" ist vermerkt und zaehlt als gefehlt, nicht als Teilnahme',
   (await zeile(vs, 'gil')).attended_status === 'nicht_erledigt' && fbC(hjC, 'gil', 'Vergangen')[0].status === 'nicht_erledigt', fbC(hjC, 'gil', 'Vergangen'));
+// Die Wochenkachel (dieselbe Funktion wie im Raster, mit den Daten vom Server) zeigt es auch.
+await kalender();
+const kachelV = () => lauf(`awChip(calData.slots.find(x => x.id === ${v}))`);
+let kachel = kachelV();
+pruefe('Z14b2 die Wochenkachel zeigt es: gil und hal (altes "gefehlt") mit ✗, rot - fay ohne Zeichen',
+  kachel.includes('aw-person-fehlt" title="hat unentschuldigt gefehlt">gil ✗<')
+  && kachel.includes('aw-person-fehlt" title="hat unentschuldigt gefehlt">hal ✗<')
+  && kachel.includes('title="hat gebucht">fay<'), kachel);
 await lauf(`awAnwesenheit(${gilV.id}, 'ausstehend')`); await ruhe();
 hjC = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;
 pruefe('Z14c zurueckgenommen (↩): zaehlt wieder als teilgenommen', fbC(hjC, 'gil', 'Vergangen')[0].status === 'erledigt', fbC(hjC, 'gil', 'Vergangen'));
+await kalender();
+kachel = kachelV();
+pruefe('Z14c2 und an der Kachel steht gil wieder ohne Zeichen (teilgenommen)',
+  kachel.includes('title="hat teilgenommen">gil<') && !kachel.includes('gil ✗'), kachel);
 await lauf(`awVortrag(${vs}, 'nicht_erledigt')`); await ruhe();
 hjC = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;
 await kalender();
 bar = leiste(v);
 pruefe('Z14d auch die buchende Person: unentschuldigt gefehlt vermerkbar und sichtbar',
   fbC(hjC, 'fay', 'Vergangen')[0].status === 'nicht_erledigt' && bar.includes(`awVortrag(${vs}, 'ausstehend')`), bar);
+kachel = kachelV();
+pruefe('Z14d2 an der Kachel: fay (bucht) fett und mit ✗',
+  kachel.includes('aw-person-main aw-person-fehlt" title="hat gebucht - hat unentschuldigt gefehlt">fay ✗<'), kachel);
 await lauf(`awVortrag(${vs}, 'ausstehend')`); await ruhe();
 await kalender();
 bar = leiste(m1);
