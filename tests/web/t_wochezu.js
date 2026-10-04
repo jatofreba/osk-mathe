@@ -51,6 +51,7 @@ const basis = schneide('const LW_TALK_TEXT') + schneide('function lwBadge(typ, b
             + schneide('function invStatusText(iv) {') + schneide('function invStatusIcon(iv) {')
             + schneide('function lwBuchbar(s) {') + schneide('function lwPlaetzeFrei(s) {')
             + schneide('function lwFreiKlasse(s) {') + schneide('function lwStandText(s, sonst) {')
+            + schneide('function mwSelbstAustragbar(s) {')
             + schneide('function mwState(s) {');
 
 const mach = (name, extra) =>
@@ -105,8 +106,13 @@ const fabue = z => Object.assign({
   // Eigener Termin sticht auch hier: wer drin ist, sieht seinen Termin als solchen
   const meins = mwAktion(fabue({ geschlossen: true, booked: true, mineAsListener: true,
     myInvitationStatus: 'angenommen', myInvitationHerkunft: 'selbst', myInvitationGesehen: true }));
-  pruefe('W5 ein eigener Termin bleibt als eigener erkennbar',
-    /schon/.test(meins.hinweis || ''), JSON.stringify(meins));
+  // Seit 2026-10-04: selbst eingetragen (mitgemacht/mitgebracht) kann man sich bis zum Termin
+  // selbst wieder austragen - das weist den Termin zugleich als eigenen aus.
+  pruefe('W5 ein eigener Termin bleibt als eigener erkennbar (selbst eingetragen: austragen)',
+    meins.text === 'Nicht mehr mitmachen' && /calNichtMehrMitmachen/.test(meins.ruf || ''), JSON.stringify(meins));
+  const gebuchtSelbst = mwAktion(fabue({ geschlossen: true, booked: true, mineAsPresenter: true }));
+  pruefe('W5b selbst gebucht: bleibt "schon" - die Buchung storniert nur die Lernbegleitung',
+    /schon/.test(gebuchtSelbst.hinweis || ''), JSON.stringify(gebuchtSelbst));
 }
 
 // --- 4) Monatsraster faerbt ihn nicht mehr als buchbar ------------------

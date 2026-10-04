@@ -494,6 +494,17 @@ async function initDB() {
       SELECT u.id, (SELECT id FROM subjects WHERE key='mathe'), u.kurs
       FROM users u WHERE u.role='student'
       ON CONFLICT (user_id, subject_id) DO NOTHING;
+    -- Fachbuero ohne Zusagen (2026-10-04): wer mitmachen wollte oder mitgebracht wurde, ist
+    -- seither direkt dabei. Noch offene Anfragen/Einladungen zu KOMMENDEN Fachbueros werden
+    -- deshalb zu Teilnahmen; vergangene bleiben, wie sie sind (ob die Person da war, weiss
+    -- niemand). Lernberatung (nur zugewiesen) und Talks bleiben unberuehrt. Laeuft bei jedem
+    -- Start, aendert aber nur noch Altfaelle - neue offene Zeilen entstehen beim Fachbuero nicht.
+    UPDATE talking_invitations ti SET status = 'angenommen', updated_at = NOW()
+      FROM talking_sessions ts, talking_slots sl
+     WHERE ts.id = ti.session_id AND sl.id = ts.slot_id
+       AND sl.typ = 'input' AND sl.datum >= CURRENT_DATE
+       AND ti.status IN ('angefragt', 'eingeladen')
+       AND NOT EXISTS (SELECT 1 FROM subjects sub WHERE sub.id = sl.subject_id AND sub.nur_zugewiesen);
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -2224,7 +2235,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     const uid = req.session.userId;
     const subjectKey = req.query.subject || 'mathe';
     const [subjRes, targetRows, meRow] = await Promise.all([
-      pool.query('SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects WHERE key=$1', [subjectKey]),
+      pool.query('SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ", COALESCE(nur_zugewiesen, false) AS "nurZugewiesen" FROM subjects WHERE key=$1', [subjectKey]),
       pool.query('SELECT subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren FROM subject_halbjahr_targets'),
       pool.query('SELECT created_at, passiv_seit FROM users WHERE id=$1', [uid]),
     ]);
@@ -2291,6 +2302,8 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
         WHERE ti.listener_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
+          -- nur Eingetragene: offene Einladungen/Anfragen und Absagen sind keine Teilnahme
+          AND (ti.status = 'angenommen' OR ti.attended_status <> 'ausstehend')
         ORDER BY datum DESC
       `, [uid, subject.id]),
       // Talks, bei denen die Person MIT vortraegt: Bewertung und Zusage stehen an ihrer
@@ -2338,7 +2351,9 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     res.json({
       presenting: allePraesentationen,
       invitations: invitations.rows,
-      fabue: fabue.rows,
+      // Fachbuero: eingetragen = teilgenommen (siehe halbjahrOverview) - ausser einem alten "gefehlt".
+      fabue: subject.nurZugewiesen ? fabue.rows
+        : fabue.rows.map(f => ({ ...f, status: f.status === 'nicht_erledigt' ? 'nicht_erledigt' : 'erledigt' })),
       mitVortragOffen,
       trophies
     });
@@ -2455,10 +2470,12 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
       [slotId, req.session.userId, sessionThema]
     );
     const sessionId = sessionResult.rows[0].id;
+    // Fachbüro: wer mitgebracht wird, ist dabei (seit 2026-10-04 ohne Zusage, austragen
+    // kann man sich selbst). Bei Talks sagen die Eingeladenen zu oder ab.
     for (const listenerId of ids) {
       await client.query(
-        'INSERT INTO talking_invitations (session_id, listener_id) VALUES ($1,$2)',
-        [sessionId, listenerId]
+        'INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,$3)',
+        [sessionId, listenerId, istTalk ? 'eingeladen' : 'angenommen']
       );
     }
     // Weitere Vortragende werden gefragt wie alle anderen: sie sagen zu oder ab.
@@ -2538,8 +2555,8 @@ app.post('/api/talking-sessions/:id/invite', requireLogin, async (req, res) => {
     }
     for (const listenerId of ids) {
       await pool.query(
-        'INSERT INTO talking_invitations (session_id, listener_id) VALUES ($1,$2) ON CONFLICT (session_id, listener_id) DO NOTHING',
-        [req.params.id, listenerId]
+        'INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,$3) ON CONFLICT (session_id, listener_id) DO NOTHING',
+        [req.params.id, listenerId, istTalk ? 'eingeladen' : 'angenommen']
       );
     }
     res.json({ ok: true });
@@ -2602,18 +2619,17 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
 // Annehmen/Ablehnen geht nur, solange die TS des Presenters noch nicht bewertet wurde (presented_status
 // 'ausstehend'). Danach entscheidet ausschließlich die Zuhören-Bewertung der Lernbegleitung (attended_status),
 // ob die Person teilgenommen hat - das nachträgliche Ablehnen einer bereits stattgefundenen TS ergibt keinen Sinn.
-// Schüler:in fragt bei einem schon laufenden Input an ("darf ich mitmachen?"). Ergebnis ist eine
-// talking_invitations-Zeile mit Status 'angefragt' - erst die Zusage der Lernbegleitung macht
-// daraus eine echte Teilnahme ('angenommen'). Bewusst nur für Input: bei Talks lädt die
-// vortragende Person ein, da gibt es keine offene Anfrage.
-// Schüler:in fragt an, bei einem Fachbüro mitzumachen. Einstieg ist der SLOT, nicht die
-// Session: Auch ein noch ungebuchter Termin kann bereits ein ausgeschriebenes Thema haben.
-// Dann gehört das Thema der Lernbegleitung, gebucht wird er nicht mehr, und die Runde
-// entsteht erst mit der ersten Anfrage - ohne vortragende Person, genau wie bei einer
-// Zuweisung durch die Lernbegleitung.
+// Schüler:in macht bei einem Fachbüro mit. Seit 2026-10-04 ohne Zusage der Lernbegleitung:
+// wer eingetragen ist, hat teilgenommen - wer doch nicht da war, nimmt die Lernbegleitung
+// heraus (bis dahin hiess das "Mitmachen anfragen" und ergab eine Zeile 'angefragt').
+// Bewusst nur für Fachbüros: bei Talks lädt die vortragende Person ein. Einstieg ist der
+// SLOT, nicht die Session: Auch ein noch ungebuchter Termin kann bereits ein ausgeschriebenes
+// Thema haben. Dann gehört das Thema der Lernbegleitung, gebucht wird er nicht mehr, und die
+// Runde entsteht mit der ersten Person, die mitmacht - ohne vortragende Person, genau wie bei
+// einer Zuweisung durch die Lernbegleitung.
 app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
   try {
-    if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können anfragen' });
+    if (req.session.role !== 'student') return res.status(403).json({ error: 'Nur Schüler:innen können mitmachen' });
     const slotRes = await pool.query(`
       SELECT sl.id, sl.typ, sl.thema, sl.geschlossen, COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen",
              (sl.datum < CURRENT_DATE) AS vorbei,
@@ -2632,26 +2648,30 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
     // Nach dem Termin gibt es nichts mehr anzufragen - wer doch da war, wird von der
     // Lernbegleitung nachgetragen.
     if (s.vorbei) return res.status(409).json({ error: 'Dieser Termin ist vorbei - sprich die Lernbegleitung an, wenn du nachgetragen werden willst.' });
-    if (s.sessionId && s.presentedStatus !== 'ausstehend') return res.status(409).json({ error: 'Termin ist schon abgeschlossen' });
+    // Kein "schon abgeschlossen" mehr ueber presented_status: beim Fachbuero bestaetigt niemand
+    // mehr eine Anwesenheit - geschlossen und vorbei (oben) entscheiden allein.
     if (s.presenterId === req.session.userId) return res.status(409).json({ error: 'Du hast diesen Termin selbst gebucht' });
     const slotThema = (s.thema || '').trim();
     // Ein ganz freier Termin (weder Thema noch Session) wird gebucht, nicht angefragt.
     if (!s.sessionId && !slotThema) return res.status(400).json({ error: 'Dieser Termin ist noch ganz frei - du kannst ihn direkt buchen.' });
 
+    let vorhanden = null;
     if (s.sessionId) {
       const existing = await pool.query(
-        'SELECT status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2',
+        'SELECT id, status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2',
         [s.sessionId, req.session.userId]
       );
-      if (existing.rows.length) {
-        const st = existing.rows[0].status;
-        return res.status(409).json({ error: st === 'angefragt' ? 'Deine Anfrage läuft schon' : 'Du bist bei diesem Termin schon eingetragen' });
-      }
+      vorhanden = existing.rows[0] || null;
+      if (vorhanden && vorhanden.status === 'angenommen')
+        return res.status(409).json({ error: 'Du bist bei diesem Termin schon eingetragen' });
     }
-    // Früh prüfen, damit niemand eine Anfrage stellt, die ohnehin kollidiert - beim Zusagen
-    // wird nochmal geprüft, weil sich bis dahin etwas geändert haben kann.
     if (await hasScheduleConflict(req.session.userId, s.id))
       return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit schon einen Termin' });
+    // Eine alte Anfrage, eine offene Einladung oder eine Absage wird zur Teilnahme.
+    if (vorhanden) {
+      await pool.query(`UPDATE talking_invitations SET status='angenommen', updated_at=NOW() WHERE id=$1`, [vorhanden.id]);
+      return res.json({ ok: true });
+    }
 
     let sessionId = s.sessionId;
     if (!sessionId) {
@@ -2665,7 +2685,7 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
       sessionId = ins.rows[0].id;
     }
     await pool.query(
-      `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angefragt')
+      `INSERT INTO talking_invitations (session_id, listener_id, status) VALUES ($1,$2,'angenommen')
        ON CONFLICT (session_id, listener_id) DO NOTHING`,
       [sessionId, req.session.userId]
     );
@@ -2705,21 +2725,30 @@ app.post('/api/admin/talking-invitations/:id/decide', requireAdmin, async (req, 
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
-// Schüler:in zieht die eigene, noch offene Mitmach-Anfrage zurück. Die Zeile wird
-// gelöscht statt auf 'abgelehnt' gesetzt - genau wie beim Ablehnen durch die
-// Lernbegleitung, damit man später erneut anfragen kann.
+// Schüler:in trägt sich selbst wieder aus einem Fachbüro aus (seit 2026-10-04: Mitmachen
+// geht ohne Zusage, also muss man es auch selbst zurücknehmen können) - oder zieht eine
+// alte, noch offene Anfrage zurück. Die Zeile wird gelöscht, damit man später wieder
+// mitmachen kann. Nur bis zum Termintag und nur, was man selbst eingetragen hat bzw.
+// wozu man mitgebracht wurde: eine Zuweisung der Lernbegleitung bleibt (dafür gibt es das
+// Gespräch), und bei Talks wird eine Einladung beantwortet (respond), nicht zurückgezogen.
 app.post('/api/talking-invitations/:id/withdraw', requireLogin, async (req, res) => {
   try {
     const inv = await pool.query(`
-      SELECT ti.id, ti.status, ts.id AS "sessionId"
+      SELECT ti.id, ti.status, ti.herkunft, ts.id AS "sessionId", sl.typ,
+             COALESCE(sub.nur_zugewiesen, false) AS "nurZugewiesen", (sl.datum < CURRENT_DATE) AS vorbei
       FROM talking_invitations ti
       JOIN talking_sessions ts ON ts.id = ti.session_id
       JOIN talking_slots sl ON sl.id = ts.slot_id
+      LEFT JOIN subjects sub ON sub.id = sl.subject_id
       WHERE ti.id=$1 AND ti.listener_id=$2 AND sl.klasse=$3
     `, [req.params.id, req.session.userId, req.session.klasse]);
     if (!inv.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
-    // Nur die eigene ANFRAGE: eine Einladung wird beantwortet (respond), nicht zurückgezogen.
-    if (inv.rows[0].status !== 'angefragt') return res.status(409).json({ error: 'Das ist keine offene Anfrage mehr' });
+    const z = inv.rows[0];
+    const fachbueroDabei = z.typ === 'input' && !z.nurZugewiesen && z.status === 'angenommen' && z.herkunft !== 'zugewiesen';
+    if (z.status !== 'angefragt' && !fachbueroDabei)
+      return res.status(409).json({ error: 'Das kannst du nicht selbst zurücknehmen - sprich die Lernbegleitung an.' });
+    if (fachbueroDabei && z.vorbei)
+      return res.status(409).json({ error: 'Der Termin ist vorbei - sprich die Lernbegleitung an.' });
     await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
     // War das die einzige Anfrage an einem nur ausgeschriebenen Fachbüro, ist der
     // Termin danach wieder frei.
@@ -3498,7 +3527,7 @@ async function halbjahrOverview(klasse, onlyUid) {
       WHERE u.klasse = $1${uidFilter}
     `, params),
     pool.query(`
-      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ts.thema, pu.username AS presenter, ti.pokale, ti.rolle,
+      SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ti.status AS einladung, ts.thema, pu.username AS presenter, ti.pokale, ti.rolle,
              (SELECT string_agg(cu.username, ', ' ORDER BY ci.id) FROM talking_invitations ci JOIN users cu ON cu.id = ci.listener_id
                WHERE ci.session_id = ts.id AND ci.rolle = 'vortrag' AND ci.listener_id <> ti.listener_id
                  AND (ci.status = 'angenommen' OR ci.attended_status <> 'ausstehend')) AS mit_andere
@@ -3523,7 +3552,7 @@ async function halbjahrOverview(klasse, onlyUid) {
       FROM station_events se JOIN users u ON u.id = se.user_id
       WHERE u.klasse = $1${uidFilter}
     `, params),
-    pool.query(`SELECT id, key, name, color FROM subjects ORDER BY id`),
+    pool.query(`SELECT id, key, name, color, COALESCE(nur_zugewiesen, false) AS "nurZugewiesen" FROM subjects ORDER BY id`),
   ]);
 
   const subjectById = {};
@@ -3583,12 +3612,32 @@ async function halbjahrOverview(klasse, onlyUid) {
     s.inputUpcoming++;
     return true;
   };
+  // Fachbuero (seit 2026-10-04): wer eingetragen ist, hat teilgenommen - ab dem Termintag,
+  // ohne dass die Lernbegleitung etwas bestaetigt; wer nicht da war, nimmt sie heraus (dann
+  // gibt es die Zeile nicht mehr). Ein frueher eingetragenes "gefehlt" zaehlt weiter als
+  // gefehlt. Offene Einladungen/Anfragen und Absagen sind keine Teilnahme und stehen nicht in
+  // der Liste. Gemeldet wird der wirksame Stand ('erledigt' = teilgenommen) - darauf baut auch
+  // das Tool seine FB-Besuchsliste. Die Lernberatung (nur zugewiesen) bleibt beim Bestaetigen.
+  const fachbueroEingetragen = r => r.einladung === undefined     // buchende Person
+    || r.einladung === 'angenommen' || (r.status && r.status !== 'ausstehend');
   const fabueEintragen = (r, rolle, extra) => {
     const hj = slotHj(r); if (!hj) return;
+    if ((subjectById[r.subjectId] || {}).nurZugewiesen) {
+      const s = ensureSubject(r.uid, hj, r.subjectId);
+      if (!fabueGezaehlt(s, r)) return;
+      halbjahre.add(hj);
+      s.inputDetails.push({ datum: r.datum, role: rolle, thema: r.thema, status: r.status, ...extra });
+      s.lastInput = maxD(s.lastInput, r.datum);
+      return;
+    }
+    if (!r.datum || !fachbueroEingetragen(r)) return;
     const s = ensureSubject(r.uid, hj, r.subjectId);
-    if (!fabueGezaehlt(s, r)) return;
+    let status = r.status;
+    if (r.datum > heuteIso) s.inputUpcoming++;                                   // steht noch an
+    else if (r.status === 'nicht_erledigt') s.inputMissed++;                     // altes "gefehlt"
+    else { s.inputParticipated++; status = 'erledigt'; }                        // eingetragen = teilgenommen
     halbjahre.add(hj);
-    s.inputDetails.push({ datum: r.datum, role: rolle, thema: r.thema, status: r.status, ...extra });
+    s.inputDetails.push({ datum: r.datum, role: rolle, thema: r.thema, status, ...extra });
     s.lastInput = maxD(s.lastInput, r.datum);
   };
 
@@ -3713,10 +3762,9 @@ app.get('/api/public/week', async (req, res) => {
                sub.id AS "subjectId", sub.key AS "subjectKey", sub.name AS "subjectName",
                sub.color AS "subjectColor",
                (ts.id IS NOT NULL) AS booked, ts.thema, s.thema AS "slotThema",
-               -- fuer "noch Plaetze frei" (Fachbuero, mitmachen anfragen): beides ohne
-               -- Personenbezug - geschlossen ist eine Termin-Einstellung, rundeOffen sagt nur,
-               -- ob die Runde noch Anfragen annimmt (wie der Anfrage-Weg prueft)
-               s.geschlossen, (ts.presented_status = 'ausstehend') AS "rundeOffen"
+               -- fuer "noch Plaetze frei" (Fachbuero, mitmachen): eine Termin-Einstellung,
+               -- ohne Personenbezug
+               s.geschlossen
         FROM talking_slots s
         LEFT JOIN subjects sub ON sub.id = s.subject_id
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id

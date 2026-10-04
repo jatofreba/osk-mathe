@@ -45,8 +45,9 @@ const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenomme
     plaetze.includes('ist-frei') && plaetze.includes('noch Plätze frei'), plaetze);
   pruefe('F6 keine weiteren Anmeldungen: grau', bau(LB, offen({ geschlossen: true })).includes('ist-vergeben')
     && !bau(LB, offen({ geschlossen: true })).includes('noch Plätze frei'));
-  pruefe('F7 Runde schon abgeschlossen (buchende Person eingetragen): grau',
-    bau(LB, offen({ presentedStatus: 'erledigt' })).includes('ist-vergeben'));
+  // Seit Fachbueros ohne Zusage laufen (2026-10-04), schliesst ein frueheres "war da" die Runde nicht mehr.
+  pruefe('F7 auch mit alt eingetragenem "war da" der buchenden Person: weiter gruen',
+    bau(LB, offen({ presentedStatus: 'erledigt' })).includes('ist-frei'));
   pruefe('F8 gebuchter Talk: grau - einen Talk kann man nicht mitbuchen',
     bau(LB, offen({ typ: 'talk' })).includes('ist-vergeben') && !bau(LB, offen({ typ: 'talk' })).includes('noch Plätze frei'));
   pruefe('F9 Lernberatung: grau - die vergibt die Lernbegleitung',
@@ -64,8 +65,8 @@ const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenomme
   pruefe('T4 gebuchter Talk: vergeben', t({ booked: true, typ: 'talk' }) === 'vergeben');
   pruefe('T5 gebucht und vorbei: vergeben (nicht "voll")', t({ booked: true, geschlossen: true, datum: '2020-01-01' }) === 'vergeben');
   pruefe('T6 nicht gebucht und nicht buchbar: Text der Ansicht', t({ geschlossen: true }) === 'sonst');
-  pruefe('T7 oeffentliche Woche (ohne presentedStatus): rundeOffen entscheidet',
-    t({ booked: true, rundeOffen: true }) === 'noch Plätze frei' && t({ booked: true, rundeOffen: false }) === 'vergeben');
+  pruefe('T7 oeffentliche Woche (ohne presentedStatus): gebucht und offen heisst noch Plätze frei',
+    t({ booked: true }) === 'noch Plätze frei');
 }
 
 // --- klein: Namen als Text -------------------------------------------------

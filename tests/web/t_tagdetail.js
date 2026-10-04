@@ -32,6 +32,7 @@ function baue(rolle, items, tag) {
   const el = { innerHTML: '' };
   const code = schneide('function calDateStr(d) {') + schneide('function slotVorbei(s) {') + schneide('function calGehoertMir(it) {')
              + schneide('function invEingeteilt(iv) {') + schneide('function talkVortragendeText(praesentierend, weitere) {')
+             + schneide('function mwSelbstAustragbar(s) {')
              + schneide('function renderCalDetail() {');
   const wann = tag || HEUTE;
   const tage = {}; tage[wann] = items;
@@ -69,8 +70,8 @@ const slot = z => Object.assign({
     baue(SCHUELI, [frei], MORGEN).includes('buchen'), '');
 
   const ausgeschrieben = slot({ id: 3, datum: MORGEN, slotThema: 'Brueche' });
-  pruefe('T2b ein ausgeschriebenes Fachbuero bleibt (anfragen)',
-    baue(SCHUELI, [ausgeschrieben], MORGEN).includes('Mitmachen anfragen'), '');
+  pruefe('T2b ein ausgeschriebenes Fachbuero bleibt (mitmachen)',
+    baue(SCHUELI, [ausgeschrieben], MORGEN).includes('>Mitmachen<'), '');
 
   const eingeladen = slot({ id: 4, booked: true, mineAsListener: true,
     myInvitationStatus: 'eingeladen', myInvitationId: 44, thema: 'Kreise' });
@@ -88,8 +89,14 @@ const slot = z => Object.assign({
     myInvitationStatus: 'angenommen', myInvitationHerkunft: 'selbst',
     myInvitationGesehen: true, thema: 'Prozente' });
   const h6 = baue(SCHUELI, [zugesagt]);
-  pruefe('T2e ein eigener zugesagter Termin bleibt, obwohl es dort keinen Knopf gibt',
-    h6.includes('Prozente') && h6.includes('zugesagt'), h6.slice(0, 260));
+  // Fachbuero (seit 2026-10-04): "Du machst mit" - und austragen geht bis zum Termin.
+  pruefe('T2e ein eigener Fachbuero-Termin bleibt: "Du machst mit" samt "Nicht mehr mitmachen"',
+    h6.includes('Prozente') && h6.includes('Du machst mit') && h6.includes('calNichtMehrMitmachen(')
+    && !h6.includes('zugesagt'), h6.slice(0, 600));
+  const talkZugesagt = Object.assign({}, zugesagt, { id: 61, typ: 'talk', thema: 'Brueche' });
+  const h61 = baue(SCHUELI, [talkZugesagt]);
+  pruefe('T2e2 ein eigener zugesagter Talk heisst weiter "zugesagt" (ohne Austragen-Knopf)',
+    h61.includes('Brueche') && h61.includes('zugesagt') && !h61.includes('calNichtMehrMitmachen('), h61.slice(0, 600));
 
   const haelt = slot({ id: 7, typ: 'talk', booked: true, mineAsPresenter: true, thema: 'Mein Vortrag' });
   pruefe('T2f ein Termin, den ich selbst halte, bleibt',
@@ -107,8 +114,8 @@ const slot = z => Object.assign({
   // anfragbar - darf NICHT verschwinden.
   const fremdGebucht = slot({ id: 12, booked: true, presenterUsername: 'nele', thema: 'Heute' });
   const h12 = baue(SCHUELI, [fremdGebucht]);
-  pruefe('T3 ein schon gebuchtes Fachbuero bleibt samt Anfrage-Knopf',
-    h12.includes('Heute') && h12.includes('Mitmachen anfragen'), h12.slice(0, 260));
+  pruefe('T3 ein schon gebuchtes Fachbuero bleibt samt Mitmachen-Knopf',
+    h12.includes('Heute') && h12.includes('>Mitmachen<'), h12.slice(0, 260));
 
   const freiMorgen = slot({ id: 13, datum: MORGEN });
   pruefe('T3b ein freies Fachbuero in der Zukunft bleibt',
@@ -131,7 +138,7 @@ const slot = z => Object.assign({
   const zuFrei = slot({ id: 16, datum: MORGEN, geschlossen: true });
   const h16 = baue(SCHUELI, [zuFrei], MORGEN);
   pruefe('T3e ein geschlossenes freies Fachbuero verschwindet',
-    !h16.includes('buchen') && !h16.includes('Mitmachen anfragen'), h16.slice(0, 260));
+    !h16.includes('buchen') && !h16.includes('Mitmachen'), h16.slice(0, 260));
 
   const zuGebucht = slot({ id: 17, booked: true, geschlossen: true,
     presenterUsername: 'nele', thema: 'Zu' });

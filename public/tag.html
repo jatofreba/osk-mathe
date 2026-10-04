@@ -147,10 +147,10 @@ function vorbei(s) {
 function buchbar(s) {
   return !s.booked && !s.geschlossen && !vorbei(s);
 }
-// Gebuchtes Fachbüro, zu dem man noch dazukommen kann (mitmachen anfragen) - wie
-// lwPlaetzeFrei() in index.html. rundeOffen liefert /api/public/week ohne Personenbezug.
+// Gebuchtes Fachbüro, zu dem man noch dazukommen kann (mitmachen) - wie lwPlaetzeFrei()
+// in index.html.
 function plaetzeFrei(s) {
-  return s.typ === 'input' && !!s.booked && !s.geschlossen && !vorbei(s) && s.rundeOffen !== false;
+  return s.typ === 'input' && !!s.booked && !s.geschlossen && !vorbei(s);
 }
 // frei / noch Plätze frei / voll (Fachbüro ohne weitere Anmeldungen) / vergeben
 function standText(s) {

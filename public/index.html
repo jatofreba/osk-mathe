@@ -2221,16 +2221,22 @@ function lwBadge(typ, buchstabe, farbe) {
 function lwBuchbar(s) {
   return !s.booked && !s.geschlossen && !slotVorbei(s);
 }
-// Gebuchtes Fachbuero, zu dem man noch dazukommen kann ("Mitmachen anfragen", 2026-10-04):
-// nicht geschlossen, nicht vorbei, die Runde noch offen und kein Termin, den die Lernbegleitung
-// vergibt - dieselben Bedingungen wie beim Anfragen auf dem Server. presentedStatus kommt aus
-// der angemeldeten Sicht; die oeffentliche Woche sagt nur, ob die Runde noch offen ist.
+// Gebuchtes Fachbuero, zu dem man noch dazukommen kann ("Mitmachen", 2026-10-04): nicht
+// geschlossen, nicht vorbei und kein Termin, den die Lernbegleitung vergibt - dieselben
+// Bedingungen wie beim Mitmachen auf dem Server.
 function lwPlaetzeFrei(s) {
   if (s.typ !== 'input' || !s.booked || s.geschlossen || slotVorbei(s)) return false;
-  if ((subjectById(s.subjectId) || {}).nurZugewiesen) return false;
-  return s.presentedStatus !== undefined ? s.presentedStatus === 'ausstehend' : s.rundeOffen !== false;
+  return !(subjectById(s.subjectId) || {}).nurZugewiesen;
 }
-// Klasse fuer die Kachel: gruen, wenn man noch dazu kann (buchen oder mitmachen anfragen) -
+// Eigene Fachbuero-Teilnahme, die man selbst zuruecknehmen kann (2026-10-04: Mitmachen braucht
+// keine Zusage mehr): mitgemacht oder mitgebracht - nicht selbst gebucht, nicht von der
+// Lernbegleitung eingeteilt -, und der Termin ist noch nicht vorbei.
+function mwSelbstAustragbar(s) {
+  return s.typ === 'input' && !(subjectById(s.subjectId) || {}).nurZugewiesen && !s.mineAsPresenter
+    && !!s.mineAsListener && s.myInvitationStatus === 'angenommen' && s.myInvitationHerkunft !== 'zugewiesen'
+    && !slotVorbei(s);
+}
+// Klasse fuer die Kachel: gruen, wenn man noch dazu kann (buchen oder mitmachen) -
 // das ist die EINE Frage, die das Gruen beantwortet. Sonst grau.
 function lwFreiKlasse(s) {
   return lwBuchbar(s) || lwPlaetzeFrei(s) ? 'ist-frei' : 'ist-vergeben';
@@ -2738,7 +2744,7 @@ function mwChip(s) {
   const chipStyle = (neutral || (state === 'taken' && !lwPlaetzeFrei(s)) || state === 'zu') ? '' : ` style="border-left-color:${color};color:${color};"`;
   // Gruen/grau nur fuer "frei" und "fremd vergeben" - eigene, eingeladene und
   // angefragte Termine haben ihre eigene Kennzeichnung, der Konflikt ist ohnehin grau.
-  // Ein fremd gebuchtes Fachbuero, bei dem man mitmachen anfragen kann, ist gruen.
+  // Ein fremd gebuchtes Fachbuero, bei dem man mitmachen kann, ist gruen.
   const freiKlasse = (state === 'free' || state === 'taken') ? ' ' + lwFreiKlasse(s)
     : ['zu', 'conflict'].includes(state) ? ' ist-vergeben' : '';
   return `<div class="lw-chip mw-${state}${freiKlasse}"${chipStyle} ${desc}
@@ -3461,6 +3467,7 @@ function mwAktion(s) {
     if (invEingeteilt(meins) && !meins.gesehen && !slotVorbei(s))
       return { text: 'Alles klar', ruf: `calGesehen(${s.myInvitationId})` };
     if (invEingeteilt(meins)) return { hinweis: '📋 Von der Lernbegleitung eingeladen.' };
+    if (mwSelbstAustragbar(s)) return { text: 'Nicht mehr mitmachen', ruf: `calNichtMehrMitmachen(${s.myInvitationId})` };
     return { hinweis: '✓ Den Termin hast du schon.' };
   }
   // Ab hier gilt: was vorbei ist, gehoert der Lernbegleitung - auch das Zurueckziehen
@@ -3481,14 +3488,13 @@ function mwAktion(s) {
   if (subjectById(s.subjectId).nurZugewiesen) return { hinweis: 'Diesen Termin vergibt die Lernbegleitung.' };
   const istFabue = s.typ === 'input';
   if (st === 'free') {
-    // Ausgeschriebenes Thema = der Termin gehoert der Lernbegleitung, da fragt man an.
+    // Ausgeschriebenes Thema = der Termin gehoert der Lernbegleitung, da macht man mit.
     // Ganz frei = man bringt sein eigenes Thema mit, das geht nur im Buchungsdialog.
     return (istFabue && s.slotThema)
-      ? { text: 'Mitmachen anfragen', ruf: `calRequestJoin(${s.id})` }
+      ? { text: 'Mitmachen', ruf: `calRequestJoin(${s.id})` }
       : { text: istFabue ? 'Fachbüro buchen' : 'Talk anmelden', ruf: `mwBuchen(${s.id})` };
   }
-  if (istFabue && s.presentedStatus === 'ausstehend')
-    return { text: 'Mitmachen anfragen', ruf: `calRequestJoin(${s.id})` };
+  if (istFabue) return { text: 'Mitmachen', ruf: `calRequestJoin(${s.id})` };
   return { hinweis: 'Schon vergeben – sprich die Lernbegleitung an.' };
 }
 
@@ -3724,7 +3730,7 @@ async function loadMyWeek() {
       <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
       <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
       <span><b>✓ von dir gebucht</b></span>
-      <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar · noch Plätze frei = Fachbüro, du kannst mitmachen anfragen</span>
+      <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar · noch Plätze frei = Fachbüro, du kannst mitmachen</span>
       <span><span class="lw-legende-feld ist-vergeben"></span> vergeben</span>
       ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
       ${weekLzk.length ? '<span>📝 LZK – ganztägig, antippen öffnet den Tag im Kalender</span>' : ''}
@@ -4853,7 +4859,7 @@ function fabueHalbjahr(f) {
   return (f.halbjahr && String(f.halbjahr).trim()) || halbjahrForDateClient(f.datum) || '';
 }
 function fabueStatusPill(status) {
-  const [klasse, text] = status === 'erledigt' ? ['pill-green', '✓ da gewesen']
+  const [klasse, text] = status === 'erledigt' ? ['pill-green', '✓ teilgenommen']
     : status === 'nicht_erledigt' ? ['pill-red', '✗ gefehlt']
     : ['pill-yellow', '⏳ noch offen'];
   return { klasse, text };
@@ -5515,7 +5521,8 @@ function calSlotState(it) {
   if (subjectById(it.subjectId).nurZugewiesen) return 'closed';
   if (it.typ === 'input') {
     if (!it.booked) return it.slotThema ? 'join' : 'free';
-    return it.presentedStatus === 'ausstehend' ? 'join' : 'closed';
+    // Mitmachen geht ohne Zusage (2026-10-04) - geschlossen und vorbei sind oben schon raus.
+    return 'join';
   }
   return it.booked ? 'closed' : 'free';
 }
@@ -5591,7 +5598,7 @@ function renderCalendar() {
       // welchem Fach der Termin gehoert - dadurch sah das ganze Raster blau aus. Das
       // SVG erbt per currentColor die Fachfarbe.
       const zustand = calSlotState(it);
-      const st = { mine: 'dein Termin', join: 'mitmachen anfragen möglich',
+      const st = { mine: 'dein Termin', join: 'mitmachen möglich',
                    free: 'offen – buchbar',
                    closed: isAdminView ? 'gebucht' : 'ausgebucht' }[zustand];
       // Die FACHFARBE bleibt in jedem Zustand erhalten - sie ist die Orientierung im
@@ -5660,7 +5667,7 @@ function renderCalDetail() {
         : it.geschlossen
         ? `<span class="pill" style="font-size:10px;">Keine weiteren Anmeldungen</span>`
         : nurAnfragen
-          ? `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`
+          ? `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen</button>`
           : `<button class="btn-act btn-blue" onclick="openCalBookModal(${it.id})">${it.typ==='input'?'FaBü buchen':'Talk anmelden'}</button>`;
     } else {
       // Bei einem FaBü, das die Lernbegleitung angelegt und zugewiesen hat, gibt es keine
@@ -5686,15 +5693,18 @@ function renderCalDetail() {
         const s = it.myInvitationStatus === 'abgelehnt' ? '✗ abgelehnt'
           : it.myInvitationStatus === 'angenommen'
             ? (it.mineAsCoPresenter ? '🎤 Du trägst mit vor'
-              : invEingeteilt(meins) ? '📋 Von der Lernbegleitung eingeladen' : '✓ zugesagt')
+              : invEingeteilt(meins) ? '📋 Von der Lernbegleitung eingeladen'
+              : it.typ === 'input' ? '✓ Du machst mit' : '✓ zugesagt')
             : '';
         if (s) actions = `<span class="pill pill-blue">${s}</span>`
           + (invEingeteilt(meins) && !meins.gesehen && !slotVorbei(it)
-             ? ` <button class="btn-act btn-green" onclick="calGesehen(${it.myInvitationId})">Alles klar</button>` : '');
+             ? ` <button class="btn-act btn-green" onclick="calGesehen(${it.myInvitationId})">Alles klar</button>` : '')
+          + (mwSelbstAustragbar(it)
+             ? ` <button class="btn-cancel" onclick="calNichtMehrMitmachen(${it.myInvitationId})">Nicht mehr mitmachen</button>` : '');
       } else if (!isAdmin && it.typ === 'input' && !it.mineAsPresenter && !it.geschlossen
-                 && it.presentedStatus === 'ausstehend' && !slotVorbei(it)) {
-        // Bei einem schon laufenden Fachbüro, bei dem man nicht dabei ist, kann man mitmachen anfragen.
-        actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen anfragen</button>`;
+                 && !subj.nurZugewiesen && !slotVorbei(it)) {
+        // Bei einem schon laufenden Fachbüro, bei dem man nicht dabei ist, macht man direkt mit.
+        actions = `<button class="btn-act btn-outline" onclick="calRequestJoin(${it.id})">Mitmachen</button>`;
       }
     }
     if (isAdmin) {
@@ -6301,7 +6311,7 @@ function calInviteeListHtml(it) {
       : '';
     return `<span class="pill pill-blue" style="font-size:10px;">${escHtml(iv.username)} ${s}${att}${removeBtn}</span>`;
   }).join(' ');
-  return `<div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;"><span style="font-size:11px;color:var(--md-on-surface-variant);">Eingeladen:</span> ${pills}</div>`;
+  return `<div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;"><span style="font-size:11px;color:var(--md-on-surface-variant);">${it.typ === 'input' ? 'Dabei:' : 'Eingeladen:'}</span> ${pills}</div>`;
 }
 
 // Prominente Liste aller offenen Einladungen (monatsunabhängig), damit Eingeladene sie nicht verpassen.
@@ -6468,14 +6478,23 @@ async function calDeleteSlot(slotId) {
   if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   loadCalendar();
 }
-// Schüler:in fragt an, bei einem Fachbüro mitzumachen - egal ob schon jemand gebucht hat
-// oder ob die Lernbegleitung erst ein Thema ausgeschrieben hat (dann entsteht die Runde
-// mit der ersten Anfrage). Deshalb geht die Anfrage über den Termin, nicht über die Session.
+// Schüler:in macht bei einem Fachbüro mit - egal ob schon jemand gebucht hat oder ob die
+// Lernbegleitung erst ein Thema ausgeschrieben hat (dann entsteht die Runde mit der ersten
+// Person). Deshalb geht es über den Termin, nicht über die Session. Seit 2026-10-04 ohne
+// Zusage der Lernbegleitung: man ist sofort dabei (und kann sich selbst wieder austragen).
 async function calRequestJoin(slotId) {
   const r = await fetch(`/api/talking-slots/${slotId}/request`, { method: 'POST' });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) { alert(d.error || 'Anfrage nicht möglich.'); return; }
-  alert('Anfrage gestellt - die Lernbegleitung entscheidet darüber.');
+  if (!r.ok) { alert(d.error || 'Mitmachen nicht möglich.'); return; }
+  calReload();
+}
+
+// Schüler:in trägt sich selbst wieder aus einem Fachbüro aus (bis zum Termintag).
+async function calNichtMehrMitmachen(invitationId) {
+  if (!confirm('Nicht mehr mitmachen?\n\nDu wirst aus dem Fachbüro ausgetragen. Mitmachen kannst du später wieder, solange noch Plätze frei sind.')) return;
+  const r = await fetch(`/api/talking-invitations/${invitationId}/withdraw`, { method: 'POST' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.error || 'Austragen nicht möglich.'); return; }
   calReload();
 }
 
@@ -6510,7 +6529,7 @@ async function calDecideRequest(invitationId, accept) {
 
 // Admin entfernt nachträglich eine einzelne Person aus einem Talk (Zuhören) oder Fachbüro (Teilnahme).
 async function calRemoveInvitee(invitationId) {
-  if (!confirm('Diese Person wirklich aus dem Termin entfernen?\n\nEin schon eingetragenes "da gewesen"/"gefehlt" wird damit ebenfalls gelöscht.')) return;
+  if (!confirm('Diese Person wirklich aus dem Termin entfernen?\n\nIhre Teilnahme zählt dann nicht mehr.')) return;
   const r = await fetch(`/api/admin/talking-invitations/${invitationId}`, { method:'DELETE' });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Entfernen.'); return; }
@@ -6521,7 +6540,7 @@ async function calRemoveInvitee(invitationId) {
 // findet mit den anderen trotzdem statt. Bleibt niemand eingetragen, wird er wieder frei.
 async function calRemoveBooker(sessionId) {
   if (!confirm('Die buchende Person aus dem Fachbüro nehmen?\n\nDer Termin und das Thema bleiben, alle anderen bleiben eingetragen. '
-    + 'Ein schon eingetragenes "da gewesen"/"gefehlt" der Person wird gelöscht. Ist danach niemand mehr eingetragen, wird der Termin wieder frei.')) return;
+    + 'Ihre Teilnahme zählt dann nicht mehr. Ist danach niemand mehr eingetragen, wird der Termin wieder frei.')) return;
   const r = await fetch(`/api/admin/talking-sessions/${sessionId}/presenter`, { method: 'DELETE' });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Herausnehmen.'); return; }
@@ -6693,9 +6712,12 @@ function awRenderBar() {
   // Schliessen betrifft nur die Selbst-Anmeldung der Schueler:innen. Die Lernbegleitung
   // kann weiterhin Leute eintragen - deshalb bleibt "+ einladen" davon unberuehrt.
   const schliessbar = darf && s.typ === 'input';
-  // Nur beim Fachbüro gibt es die Schnell-Knoepfe: bei Talks gehoeren Flammen und
-  // Qualitaets-Emoji zur Bewertung, und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
-  const schnell = darf && gelaufen && s.typ === 'input';
+  // Fachbuero (seit 2026-10-04): wer eingetragen ist, hat teilgenommen - es gibt nichts mehr
+  // zu bestaetigen; wer nicht da war, wird herausgenommen (×). Die Schnell-Knoepfe bleiben
+  // nur fuer die Lernberatung. Bei Talks gehoeren Flammen und Qualitaets-Emoji zur Bewertung,
+  // und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
+  const fachbuero = s.typ === 'input' && !subj.nurZugewiesen;
+  const schnell = darf && gelaufen && s.typ === 'input' && !fachbuero;
   // Echte <button>, keine anklickbaren <span>: nur so sind die Entscheidungen auch
   // per Tastatur erreichbar, und aria-label sagt an, was ✓/✗/× bedeuten.
   const ja = (ruf, titel) => ` <button type="button" class="aw-btn" onclick="${ruf}" title="${titel}" aria-label="${titel}">✓</button>`;
@@ -6718,7 +6740,8 @@ function awRenderBar() {
   const leute = [];
   if (s.presenterUsername) {
     const st = s.presentedStatus;
-    const zustand = st === 'erledigt' ? '✓ da gewesen' : st === 'nicht_erledigt' ? '✗ gefehlt'
+    const zustand = st === 'nicht_erledigt' ? (fachbuero ? '✗ gefehlt (zählt nicht)' : '✗ gefehlt')
+      : st === 'erledigt' && !fachbuero ? '✓ da gewesen'
       : (s.typ === 'input' ? 'hat gebucht' : 'hält den Talk');
     const klasse = st === 'erledigt' ? 'pill-green' : st === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
     const knoepfe = (schnell
@@ -6750,9 +6773,15 @@ function awRenderBar() {
       return;
     }
     const att = iv.attendedStatus;
-    const zustand = att === 'erledigt' ? '✓ da gewesen' : att === 'nicht_erledigt' ? '✗ gefehlt'
+    // Fachbuero: eingetragen = dabei, ab dem Termintag = teilgenommen. Ein frueher
+    // eingetragenes "gefehlt" zaehlt weiter nicht.
+    const fbDabei = fachbuero && iv.status === 'angenommen' && att !== 'nicht_erledigt';
+    const zustand = att === 'nicht_erledigt' ? (fachbuero ? '✗ gefehlt (zählt nicht)' : '✗ gefehlt')
+      : fbDabei ? (gelaufen ? '✓ teilgenommen' : (invEingeteilt(iv) ? invStatusText(iv) : '✓ dabei'))
+      : att === 'erledigt' ? '✓ da gewesen'
       : invStatusText(iv);
-    const klasse = att === 'erledigt' ? 'pill-green' : att === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
+    const klasse = att === 'nicht_erledigt' ? 'pill-red'
+      : (att === 'erledigt' || (fbDabei && gelaufen)) ? 'pill-green' : 'pill-blue';
     const knoepfe = (schnell
       ? ja(`awAnwesenheit(${iv.id}, 'erledigt')`, 'War da')
         + nein(`awAnwesenheit(${iv.id}, 'nicht_erledigt')`, 'Hat gefehlt')
@@ -6763,6 +6792,7 @@ function awRenderBar() {
   const hinweis = !darf ? 'Termin einer anderen Lernbegleitung.'
     : !leute.length ? 'Noch niemand auf diesem Termin.'
     : (s.typ === 'talk' && gelaufen) ? 'Talks werden im Talks-Tab bewertet (Flammen).'
+    : fachbuero ? 'Wer eingetragen ist, hat teilgenommen. × nimmt jemanden heraus – dann zählt es nicht.'
     : !gelaufen ? 'Teilnahme eintragen geht ab dem Termintag; × nimmt jemanden schon vorher wieder raus.'
     : '✓ war da · ✗ hat gefehlt · × ganz vom Termin nehmen (ohne Fehlzeit).';
   // Der Server loescht keinen gebuchten Termin (409) - sonst gingen Teilnahmen verloren.
@@ -6891,7 +6921,7 @@ function renderAdminWeek() {
            <span>Buchstabe/Farbe = Fach</span>
            <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
            <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
-           <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar · noch Plätze frei = Fachbüro, mitmachen anfragen geht</span>
+           <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar · noch Plätze frei = Fachbüro, mitmachen geht</span>
            <span><span class="lw-legende-feld ist-vergeben"></span> vergeben, voll (keine Anmeldung mehr) oder vorbei</span>
            <span><b>von dir</b> = du bist als Lernbegleitung eingetragen</span>
            <span>Name ohne Zeichen = alles erledigt</span>
@@ -7118,7 +7148,7 @@ function hjDetailHtml(s, subjectKey) {
   // Ein Termin, der erst noch kommt, ist etwas anderes - sonst sieht es aus, als waere
   // da etwas liegengeblieben.
   const heuteHj = new Date().toISOString().slice(0, 10);
-  const fabuePill = t => t.status === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ da gewesen</span>'
+  const fabuePill = t => t.status === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ teilgenommen</span>'
     : t.status === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ gefehlt</span>'
     : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
