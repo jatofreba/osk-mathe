@@ -16,7 +16,8 @@ const stubs = `
 const code = schneide('const LW_TALK_TEXT') + schneide('function lwBadge(typ, buchstabe, farbe) {') + schneide('function invEingeteilt(iv) {') + schneide('const AW_NAMEN_MAX')
            + schneide('function awPersonenHtml(leute) {') + schneide('function slotVorbei(s) {')
            + schneide('function lwBuchbar(s) {') + schneide('function lwPlaetzeFrei(s) {') + schneide('function lwFreiKlasse(s) {')
-           + schneide('function lwStandText(s, sonst) {') + schneide('function awChip(s) {');
+           + schneide('function lwStandText(s, sonst) {') + schneide('function lwThemaOhneFrei(text) {')
+           + schneide('function awChip(s) {');
 const bau = (me, s) => new Function('FAECHER', 'me', stubs + code + '\nreturn awChip;')(FAECHER, me)(s);
 const LB = { role: 'admin', userId: 7, username: 'herf' };
 const slot = inv => ({ id: 5, subjectId: 1, typ: 'input', datum: '2026-09-18', uhrzeit: '08:45',
@@ -67,6 +68,17 @@ const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenomme
   pruefe('T6 nicht gebucht und nicht buchbar: Text der Ansicht', t({ geschlossen: true }) === 'sonst');
   pruefe('T7 oeffentliche Woche (ohne presentedStatus): gebucht und offen heisst noch Plätze frei',
     t({ booked: true }) === 'noch Plätze frei');
+}
+
+// --- das ausgeschriebene Thema steht auch an einem freien Termin (2026-10-04) ---
+{
+  const zukunft = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  const frei = bau(LB, { id: 9, subjectId: 1, typ: 'input', datum: zukunft, uhrzeit: '12:55', booked: false,
+    teacherUsername: 'herf', slotThema: 'Mathe-Talks erklärt', invitees: [] });
+  pruefe('TH1 freier Termin: das ausgeschriebene Thema steht an der Kachel und im Tooltip',
+    frei.includes('„Mathe-Talks erklärt“') && frei.includes('Thema: Mathe-Talks erklärt'), frei);
+  const gebucht = bau(LB, slot([p('merle')]));
+  pruefe('TH2 gebuchter Termin: weiter das Thema der Buchung', gebucht.includes('„Begrüßung“'), gebucht);
 }
 
 // --- klein: Namen als Text -------------------------------------------------

@@ -6713,9 +6713,13 @@ function awChip(s) {
     s.teacherUsername ? escHtml(formatTeacherShort(s.teacherUsername)) : '',
   ].filter(Boolean);
 
+  // Am gebuchten Termin gilt das Thema der Buchung, am freien das ausgeschriebene
+  // (ein fuehrendes "frei" faellt weg - der Status sagt es schon). Vorher stand das
+  // ausgeschriebene Thema nur in der Leiste darunter, nicht an der Kachel (2026-10-04).
+  const themaText = s.booked ? (s.thema || '') : lwThemaOhneFrei(s.slotThema || '');
   const tip = escHtml([subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
-    s.thema ? 'Thema: ' + s.thema : '',
+    themaText ? 'Thema: ' + themaText : '',
     s.booked ? (plaetze ? 'gebucht · noch Plätze frei' : 'gebucht') : (lwBuchbar(s) ? 'frei' : 'nicht gebucht')]
     .filter(Boolean).join(' · '));
   // Fach nur als Buchstaben-Badge, Talk/Fachbüro nur als Piktogramm - analog zur
@@ -6732,7 +6736,7 @@ function awChip(s) {
        : plaetze ? plaetzeHtml : '');
   // Thema mit anzeigen (nicht nur im Tooltip): es sagt auf einen Blick, worum es
   // in dem Termin geht - und danach fragen Schueler:innen, wenn sie dazu wollen.
-  const themaHtml = s.booked && s.thema ? `„${escHtml(s.thema)}“` : '';
+  const themaHtml = themaText ? `„${escHtml(themaText)}“` : '';
   const line2 = [statusHtml, themaHtml].filter(Boolean).join(' · ');
 
   return `<div class="lw-chip mw-${state} ${lwFreiKlasse(s)}"${chipStyle} title="${tip}" aria-label="${tip}"
