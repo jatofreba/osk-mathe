@@ -12,7 +12,7 @@ const FAECHER = [
   { key: 'englisch', name: 'Englisch', color: '#ca8a04', nurZugewiesen: false },
   { key: 'beratung', name: 'Lernberatung', color: '#7c3aed', nurZugewiesen: true },
 ];
-const code = schneide('function hjDetailHtml(s, subjectKey) {');
+const code = schneide('function fachKurs(') + schneide('function hjDetailHtml(s, subjectKey) {');
 const bau = (student, subjectKey) => new Function('hjSelected', 'orderedSubjects', 'subjectByKey', `
   const escHtml = t => String(t == null ? '' : t);
   const hjFmtDate = d => d || ''; const hjLtTitle = k => k || '';
@@ -29,13 +29,15 @@ pruefe('H1b E gruen, G gelb - wie sonst auch im Projekt',
 pruefe('H2 Lernberatung ist nicht gekurst und bekommt keine Marke',
   (h.match(/-Kurs</g) || []).length === 2, h);
 
-h = bau(ich({ mathe: 'E' }), null);
-pruefe('H3 ein Fach ohne Wert bekommt nichts - kein geratenes E',
-  (h.match(/-Kurs</g) || []).length === 1, h);
-pruefe('H4 ganz ohne Kursungen bleibt alles wie bisher',
-  !bau(ich({}), null).includes('-Kurs<'), '');
+// Seit 2026-10-04 (Nutzerwunsch): jedes gekurste Fach zeigt seine Kursung - ohne
+// gespeicherten Wert E, wie in der Tandem-Uebersicht (vorher stand dort nichts).
+h = bau(ich({ mathe: 'G' }), null);
+pruefe('H3 ein Fach ohne Wert zeigt E',
+  (h.match(/-Kurs</g) || []).length === 2 && h.includes('>G-Kurs<') && h.includes('>E-Kurs<'), h);
+pruefe('H4 ganz ohne Kursungen: E bei jedem gekursten Fach, Lernberatung ohne',
+  (bau(ich({}), null).match(/>E-Kurs</g) || []).length === 2, '');
 pruefe('H5 auch ohne das Feld kein Absturz',
-  !bau({ byHalbjahr: { '2627_1': leer } }, null).includes('-Kurs<'), '');
+  (bau({ byHalbjahr: { '2627_1': leer } }, null).match(/>E-Kurs</g) || []).length === 2, '');
 
 h = bau(ich({ mathe: 'G', englisch: 'E' }), 'mathe');
 pruefe('H6 im Detail-Fenster (nur ein Fach) steht dessen Kursung',

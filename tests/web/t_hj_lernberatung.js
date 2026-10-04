@@ -18,6 +18,7 @@ const bau = (studenten, zaehlt = true) => {
     const document = { getElementById: () => el };
     const SUBJ_ = ${JSON.stringify(SUBJ)};
     ${schneide('function renderHalbjahr() {')}
+    ${schneide('function fachKurs(')}
     ${schneide('function hjDetailHtml(s, subjectKey) {')}
     return { renderHalbjahr, hjDetailHtml };`);
   return { api: f({ students: studenten }, el, zaehlt), el };

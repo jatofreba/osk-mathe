@@ -7,7 +7,7 @@ const pruefe = (n, b, e) => { if (!b) { console.error('FAIL: ' + n + (e ? '\n   
 const schneide = k => { const a = html.indexOf(k); return html.slice(a, html.indexOf('\n}\n', a) + 2); };
 
 const FAECHER = [{ key: 'mathe', name: 'Mathe', color: '#2563eb' }];
-const code = schneide('function hjDetailHtml(s, subjectKey) {');
+const code = schneide('function fachKurs(') + schneide('function hjDetailHtml(s, subjectKey) {');
 const bauen = (b, subjectKey) => new Function('hjSelected', 'orderedSubjects', 'subjectByKey', `
   const escHtml = t => String(t == null ? '' : t);
   const hjFmtDate = d => d || '';

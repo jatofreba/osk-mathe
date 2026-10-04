@@ -313,7 +313,7 @@ function dialog(me, calData, calClassmates) {
   // 10) Halbjahr: LZK je Fach
   // =======================================================================
   {
-    const detail = schneide('function hjDetailHtml(s, subjectKey) {');
+    const detail = schneide('function fachKurs(') + schneide('function hjDetailHtml(s, subjectKey) {');
     const hj = '2627_1';
     const person = { id: 3, username: 'merle', byHalbjahr: { [hj]: {
       lzk: [{ lerntheke: 'kreise-und-zylinder', typ: 'Basis', status: 'bestanden', pokale: 2, datum: HEUTE, subjectId: 1, thema: '' },

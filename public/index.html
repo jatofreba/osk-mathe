@@ -1929,6 +1929,18 @@ function hjCountsForUser(hj, firstHalbjahr, lastHalbjahr) {
 // Faecher, die als Angebot ausgespielt werden - also ohne die "nur zugewiesen"-Eintraege
 // (Lernberatung): dort gibt es keine Talks, nichts zu buchen und keine Flammen-Vorgaben.
 // Solche Termine legt die Lernbegleitung an und ordnet sie einzelnen Personen zu.
+// Kursung eines Fachs für die Anzeige. Ohne gespeicherten Wert gilt E - so zeigt es
+// auch die Tandem-Übersicht, in der die Kursung gepflegt wird, und so ist es der
+// Standard der Kurs-Tabelle (user_subject_kurs). Für Mathe zählt notfalls der alte
+// Spiegel users.kurs. "Nur zugewiesen"-Fächer (Lernberatung) sind nicht gekurst: ''.
+// Vorher stand bei Fächern ohne gespeicherten Wert gar nichts - in "Mein Halbjahr"
+// fehlte dann die Kursung für Englisch und Deutsch (Nutzerwunsch 2026-10-04).
+function fachKurs(kurse, subj, matheKurs) {
+  if (!subj || subj.nurZugewiesen) return '';
+  const k = (kurse || {})[subj.key] || (subj.key === 'mathe' ? matheKurs : '');
+  return k === 'G' ? 'G' : 'E';
+}
+
 function angebotsFaecher() {
   const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
   return list.filter(s => !s.nurZugewiesen);
@@ -3871,9 +3883,8 @@ async function showApp() {
       // Kopfzeile war deshalb bestenfalls die Mathe-Kursung und im schlechteren Fall
       // schlicht falsch. Jetzt je Angebotsfach ein Fach-Badge mit seinem Buchstaben;
       // "nur zugewiesen"-Fächer (Lernberatung) sind nicht gekurst und bleiben draußen.
-      const kurse = me.subjectKurs || {};
       const teile = angebotsFaecher()
-        .map(subj => ({ subj, kurs: kurse[subj.key] || (subj.key === 'mathe' ? me.kurs : null) }))
+        .map(subj => ({ subj, kurs: fachKurs(me.subjectKurs, subj, me.kurs) }))
         .filter(x => x.kurs)
         .map(({ subj, kurs }) =>
           `<span class="bar-kurs-fach" title="${escHtml(subj.name)}: ${escHtml(kurs)}-Kurs">`
@@ -7177,11 +7188,10 @@ function hjDetailHtml(s, subjectKey) {
   };
 
   // Kursung neben dem Fachnamen: "G-Kurs und noch nichts gemacht" liest sich anders
-  // als dieselbe Auswertung im E-Kurs. "Nur zugewiesen"-Fächer (Lernberatung) sind
-  // nicht gekurst; fehlt ein Wert, steht auch nichts da statt eines geratenen 'E'.
+  // als dieselbe Auswertung im E-Kurs. Je Fach - ohne gespeicherten Wert E, wie in der
+  // Tandem-Übersicht (fachKurs); "Nur zugewiesen"-Fächer (Lernberatung) bekommen nichts.
   const kursMarke = (subj) => {
-    if (subj.nurZugewiesen) return '';
-    const k = (s.subjectKurs || {})[subj.key];
+    const k = fachKurs(s.subjectKurs, subj, s.kurs);
     if (!k) return '';
     return `<span class="pill ${k === 'G' ? 'pill-yellow' : 'pill-green'}" style="font-size:10px;">${escHtml(k)}-Kurs</span>`;
   };
