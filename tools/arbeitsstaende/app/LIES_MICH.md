@@ -116,12 +116,28 @@ Namen ändern sich.
   klären lässt (beide Seiten verschieden geändert, kein passender Baustein),
   steht darunter zum Lesen. Die Einzelschritte liegen unter *Lerntheken-App →
   Einzelne Schritte*.
-- **LZK einer Lerntheke aus dem LZK-Reiter oder Kalender**: dort angelegte LZK
-  haben keine Lerntheke, nur ein Thema. Heißt das Thema wie eine Lerntheke
-  (Groß/klein egal), gilt sie als deren LZK und steht in der Lerntheken-Zeile;
-  verschiebst du sie dort, wird genau diese LZK online geändert (keine zweite).
-  Ausnahme: gibt es einen **eigenen** Baustein mit genau diesem Namen, bekommt
-  der die LZK, wie bisher.
+- **Online festgelegte LZK einem Baustein zuordnen** (seit 2026-10-04): Jede LZK
+  aus OSKlar – zu einer Lerntheke oder frei angelegt –, die noch zu keinem deiner
+  Bausteine gehört, steht in der Vorschau unter „⬇ Kommt in diese Liste“ mit einem
+  **Vorschlag**: dein gleichnamiger Baustein („Baustein Kreise“ → „Kreise“;
+  Groß/klein, „&“/„und“ egal). Eine Zeile markieren, dann unten den Baustein
+  wählen – oder „＋ neuer Baustein“. **„Für alle mit dieser LZK übernehmen“**
+  setzt dieselbe Wahl bei allen anderen Personen (je Person ihr Baustein dieses
+  Namens). Die Wahl merkt sich die Datei: beim nächsten Mal ist sie der
+  Vorschlag (ansehen/vergessen: *Einzelne Schritte → Gemerkte
+  LZK-Zuordnungen…*). „— nie zuordnen —“ fragt für diese Lerntheke bzw. dieses
+  Thema nicht mehr (Lerntheken-LZK bleiben dann in der App-Zeile).
+  Zugeordnet ist zugeordnet: Termin und Ergebnis gleichen sich danach in beide
+  Richtungen ab, die App-Zeile zeigt nur noch den Stationsstand; was dort an
+  Note/Bemerkung zu dieser LZK stand, zieht in den Baustein mit um.
+- **Halbjahr zählt**: Eine LZK kommt nie in einen Platz, der schon eine LZK aus
+  einem anderen Halbjahr trägt – dann ist der Vorschlag ein neuer Baustein fürs
+  Halbjahr der LZK. Ein anderer Termin im selben Halbjahr gilt als dieselbe,
+  verschobene LZK (Note und Ergebnis bleiben). Wählst du bewusst einen belegten
+  Platz, wandert dessen alter Stand in die Bemerkung des Bausteins.
+  Steht eine LZK schon im Baustein eines anderen Halbjahres und sind dort noch
+  Spuren einer früheren LZK (Note), bietet die Vorschau an, sie in einen eigenen
+  Baustein ihres Halbjahres **umzuziehen**.
 - **Einzelne Schritte → Ergebnisse abrufen…**: holt Talks, Fachbüro, Flammen,
   Stationen und LZK in die Bausteinlisten -- je Halbjahr eine Zeile pro
   bearbeiteter Lerntheke und eine für Talks/Fachbüro. Freie Mathe-LZK, die mit
@@ -247,6 +263,12 @@ Fachbüro-Besuche (mit Daten) und die Mathe-Talks. Oben lässt sich das Halbjahr
 wechseln und die **HJ-Note** für genau dieses Halbjahr eintragen. Sie wird
 übernommen, sobald man das Halbjahr wechselt oder das Fenster schließt. „Text
 kopieren“ legt die Zusammenfassung in die Zwischenablage.
+
+**Halbjahr folgt dem Status** (seit 2026-10-04): Stellst du im Baustein-Formular
+den Status auf „In Bearbeitung“ oder „Abgeschlossen“, springt das Feld Halbjahr
+sofort auf das laufende Halbjahr – sichtbar, du kannst es vor dem Übernehmen noch
+ändern. Ein selbst eingetragenes Halbjahr wird nie überschrieben; stellst du den
+Status zurück, kehrt der alte Wert zurück.
 
 Die HJ-Note wird jetzt pro Halbjahr gespeichert. Das Feld „HJ-Note (lfd. HJ)“ im
 Personenkopf ist die Note des laufenden Halbjahres. Eine Note aus einer älteren

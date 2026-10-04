@@ -25,7 +25,8 @@ from arbeitsstaende_data import (
     lt_mathe_talks, lt_talks_uebernehmen, lt_talks_hochladen_liste, talk_hochgeladen,
     talk_wartet, talks_je_halbjahr, talks_zusammenfassung,
     hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
-    verknuepfte_lzk_ids, lzk_lerntheken_zuordnen, eigene_baustein_namen,
+    verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_optionen, lzk_ziel_nach_name, lzk_ziel_text,
+    lzk_zuordnen, lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -215,6 +216,14 @@ class BausteinDialog(tk.Toplevel):
             self.vars[feld] = var
             row += 1
 
+        # Wechselt der Status auf "In Bearbeitung" oder "Abgeschlossen", gehoert der
+        # Baustein ins laufende Halbjahr - sofort sichtbar im Feld, damit man es vor
+        # dem Uebernehmen noch aendern kann (Nutzerwunsch 2026-10-04).
+        self._status_vorher = b.status or ""
+        self._hj_vorher = (b.halbjahr or "").strip()
+        self._hj_auto = None
+        self.vars["status"].trace_add("write", self._status_geaendert)
+
         btns = ttk.Frame(self)
         btns.grid(row=row, column=0, columnspan=2, pady=10)
         ttk.Button(btns, text="Übernehmen", command=self._uebernehmen).pack(side="left", padx=4)
@@ -228,6 +237,13 @@ class BausteinDialog(tk.Toplevel):
         """Enter im Textfeld: Zeile umbrechen, Ereignis nicht weiterreichen."""
         event.widget.insert("insert", "\n")
         return "break"
+
+    def _status_geaendert(self, *_):
+        feld, self._hj_auto = hj_nach_statuswechsel(
+            self._status_vorher, self.vars["status"].get(), self._hj_vorher,
+            self.vars["halbjahr"].get().strip(), self._hj_auto)
+        if feld != self.vars["halbjahr"].get().strip():
+            self.vars["halbjahr"].set(feld)
 
     def _uebernehmen(self):
         try:
@@ -620,20 +636,28 @@ class HjZusammenfassungDialog(tk.Toplevel):
 class SyncDialog(tk.Toplevel):
     """Vorschau beim Synchronisieren: was hereinkommt, was hinausgeht, was offen ist.
 
-    `posten` ist eine Liste von dicts {"gruppe", "person", "text", "an"}; jede Zeile
-    laesst sich per Klick an- und abwaehlen. `hinweise` sind nur zum Lesen.
+    `posten` sind dicts {"gruppe", "person", "text", "an"}. Posten mit "art" ==
+    "zuordnen" tragen zusaetzlich ein "ziel" (siehe lzk_zuordnungen); fuer sie
+    zeigt die Vorschau unter der Liste eine Auswahl: `optionen(posten)` liefert
+    [(Text, Ziel)], `nach_name(posten, name)` das Ziel fuer "für alle
+    übernehmen", `text(posten)` den Zeilentext. `hinweise` sind nur zum Lesen.
     `result` ist danach die Menge der gewaehlten Indizes (oder None bei Abbruch).
     """
 
     GRUPPEN = (("herein", "⬇ Kommt in diese Liste"), ("raus", "⬆ Geht zum Server"))
 
-    def __init__(self, parent, posten: list, hinweise: list, klasse: str, abruf_text: str):
+    def __init__(self, parent, posten: list, hinweise: list, klasse: str, abruf_text: str,
+                 optionen=None, nach_name=None, text=None):
         super().__init__(parent)
         self.title("Synchronisieren")
         self.result = None
         self.transient(parent)
         self.grab_set()
         self.posten = posten
+        self._optionen, self._nach_name = optionen, nach_name
+        self._text = text or (lambda p: p.get("text", ""))
+        self._opts = []
+        self._aktuell = None
         self.an = {i for i, p in enumerate(posten) if p.get("an", True)}
 
         ttk.Label(self, text=f"Tandem {klasse} — abgerufen ist schon alles. "
@@ -644,7 +668,7 @@ class SyncDialog(tk.Toplevel):
         # scrollbaren Feld, sonst rutschen die Knoepfe unter den Bildschirmrand.
         bericht = ttk.Frame(self)
         bericht.pack(fill="x", padx=10)
-        feld = tk.Text(bericht, height=6, width=100, wrap="word", relief="flat",
+        feld = tk.Text(bericht, height=5, width=100, wrap="word", relief="flat",
                        foreground="#555", background=self.cget("background"))
         feld.insert("1.0", abruf_text)
         feld.config(state="disabled")
@@ -655,11 +679,11 @@ class SyncDialog(tk.Toplevel):
 
         rahmen = ttk.Frame(self)
         rahmen.pack(fill="both", expand=True, padx=10, pady=6)
-        self.baum = ttk.Treeview(rahmen, columns=("text",), show="tree headings", height=16)
-        self.baum.heading("#0", text="Person")
+        self.baum = ttk.Treeview(rahmen, columns=("text",), show="tree headings", height=14)
+        self.baum.heading("#0", text="☑ Person")
         self.baum.heading("text", text="Was")
         self.baum.column("#0", width=230)
-        self.baum.column("text", width=520)
+        self.baum.column("text", width=620)
         sb = ttk.Scrollbar(rahmen, command=self.baum.yview)
         self.baum.config(yscrollcommand=sb.set)
         self.baum.pack(side="left", fill="both", expand=True)
@@ -671,7 +695,7 @@ class SyncDialog(tk.Toplevel):
             self.baum.insert("", "end", iid=gruppe, text=f"{titel} ({len(zeilen)})", open=True)
             for i, p in zeilen:
                 self.baum.insert(gruppe, "end", iid=str(i), text=self._marke(i) + p["person"],
-                                 values=(p["text"],))
+                                 values=(self._text(p),))
         if hinweise:
             self.baum.insert("", "end", iid="hinweise",
                              text=f"ℹ Nicht automatisch – bitte ansehen ({len(hinweise)})", open=False)
@@ -679,10 +703,27 @@ class SyncDialog(tk.Toplevel):
                 self.baum.insert("hinweise", "end", iid=f"h{j}", text=h[0], values=(h[1],))
         self.baum.bind("<Button-1>", self._klick)
         self.baum.bind("<space>", lambda e: self._umschalten(self.baum.focus()))
+        self.baum.bind("<<TreeviewSelect>>", lambda e: self._markiert())
 
-        ttk.Label(self, text="Klick auf eine Zeile wählt sie an oder ab. Nichts wird gelöscht; "
-                             "leere Felder überschreiben auf keiner Seite etwas.",
-                  foreground="#555").pack(anchor="w", padx=10)
+        # Auswahl des Bausteins fuer die markierte LZK (nur, wenn es etwas zuzuordnen gibt)
+        self.ziel_box = self.btn_alle = None
+        if any(p.get("art") == "zuordnen" for p in posten):
+            zr = ttk.LabelFrame(self, text="Baustein für die markierte LZK", padding=6)
+            zr.pack(fill="x", padx=10, pady=(0, 4))
+            self.ziel_var = tk.StringVar()
+            self.ziel_box = ttk.Combobox(zr, textvariable=self.ziel_var, state="disabled", width=86)
+            self.ziel_box.pack(side="left", fill="x", expand=True)
+            self.ziel_box.bind("<<ComboboxSelected>>", lambda e: self._ziel_gewaehlt())
+            self.btn_alle = ttk.Button(zr, text="Für alle mit dieser LZK übernehmen",
+                                       command=self._fuer_alle, state="disabled")
+            self.btn_alle.pack(side="left", padx=(6, 0))
+            self.ziel_hinweis = ttk.Label(self, text="", foreground="#555")
+            self.ziel_hinweis.pack(anchor="w", padx=10)
+
+        ttk.Label(self, text="Ein Klick auf ☑/☐ wählt an oder ab; eine LZK markieren, dann unten den "
+                             "Baustein wählen. Nichts wird gelöscht; was ein belegter Platz vorher "
+                             "enthielt, wandert in die Bemerkung des Bausteins.",
+                  foreground="#555", wraplength=860, justify="left").pack(anchor="w", padx=10)
         btns = ttk.Frame(self)
         btns.pack(pady=10)
         self.btn_ok = ttk.Button(btns, text="Ausgewählte übernehmen", command=self._ok)
@@ -696,19 +737,143 @@ class SyncDialog(tk.Toplevel):
     def _marke(self, i) -> str:
         return "☑ " if i in self.an else "☐ "
 
+    def _zeichnen(self, i):
+        p = self.posten[i]
+        self.baum.item(str(i), text=self._marke(i) + p["person"], values=(self._text(p),))
+
     def _umschalten(self, iid):
-        if not iid or not iid.isdigit():
+        if not iid or not str(iid).isdigit():
             return
         i = int(iid)
+        p = self.posten[i]
+        # Eine Zuordnung ohne Ziel laesst sich nicht anwaehlen - erst den Baustein waehlen.
+        if p.get("art") == "zuordnen" and i not in self.an and not (p.get("ziel") and p["ziel"][0] != "nicht"):
+            return
         self.an.symmetric_difference_update({i})
-        self.baum.item(iid, text=self._marke(i) + self.posten[i]["person"])
+        self._zeichnen(i)
 
     def _klick(self, event):
-        self._umschalten(self.baum.identify_row(event.y))
+        # Nur ein Klick in die erste Spalte (☑/☐ + Person) schaltet um - sonst
+        # wuerde schon das Markieren einer Zeile zum Waehlen des Bausteins umschalten.
+        if self.baum.identify_column(event.x) == "#0":
+            self._umschalten(self.baum.identify_row(event.y))
+
+    def _markiert(self):
+        if self.ziel_box is None:
+            return
+        auswahl = self.baum.selection()
+        i = int(auswahl[0]) if len(auswahl) == 1 and auswahl[0].isdigit() else None
+        if i is None or self.posten[i].get("art") != "zuordnen" or self._optionen is None:
+            self._aktuell = None
+            self.ziel_var.set("")
+            self.ziel_box.config(state="disabled", values=())
+            self.btn_alle.config(state="disabled")
+            return
+        self._aktuell = i
+        p = self.posten[i]
+        self._opts = self._optionen(p)
+        self.ziel_box.config(state="readonly", values=[t for t, _ in self._opts])
+        jetzt = next((t for t, z in self._opts if self._gleich(z, p.get("ziel"))), "")
+        self.ziel_var.set(jetzt)
+        self.btn_alle.config(state="normal" if p.get("ziel") else "disabled")
+
+    @staticmethod
+    def _gleich(a, b) -> bool:
+        if not a or not b or a[0] != b[0]:
+            return False
+        if a[0] == "baustein":
+            return a[1] is b[1]
+        return tuple(a) == tuple(b)
+
+    def _ziel_setzen(self, i, ziel):
+        p = self.posten[i]
+        p["ziel"] = ziel
+        if ziel and ziel[0] != "nicht":
+            self.an.add(i)
+        else:
+            self.an.discard(i)
+        self._zeichnen(i)
+
+    def _ziel_gewaehlt(self):
+        if self._aktuell is None:
+            return
+        idx = self.ziel_box.current()
+        if idx < 0:
+            return
+        self._ziel_setzen(self._aktuell, self._opts[idx][1])
+        self.btn_alle.config(state="normal")
+
+    def _fuer_alle(self):
+        """Dieselbe Wahl fuer alle anderen Zuordnungen derselben LZK-Art (gleiche
+        Lerntheke bzw. gleiches Thema): je Person ihr gleichnamiger Baustein."""
+        if self._aktuell is None:
+            return
+        p = self.posten[self._aktuell]
+        ziel = p.get("ziel")
+        if not ziel:
+            return
+        name = ziel[1].name if ziel[0] == "baustein" else (ziel[1] if ziel[0] == "neu" else None)
+        n = 0
+        for i, q in enumerate(self.posten):
+            if q is p or q.get("art") != "zuordnen" or q["z"]["schluessel"] != p["z"]["schluessel"]:
+                continue
+            if name is None:
+                self._ziel_setzen(i, ziel)
+            elif self._nach_name is not None:
+                self._ziel_setzen(i, self._nach_name(q, name))
+            n += 1
+        self.ziel_hinweis.config(text=f"Für {n} weitere LZK übernommen – bitte kurz durchsehen.")
 
     def _ok(self):
         self.result = set(self.an)
         self.destroy()
+
+
+class LzkZieleDialog(tk.Toplevel):
+    """Gemerkte Zuordnungen online-LZK -> Baustein ansehen und einzelne vergessen
+    (dann fragt das Synchronisieren dort wieder nach)."""
+
+    def __init__(self, parent, ziele: dict):
+        super().__init__(parent)
+        self.title("Gemerkte LZK-Zuordnungen")
+        self.transient(parent)
+        self.grab_set()
+        self.ziele = ziele
+        self.geaendert = False
+        ttk.Label(self, text="So ordnet das Synchronisieren LZK aus OSKlar vor (je Lerntheke bzw. Thema):",
+                  justify="left").pack(anchor="w", padx=10, pady=(10, 4))
+        rahmen = ttk.Frame(self)
+        rahmen.pack(fill="both", expand=True, padx=10)
+        self.liste = tk.Listbox(rahmen, height=12, width=70, selectmode="extended", activestyle="none")
+        self.liste.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.liste.yview)
+        sb.pack(side="right", fill="y")
+        self.liste.config(yscrollcommand=sb.set)
+        self._schluessel = []
+        self._fuellen()
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=10, pady=10)
+        ttk.Button(btns, text="Markierte vergessen", command=self._vergessen).pack(side="left")
+        ttk.Button(btns, text="Schließen", command=self.destroy).pack(side="right")
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _fuellen(self):
+        self.liste.delete(0, "end")
+        self._schluessel = sorted(self.ziele, key=lambda k: (self.ziele[k].get("titel") or k).lower())
+        for k in self._schluessel:
+            v = self.ziele[k]
+            ziel = "nie zuordnen" if v.get("name") == LZK_ZIEL_NIE else f"„{v.get('name')}“"
+            art = "Lerntheke" if k.startswith("lt:") else "Thema"
+            self.liste.insert("end", f"{art} „{v.get('titel') or k.split(':', 1)[-1]}“  →  {ziel}")
+        if not self._schluessel:
+            self.liste.insert("end", "(noch nichts gemerkt)")
+
+    def _vergessen(self):
+        for i in sorted(self.liste.curselection(), reverse=True):
+            if i < len(self._schluessel):
+                self.ziele.pop(self._schluessel[i], None)
+                self.geaendert = True
+        self._fuellen()
 
 
 class VorlageDialog(tk.Toplevel):
@@ -1299,6 +1464,8 @@ class App(tk.Tk):
                             command=self.lzk_ergebnisse_abgleichen)
         einzeln.add_command(label="Kursungen abgleichen…",
                             command=self.kursungen_abgleichen)
+        einzeln.add_separator()
+        einzeln.add_command(label="Gemerkte LZK-Zuordnungen…", command=self.lzk_ziele_zeigen)
         lerntheke_menu.add_cascade(label="Einzelne Schritte", menu=einzeln)
         lerntheke_menu.add_separator()
         lerntheke_menu.add_command(label="Aliasse exportieren…", command=self.aliasse_exportieren)
@@ -2608,10 +2775,7 @@ class App(tk.Tk):
                 continue
             status, pokale = ziel
             try:
-                if u.get("ueber_thema") and u.get("id"):
-                    client.lzk_aendern(u["id"], status=status, pokale=pokale)
-                else:
-                    client.lzk_setzen(u["user_id"], u["lerntheke"], u["typ"], u["datum_server"], status, pokale)
+                client.lzk_setzen(u["user_id"], u["lerntheke"], u["typ"], u["datum_server"], status, pokale)
             except Exception as e:
                 fehler.append(f"{zeile(u)}: {e}")
                 continue
@@ -2989,9 +3153,6 @@ class App(tk.Tk):
             # davon lebt der Abgleich der LZK-Termine. Die Lerntheken-Titel
             # braucht der Abruf nicht; die holt der Abgleich bei Bedarf.
             konten = self._lt_konten = client.studierende()
-            # LZK aus dem LZK-Reiter mit dem Namen einer Lerntheke gehoeren in deren Zeile.
-            self._konten_zuordnen(konten, {lt.get("key"): lt.get("title")
-                                           for lt in lerntheken or [] if lt.get("key")})
         except Exception as e:
             messagebox.showerror("Ergebnisse abrufen", f"Abruf fehlgeschlagen:\n{e}")
             return
@@ -3102,8 +3263,8 @@ class App(tk.Tk):
     def synchronisieren(self):
         """Alles in einem Schritt: abrufen (wie "Ergebnisse abrufen", sicher im
         Drei-Wege-Abgleich), dann EINE Vorschau fuer alles, was bestaetigt werden
-        muss -- LZK aus OSKlar, die in noch leere Plaetze gehoeren, hier geaenderte
-        LZK-Termine und Talk-Bewertungen. Widersprueche stehen nur zum Lesen da."""
+        muss -- online-LZK ohne Baustein (mit Vorschlag und Auswahl), LZK im
+        falschen Halbjahr, hier geaenderte LZK-Termine und Talk-Bewertungen."""
         titel_fenster = "Synchronisieren"
         # Ein noch anstehender automatischer LZK-Versand liefe sonst mitten in die
         # Vorschau hinein; was er senden wollte, steht dort ohnehin zur Auswahl.
@@ -3125,30 +3286,37 @@ class App(tk.Tk):
             return
         je_konto = {(k.get("username") or "").lower(): k
                     for k in konten if k.get("aktiv", True)}
+        lokal = False
+        # Verknuepfungen, die nur hier entstehen (derselbe Termin hier und online),
+        # sofort setzen - sonst stuende dieselbe LZK gleich noch einmal zur Auswahl.
+        vorab, _, _ = self._lzk_frei_plan(konten, titel)
+        vorab = [a for a in vorab if a["art"] == "verknuepfen"]
+        if vorab and self._lzk_frei_uebertragen(client, vorab)[2]:
+            lokal = True
 
         posten, hinweise = [], []
-        # 1) Freie LZK aus OSKlar, die zu einem Baustein passen, dessen Platz hier noch leer ist
-        herein = []
+        ziele = self.az.lzk_ziele
         for st in self.az.students:
             konto = je_konto.get(st.alias.strip().lower()) if st.alias.strip() else None
             if not konto:
                 continue
-            paare, offen = lt_freie_lzk_abgleich(st, konto)
-            for x in paare:
-                if x["gleich"] or x["link"] is not None:
-                    continue
-                if x["hier_datum"] is None and not x["hier_erg"]:
-                    herein.append(x)
-                    teile = [fmt_datum(x["online_datum"]) or "ohne Datum"]
-                    if x["online_erg"]:
-                        teile.append(LZK_ERGEBNIS_TEXT.get(x["online_erg"], x["online_erg"]))
-                    posten.append({"gruppe": "herein", "art": "frei_herein", "x": x,
-                                   "person": st.voller_name,
-                                   "text": f"{x['baustein'].name}, LZK {x['nummer']}: " + ", ".join(teile)})
-            for o in offen:
-                person, _, rest = o.partition(": ")
-                hinweise.append((person, rest))
-        # 2) Hier geaenderte LZK-Termine
+            # 1) Online-LZK ohne Baustein: mit Vorschlag, der Baustein wird gewaehlt
+            for z in lzk_zuordnungen(st, konto, titel, ziele):
+                posten.append({"gruppe": "herein", "art": "zuordnen", "st": st, "z": z,
+                               "ziel": z["vorschlag"], "an": z["vorschlag"] is not None,
+                               "person": st.voller_name})
+            # 2) Schon verknuepft, aber im Baustein eines anderen Halbjahres
+            for t in lzk_falsches_halbjahr(st):
+                b = t["baustein"]
+                posten.append({"gruppe": "herein", "art": "umziehen", "st": st, "t": t,
+                               "person": st.voller_name,
+                               "text": f"{b.name} ({b.halbjahr}) LZK {t['nummer']} am {fmt_datum(t['datum'])} "
+                                       f"gehört ins Halbjahr {t['halbjahr']} → eigener Baustein für {t['halbjahr']}"})
+            for o in lt_freie_lzk_abgleich(st, konto, titel)[1]:
+                if "mehreren Bausteinen" in o:
+                    person, _, rest = o.partition(": ")
+                    hinweise.append((person, rest))
+        # 3) Hier geaenderte LZK-Termine
         aenderungen, uebersprungen, _ = self._lzk_offene_aenderungen(konten, titel)
         frei, frei_uebersprungen, _ = self._lzk_frei_plan(konten, titel)
         for a in aenderungen:
@@ -3164,7 +3332,7 @@ class App(tk.Tk):
                                    f"{fmt_datum(a.get('alt')) or '—'} → {fmt_datum(a.get('neu'))}"})
         for u in uebersprungen + frei_uebersprungen:
             hinweise.append((u["person"], f"{u['titel']} ({u['typ']}): {u['grund']}"))
-        # 3) Talk-Bewertungen
+        # 4) Talk-Bewertungen
         for st in self.az.students:
             for t, was, hier, online in lt_talks_hochladen_liste(st):
                 ziel = (talk_bewertung_text(MatheTalk(status=hier["status"], flammen=hier["flammen"],
@@ -3174,39 +3342,47 @@ class App(tk.Tk):
                                "person": st.voller_name,
                                "text": f"Talk {fmt_datum(t.datum)} „{t.thema}“: {ziel}"})
 
-        dlg = SyncDialog(self, posten, hinweise, klasse, abruf_text.replace("\nNoch speichern nicht vergessen.", ""))
+        dlg = SyncDialog(self, posten, hinweise, klasse,
+                         abruf_text.replace("\nNoch speichern nicht vergessen.", ""),
+                         optionen=lambda p: lzk_ziel_optionen(p["st"], p["z"]),
+                         nach_name=lambda p, name: lzk_ziel_nach_name(p["st"], p["z"], name),
+                         text=self._sync_text)
         self.wait_window(dlg)
         gewaehlt = [p for i, p in enumerate(posten) if dlg.result and i in dlg.result]
 
-        erledigt, fehler, lokal = [], [], False
-        # herein
-        uebernehmen = [p["x"] for p in gewaehlt if p["art"] == "frei_herein"]
-        for x in uebernehmen:
-            b, nr = x["baustein"], x["nummer"]
-            if x["online_datum"]:
-                setattr(b, f"lzk_datum_{nr}", x["online_datum"])
-            if x["online_erg"]:
-                setattr(b, f"lzk_ergebnis_{nr}", x["online_erg"])
-            erledigt.append(f"⬇ {x['person']} · {b.name} (LZK {nr})")
-        if uebernehmen and self._lzk_frei_verknuepfen(uebernehmen):
-            lokal = True
-        # raus: LZK
-        # Einzeln, damit der Bericht genau sagt, was durchging und was nicht.
+        erledigt, fehler, uebergangen = [], [], []
+        beruehrt = set()        # (id(Baustein), Platz) - gerade zugeordnet oder umgezogen
+        for p in gewaehlt:
+            if p["art"] == "zuordnen" and p.get("ziel") and p["ziel"][0] in ("baustein", "neu", "nie"):
+                zeile, b = lzk_zuordnen(p["st"], p["z"], p["ziel"], ziele)
+                if b is not None:
+                    beruehrt.add((id(b), p["z"]["nummer"]))
+                erledigt.append(f"⬇ {p['person']} · {zeile}")
+                lokal = True
+            elif p["art"] == "umziehen":
+                beruehrt.add((id(p["t"]["baustein"]), p["t"]["nummer"]))
+                erledigt.append(f"⬇ {p['person']} · {lzk_umziehen(p['st'], p['t'])}")
+                lokal = True
+        # raus: LZK -- einzeln, damit der Bericht genau sagt, was durchging. Was gerade
+        # zugeordnet wurde, geht nicht mehr den alten Weg (sonst kaeme ein alter Termin mit).
+        zugeordnet = verknuepfte_lzk_ids(self.az.students)
         for a in (p["a"] for p in gewaehlt if p["art"] == "lzk"):
+            if a.get("id") in zugeordnet:
+                uebergangen.append(f"{a['person']} · {a['titel']} ({a['typ']}-LZK): gehört jetzt zu einem Baustein")
+                continue
             g, f = self._lzk_uebertragen(client, [a])
             fehler += f
             if g:
                 erledigt.append(f"⬆ {a['person']} · {a['titel']} ({a['typ']}-LZK): {fmt_datum(a['neu'])}")
         for a in (p["a"] for p in gewaehlt if p["art"] == "frei"):
+            if (id(a["baustein"]), a["nummer"]) in beruehrt:
+                uebergangen.append(f"{a['person']} · {a['titel']} (LZK {a['nummer']}): gerade zugeordnet")
+                continue
             g, f, l, _ = self._lzk_frei_uebertragen(client, [a])
             fehler += f
             lokal = lokal or l
             if g:
                 erledigt.append(f"⬆ {a['person']} · {a['titel']} (LZK {a['nummer']}): {fmt_datum(a.get('neu'))}")
-        # Verknuepfungen ohne Serverzugriff gehoeren immer dazu (nur hier).
-        verknuepfen = [a for a in frei if a["art"] == "verknuepfen"]
-        if verknuepfen and self._lzk_frei_uebertragen(client, verknuepfen)[2]:
-            lokal = True
         # raus: Talks
         for p in gewaehlt:
             if p["art"] != "talk":
@@ -3234,6 +3410,8 @@ class App(tk.Tk):
         text = abruf_text
         if erledigt:
             text += f"\n\nÜbernommen bzw. gesendet ({len(erledigt)}):\n" + "\n".join(erledigt)
+        if uebergangen:
+            text += f"\n\nNicht gesendet ({len(uebergangen)}):\n" + "\n".join(uebergangen)
         if fehler:
             text += f"\n\nNicht geklappt ({len(fehler)}):\n" + "\n".join(fehler)
             messagebox.showwarning(titel_fenster, text)
@@ -3242,25 +3420,29 @@ class App(tk.Tk):
         else:
             self._melde(f"Synchronisiert um {datetime.now().strftime('%H:%M')} Uhr – alles auf dem gleichen Stand.")
 
+    @staticmethod
+    def _sync_text(p) -> str:
+        """Zeilentext in der Vorschau; bei Zuordnungen mit dem gerade gewaehlten Ziel."""
+        if p.get("art") != "zuordnen":
+            return p.get("text", "")
+        z = p["z"]
+        erg = f" ({LZK_ERGEBNIS_TEXT.get(z['ergebnis'], z['ergebnis'])})" if z["ergebnis"] else ""
+        typ = f"{z['typ']}-LZK" if z["typ"] in ("Basis", "Aufbau") else "LZK"
+        return f"„{z['titel']}“ {typ} am {fmt_datum(z['datum'])}{erg} → {lzk_ziel_text(p.get('ziel'))}"
+
+    def lzk_ziele_zeigen(self):
+        dlg = LzkZieleDialog(self, self.az.lzk_ziele)
+        self.wait_window(dlg)
+        if dlg.geaendert:
+            self._markiere_ungespeichert()
+
     def _lt_serverstand(self, client, neu_laden: bool = False):
         """Kontenliste und Lerntheken-Titel der Sitzung, bei Bedarf geholt."""
         if neu_laden or self._lt_konten is None:
             self._lt_konten = client.studierende()
         if neu_laden or self._lt_titel is None:
             self._lt_titel = client.lerntheken_titel()
-        self._konten_zuordnen(self._lt_konten, self._lt_titel)
         return self._lt_konten, self._lt_titel
-
-    def _konten_zuordnen(self, konten, titel):
-        """Freie LZK, deren Thema eine Lerntheke benennt, der Lerntheke zuordnen
-        (siehe lzk_lerntheken_zuordnen) -- bei jedem frisch geholten Stand."""
-        ids = verknuepfte_lzk_ids(self.az.students)
-        je_alias = {st.alias.strip().lower(): st for st in self.az.students if st.alias.strip()}
-        for konto in konten or []:
-            st = je_alias.get((konto.get("username") or "").strip().lower())
-            lzk_lerntheken_zuordnen(konto, titel or {}, ids,
-                                    eigene_baustein_namen(st) if st else ())
-        return konten
 
     def _lzk_offene_aenderungen(self, konten, titel):
         """(aenderungen, uebersprungen, ohne_konto) fuer alle Personen."""
@@ -3289,13 +3471,8 @@ class App(tk.Tk):
         gesendet, fehler = 0, []
         for a in aenderungen:
             try:
-                if a.get("ueber_thema") and a.get("id"):
-                    # Eine freie LZK mit dem Namen der Lerntheke: GENAU diese
-                    # verschieben, sonst stuende die LZK danach zweimal da.
-                    client.lzk_aendern(a["id"], datum=a["neu"])
-                else:
-                    client.lzk_setzen(a["user_id"], a["lerntheke"], a["typ"],
-                                      a["neu"], a["status"], a["pokale"])
+                client.lzk_setzen(a["user_id"], a["lerntheke"], a["typ"],
+                                  a["neu"], a["status"], a["pokale"])
             except Exception as e:
                 fehler.append(f"{a['person']} · {a['titel']} ({a['typ']}): {e}")
                 continue
@@ -3360,19 +3537,14 @@ class App(tk.Tk):
                 liste.append(eintrag)
 
     def _lzk_cache_frei_auffrischen(self, frisch):
-        """Die freien LZK im gemerkten Serverstand durch den frischen Stand ersetzen.
-        Die Lerntheken-LZK bleiben unberuehrt -- fuer sie aendert sich nichts."""
+        """Die LZK im gemerkten Serverstand durch den frischen Stand ersetzen - alle:
+        auch Lerntheken-LZK haengen inzwischen an eigenen Bausteinen (lzk_zuordnen),
+        und ein online verschobener Termin saehe sonst unveraendert aus."""
         je_id = {k.get("id"): k for k in frisch or []}
         for konto in self._lt_konten or []:
             neu = je_id.get(konto.get("id"))
-            if neu is None:
-                continue
-            # Ueber das Thema zugeordnete sind freie LZK: sie kommen frisch mit.
-            konto["lzk"] = ([e for e in (konto.get("lzk") or [])
-                             if e.get("lerntheke") and not e.get("ueber_thema")]
-                            + [e for e in (neu.get("lzk") or [])
-                               if not e.get("lerntheke") or e.get("ueber_thema")])
-        self._konten_zuordnen(self._lt_konten, self.__dict__.get("_lt_titel") or {})
+            if neu is not None:
+                konto["lzk"] = list(neu.get("lzk") or [])
 
     @staticmethod
     def _lzk_frei_verknuepfen(paare, ausser=()):
@@ -3478,7 +3650,6 @@ class App(tk.Tk):
             except Exception as e:
                 self.status_leiste.config(text=f"⚠ LZK-Abgleich nicht möglich: {e}")
                 return
-            self._konten_zuordnen(frisch, titel)
             self._lzk_cache_frei_auffrischen(frisch)
             frei, frei_uebersprungen, _ = self._lzk_frei_plan(frisch, titel)
         schreiben = aenderungen + [a for a in frei if a["art"] != "verknuepfen"]

@@ -90,6 +90,18 @@ s3 = D.Student(vorname="C", nachname="D", alias="c.d",
                bausteine=[D.Baustein(name="Bruchrechnung", halbjahr="2425_1"), D.Baustein(name="Bruchrechnung", halbjahr="2425_2")])
 p3, o3 = D.lt_freie_lzk_abgleich(s3, {"lzk": [eintrag(21, "Bruchrechnung")]})
 pruefe("Z9 bleibt es mehrdeutig, wird nichts geraten", not p3 and any("mehrere Bausteine" in o for o in o3), (p3, o3))
+# Seit 2026-10-04: ein Platz mit einer LZK aus einem ANDEREN Halbjahr kommt fuer eine neue LZK
+# nicht in Frage (sonst ueberschrieb sie dort den frueheren Termin, das alte Ergebnis blieb stehen).
+s3c = D.Student(vorname="C", nachname="D", alias="c.d",
+                bausteine=[D.Baustein(name="Bruchrechnung", halbjahr="2425_2", lzk_datum_1=date(2025, 5, 12),
+                                      lzk_ergebnis_1="2")])
+p3c, o3c = D.lt_freie_lzk_abgleich(s3c, {"lzk": [eintrag(24, "Bruchrechnung")]})
+pruefe("Z9c Platz mit LZK aus anderem Halbjahr: nicht zugeordnet, Hinweis",
+       not p3c and any("anderen Halbjahr" in o for o in o3c), (p3c, o3c))
+s3b = D.Student(vorname="C", nachname="D", alias="c.d",
+                bausteine=[D.Baustein(name="Bruchrechnung"), D.Baustein(name="Bruchrechnung")])
+p3b, o3b = D.lt_freie_lzk_abgleich(s3b, {"lzk": [eintrag(23, "Bruchrechnung")]})
+pruefe("Z9b bleibt es mehrdeutig, wird nichts geraten", not p3b and any("mehrere Bausteine" in o for o in o3b), (p3b, o3b))
 
 # gleich-Kennzeichen
 fertig = D.Baustein(name="Bruchrechnung", lzk_datum_1=date(2026, 10, 1), lzk_ergebnis_1="3")
@@ -182,14 +194,20 @@ client, merk, _ = lauf("server_zu_liste", [b1, b2, b3], [
 pruefe("R1 vom Server: leerer Platz bekommt Datum und Ergebnis",
        b1.lzk_datum_1 == date(2026, 10, 1) and b1.lzk_ergebnis_1 == "3", b1)
 pruefe("R1b die freie Note bleibt unberuehrt", b1.lzk_note_1 == "Teil 2 ueben", b1)
-pruefe("R2 ein abweichendes Datum wird uebernommen", b2.lzk_datum_2 == date(2026, 10, 5), b2)
-pruefe("R2b das alte Datum steht im Bericht", "12.05.2025" in (merk["bericht"] or ""), merk["bericht"])
+# Seit 2026-10-04: eine abgeschlossene LZK aus einem frueheren Halbjahr wird NICHT mehr
+# ueberschrieben (vorher bekam sie den neuen Termin, und ihr Ergebnis stand dann scheinbar
+# bei der neuen LZK). Die neue LZK steht offen da und wird beim Synchronisieren zugeordnet.
+pruefe("R2 eine abgeschlossene LZK aus einem frueheren Halbjahr bleibt stehen",
+       b2.lzk_datum_2 == date(2025, 5, 12) and b2.lzk_ergebnis_2 == "1", b2)
+pruefe("R2b die neue LZK wird als offen genannt (beim Synchronisieren zuordnen)",
+       any("Prozentrechnung" in o and "Synchronisieren" in o for o in merk.get("offen") or []), merk.get("offen"))
 pruefe("R2c online unbewertet loescht hier kein Ergebnis", b2.lzk_ergebnis_2 == "1", b2)
 pruefe("R3 online nicht bewertet laesst das Ergebnis hier stehen", b3.lzk_ergebnis_1 == "2", b3)
 pruefe("R4 nichts geht dabei zum Server", client.aufrufe == [], client.aufrufe)
 pruefe("R4b die Datei gilt als ungespeichert", merk["ungespeichert"] == 1, merk)
-pruefe("R4c jeder Platz merkt sich den Stand online", b1.lzk_online_1 == {"id": 30, "datum": "2026-10-01", "ergebnis": "3"}
-       and b2.lzk_online_2 == {"id": 31, "datum": "2026-10-05", "ergebnis": ""}, (b1.lzk_online_1, b2.lzk_online_2))
+pruefe("R4c jeder zugeordnete Platz merkt sich den Stand online (der alte bleibt unverknuepft)",
+       b1.lzk_online_1 == {"id": 30, "datum": "2026-10-01", "ergebnis": "3"} and b2.lzk_online_2 is None,
+       (b1.lzk_online_1, b2.lzk_online_2))
 
 # Aus der Liste zum Server
 b1 = D.Baustein(name="Bruchrechnung", lzk_datum_1=date(2026, 10, 8), lzk_ergebnis_1="2")

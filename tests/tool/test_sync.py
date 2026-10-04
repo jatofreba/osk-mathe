@@ -1,6 +1,8 @@
-"""Prueft Synchronisieren und die LZK einer Lerntheke, die online nur ueber das Thema dranhaengt."""
+"""Prueft Synchronisieren: online-LZK einem Baustein zuordnen (Vorschlag, Auswahl, Halbjahr),
+das Umziehen falsch abgelegter LZK, das Halbjahr beim Statuswechsel und die echten Fenster."""
 import copy
 import importlib.util
+import json
 import os
 import sys
 from datetime import date, timedelta
@@ -25,190 +27,297 @@ def pruefe(name, bedingung, extra=""):
     print("OK  " + name)
 
 
-TITEL = {"kreise-und-zylinder": "Kreise und Zylinder", "lineare-funktionen": "Lineare Funktionen"}
-IN14 = (date.today() + timedelta(days=14)).isoformat()
-IN21 = (date.today() + timedelta(days=21)).isoformat()
+HJ = D.halbjahr_fuer_datum()
+IN14 = date.today() + timedelta(days=14)
+IN21 = date.today() + timedelta(days=21)
+VOR_HJ = date.today() - timedelta(days=200)           # sicher ein frueheres Halbjahr
+HJ_ALT = D.halbjahr_fuer_datum(VOR_HJ)
+HJ14 = D.halbjahr_fuer_datum(IN14)
+TITEL = {"kreise": "Baustein Kreise", "wz": "Baustein Wahrscheinlichkeit und Zufall"}
 
 
-def frei(i, thema, datum=IN14, typ="Basis", **z):
-    e = {"id": i, "lerntheke": None, "typ": typ, "datum": datum, "status": "ausstehend", "pokale": 0,
-         "thema": thema, "anfrage": None, "fach": "mathe"}
+def lt_lzk(i, key, typ="Basis", datum=IN14, **z):
+    e = {"id": i, "lerntheke": key, "typ": typ, "datum": datum.isoformat() if datum else None,
+         "status": "ausstehend", "pokale": 0, "thema": "", "anfrage": None, "fach": "mathe"}
     e.update(z)
     return e
 
 
-# ===========================================================================
-# A) Zuordnung ueber das Thema
-# ===========================================================================
-konto = {"id": 7, "lzk": [frei(1, "  kreise UND zylinder "), frei(2, "Lineare Funktionen", typ="Aufbau"),
-                         frei(3, "Bruchrechnung"), frei(4, "Kreise und Zylinder", fach="englisch"),
-                         frei(5, "lineare-funktionen", typ="LZK")]}
-n = D.lzk_lerntheken_zuordnen(konto, TITEL)
-e = {x["id"]: x for x in konto["lzk"]}
-pruefe("A1 Thema = Lerntheken-Titel (Gross/klein, Leerzeichen egal) -> Lerntheke",
-       e[1]["lerntheke"] == "kreise-und-zylinder" and e[1]["ueber_thema"], e[1])
-pruefe("A2 Aufbau bleibt Aufbau", e[2]["lerntheke"] == "lineare-funktionen" and e[2]["typ"] == "Aufbau")
-pruefe("A3 Thema = Schluessel geht auch, 'LZK' zaehlt als Basis",
-       e[5]["lerntheke"] == "lineare-funktionen" and e[5]["typ"] == "Basis", e[5])
-pruefe("A4 anderes Thema bleibt frei", e[3]["lerntheke"] is None)
-pruefe("A5 andere Faecher bleiben unberuehrt", e[4]["lerntheke"] is None)
-pruefe("A6 Anzahl stimmt, zweiter Aufruf aendert nichts",
-       n == 3 and D.lzk_lerntheken_zuordnen(konto, TITEL) == 0)
+def frei(i, thema, typ="Basis", datum=IN14, **z):
+    return lt_lzk(i, None, typ=typ, datum=datum, thema=thema, **z)
 
-echt = {"id": 9, "lerntheke": "kreise-und-zylinder", "typ": "Basis", "datum": IN21, "status": "ausstehend", "pokale": 0}
-konto = {"id": 7, "lzk": [echt, frei(1, "Kreise und Zylinder")]}
-D.lzk_lerntheken_zuordnen(konto, TITEL)
-pruefe("A7 eine echte Lerntheken-LZK desselben Typs hat Vorrang", konto["lzk"][1]["lerntheke"] is None)
-konto = {"id": 7, "lzk": [frei(1, "Kreise und Zylinder")]}
-D.lzk_lerntheken_zuordnen(konto, TITEL, {1})
-pruefe("A8 schon mit einem Baustein verknuepft: bleibt dort", konto["lzk"][0]["lerntheke"] is None)
-konto = {"id": 7, "lzk": [frei(1, "Kreise und Zylinder", datum=IN14), frei(2, "Kreise und Zylinder", datum=IN21)]}
-D.lzk_lerntheken_zuordnen(konto, TITEL)
-pruefe("A9 zwei fuer denselben Platz: die juengste gilt",
-       konto["lzk"][1]["lerntheke"] and not konto["lzk"][0]["lerntheke"], konto)
 
-konto = {"id": 7, "lzk": [frei(1, "Kreise und Zylinder", datum=IN14),
-                         frei(2, "Kreise und Zylinder", datum=IN21, anfrage="offen")]}
-D.lzk_lerntheken_zuordnen(konto, TITEL)
-pruefe("A10 ein fester Termin geht einer (spaeteren) Anfrage vor",
-       konto["lzk"][0]["lerntheke"] and not konto["lzk"][1]["lerntheke"], konto)
+def person(*bausteine, alias="ga.em"):
+    return D.Student(vorname="Gabi", nachname="E", alias=alias, bausteine=list(bausteine))
 
-konto = {"id": 7, "lzk": [frei(1, "Kreise und Zylinder")]}
-eigen = D.Student(vorname="A", nachname="B", alias="a.b",
-                  bausteine=[D.Baustein(name="kreise und zylinder")])
-D.lzk_lerntheken_zuordnen(konto, TITEL, (), D.eigene_baustein_namen(eigen))
-pruefe("A11 ein von Hand gepflegter Baustein mit genau diesem Namen behaelt die LZK",
-       konto["lzk"][0]["lerntheke"] is None, konto)
 
 # ===========================================================================
-# B) Die Lerntheken-Zeile bekommt den Termin, zurueck geht es an GENAU diese LZK
+# A) Hilfen
 # ===========================================================================
-LT = [{"key": "kreise-und-zylinder", "title": "Kreise und Zylinder", "total": 10}]
-konto = {"id": 7, "lzk": [frei(1, "Kreise und Zylinder")]}
-D.lzk_lerntheken_zuordnen(konto, TITEL)
-zeilen = D.lt_lerntheke_zeilen({}, konto["lzk"], LT, D.halbjahr_fuer_datum())
-pruefe("B1 die Zeile 'Kreise und Zylinder' traegt den Termin als LZK 1",
-       len(zeilen) == 1 and zeilen[0]["lzk_datum_1"] == date.fromisoformat(IN14), zeilen)
+pruefe("A1 'Baustein Kreise' = 'kreise' (Praefix, Gross/klein)", D._name_norm("Baustein Kreise") == D._name_norm("kreise"))
+pruefe("A2 '&' = 'und'", D._name_norm("Glück & Zufall") == D._name_norm("glück und zufall"))
+pruefe("A3 neuer Name aus dem Lerntheken-Titel ohne 'Baustein '",
+       D.lzk_neuer_name(lt_lzk(1, "wz"), TITEL) == "Wahrscheinlichkeit und Zufall")
+pruefe("A4 freie LZK: ihr Thema", D.lzk_neuer_name(frei(2, "Terme 1"), TITEL) == "Terme 1")
+konto = {"lzk": [lt_lzk(1, "kreise"), frei(2, "X", anfrage="offen"), frei(3, "Y", datum=None),
+                 frei(4, "Z", fach="deutsch"), frei(5, "W")]}
+pruefe("A5 zur Auswahl: feste Mathe-LZK mit Datum, mit oder ohne Lerntheke",
+       [e["id"] for e in D.lzk_online_alle(konto)] == [1, 5], D.lzk_online_alle(konto))
 
-st = D.Student(vorname="Gabi", nachname="E", alias="ga.em")
-D.lt_zeilen_aktualisieren(st, {}, {}, konto["lzk"], LT)
-zeile = st.bausteine[0]
+# ===========================================================================
+# B) Vorschlaege
+# ===========================================================================
+kreise = D.Baustein(name="Kreise")
+gz = D.Baustein(name="Glück & Zufall")
+pyth_alt = D.Baustein(name="Satz des Pythagoras", halbjahr=HJ_ALT, lzk_datum_1=VOR_HJ, lzk_note_1="best")
+geo = D.Baustein(name="Geometrie", lzk_datum_1=VOR_HJ, lzk_note_1="22/25")       # ohne Halbjahr
+terme = D.Baustein(name="Terme 1", halbjahr=HJ14, lzk_datum_1=IN21, lzk_ergebnis_1="2")
+st = person(kreise, gz, pyth_alt, geo, terme)
+konto = {"lzk": [lt_lzk(10, "kreise"), lt_lzk(11, "wz"), frei(12, "Satz des Pythagoras"),
+                 frei(13, "Geometrie"), frei(14, "terme 1")]}
+zu = {z["eintrag"]["id"]: z for z in D.lzk_zuordnungen(st, konto, TITEL, {})}
+
+
+def ist(ziel, b):
+    """Ziel zeigt auf GENAU diesen Baustein (Bausteine sind Dataclasses: == vergleicht Felder)."""
+    return bool(ziel) and ziel[0] == "baustein" and ziel[1] is b
+
+
+pruefe("B1 Lerntheke 'Baustein Kreise' -> dein Baustein 'Kreise'", ist(zu[10]["vorschlag"], kreise), zu[10])
+pruefe("B2 'Wahrscheinlichkeit und Zufall' passt zu nichts: du waehlst", zu[11]["vorschlag"] is None, zu[11])
+pruefe("B3 gleicher Name, aber Baustein aus frueherem Halbjahr mit LZK: neuer Baustein fuers Halbjahr",
+       zu[12]["vorschlag"] == ("neu", "Satz des Pythagoras", HJ14), zu[12]["vorschlag"])
+pruefe("B4 Baustein ohne Halbjahr mit LZK aus frueherem Halbjahr: ebenso neuer Baustein",
+       zu[13]["vorschlag"] == ("neu", "Geometrie", HJ14), zu[13]["vorschlag"])
+pruefe("B5 anderer Termin im selben Halbjahr: dieselbe (verschobene) LZK",
+       ist(zu[14]["vorschlag"], terme), zu[14]["vorschlag"])
+zu2 = {z["eintrag"]["id"]: z for z in D.lzk_zuordnungen(st, konto, TITEL,
+                                                        {"lt:wz": {"name": "Glück & Zufall", "titel": "x"}})}
+pruefe("B6 die gemerkte Wahl wird zum Vorschlag", ist(zu2[11]["vorschlag"], gz), zu2[11]["vorschlag"])
+zu3 = D.lzk_zuordnungen(st, konto, TITEL, {"lt:wz": {"name": D.LZK_ZIEL_NIE, "titel": "x"}})
+pruefe("B7 'nie zuordnen' fragt nicht mehr", all(z["eintrag"]["id"] != 11 for z in zu3))
+kreise.lzk_online_1 = {"id": 10, "datum": IN14.isoformat(), "ergebnis": ""}
+pruefe("B8 schon verknuepfte LZK stehen nicht zur Auswahl",
+       all(z["eintrag"]["id"] != 10 for z in D.lzk_zuordnungen(st, konto, TITEL, {})))
+kreise.lzk_online_1 = None
+opts = D.lzk_ziel_optionen(st, zu[12])
+texte = [t for t, _ in opts]
+pruefe("B9 Auswahl: neuer Baustein zuerst, dann alle eigenen, 'nicht'/'nie' am Ende",
+       texte[0].startswith("＋ neuer Baustein „Satz des Pythagoras“") and texte[-2].startswith("— nicht")
+       and texte[-1].startswith("— nie") and any("⚠ wird ersetzt" in t for t in texte), texte)
+pruefe("B10 'für alle': dieselbe Wahl je Person nach Namen",
+       D.lzk_ziel_nach_name(person(D.Baustein(name="Glück & Zufall")), zu[11], "Glück & Zufall")[0] == "baustein"
+       and D.lzk_ziel_nach_name(person(), zu[11], "Glück & Zufall") == ("neu", "Glück & Zufall", HJ14))
+
+# Ein Thema laeuft ueber das Halbjahr hinaus: leerer Platz im Baustein von damals bleibt moeglich
+laeuft = D.Baustein(name="Kreise", halbjahr=HJ_ALT, status="In Bearbeitung")
+z11 = D.lzk_zuordnungen(person(laeuft), {"lzk": [lt_lzk(60, "kreise")]}, TITEL, {})[0]
+pruefe("B11 Baustein von damals mit leerem Platz: das Thema laeuft weiter", ist(z11["vorschlag"], laeuft), z11)
+jetzt_b, damals_b = D.Baustein(name="Kreise", halbjahr=HJ14), D.Baustein(name="Kreise", halbjahr=HJ_ALT)
+z12 = D.lzk_zuordnungen(person(damals_b, jetzt_b), {"lzk": [lt_lzk(61, "kreise")]}, TITEL, {})[0]
+pruefe("B12 gibt es beide, gewinnt der Baustein des Halbjahres", ist(z12["vorschlag"], jetzt_b), z12["vorschlag"])
+
+# ===========================================================================
+# C) Zuordnen
+# ===========================================================================
+ziele = {}
+app = D.Baustein(name="Baustein Kreise", bemerkung=D.LT_MARKER + " 13 von 27",
+                 lzk_datum_1=IN14, lzk_note_1="95%", lzk_ergebnis_1="3")
+kr = D.Baustein(name="Kreise")
+st = person(kr, app)
+z = D.lzk_zuordnungen(st, {"lzk": [lt_lzk(20, "kreise", status="bestanden", pokale=3)]}, TITEL, ziele)[0]
+zeile, ziel_b = D.lzk_zuordnen(st, z, z["vorschlag"], ziele)
+pruefe("C1 Termin, Ergebnis und Verknuepfung im gewaehlten Baustein",
+       kr.lzk_datum_1 == IN14 and kr.lzk_ergebnis_1 == "3" and kr.lzk_online_1["id"] == 20 and ziel_b is kr, kr)
+pruefe("C2 die Note aus der App-Zeile zieht mit, die App-Zeile gibt den Platz frei",
+       kr.lzk_note_1 == "95%" and app.lzk_datum_1 is None and not app.lzk_note_1 and not app.lzk_ergebnis_1, (kr, app))
+pruefe("C3 die Wahl wird gemerkt", ziele.get("lt:kreise", {}).get("name") == "Kreise", ziele)
+
+alt = D.Baustein(name="Geometrie", lzk_datum_1=VOR_HJ, lzk_note_1="22/25", lzk_bem_1="Teil 2")
+st = person(alt)
+z = D.lzk_zuordnungen(st, {"lzk": [frei(21, "Geometrie")]}, TITEL, {})[0]
+D.lzk_zuordnen(st, z, ("baustein", alt), {})
+pruefe("C4 bewusst einen belegten Platz gewaehlt: der alte Stand wandert in die Bemerkung",
+       alt.lzk_datum_1 == IN14 and not alt.lzk_note_1 and "22/25" in alt.bemerkung
+       and D._fmt_kurz(VOR_HJ) in alt.bemerkung and "Teil 2" in alt.bemerkung, alt)
+
+st = person()
+z = D.lzk_zuordnungen(st, {"lzk": [lt_lzk(22, "wz")]}, TITEL, {})[0]
+_, b_neu = D.lzk_zuordnen(st, z, ("neu", "Glück & Zufall", HJ14), {})
+pruefe("C5 neuer Baustein: Name, Halbjahr, 'In Bearbeitung', verknuepft",
+       b_neu in st.bausteine and b_neu.name == "Glück & Zufall" and b_neu.halbjahr == HJ14
+       and b_neu.status == "In Bearbeitung" and b_neu.lzk_online_1["id"] == 22, b_neu)
+
+versch = D.Baustein(name="Terme 1", lzk_datum_1=IN21, lzk_note_1="best", lzk_ergebnis_1="2")
+st = person(versch)
+z = D.lzk_zuordnungen(st, {"lzk": [frei(23, "Terme 1")]}, TITEL, {})[0]
+D.lzk_zuordnen(st, z, z["vorschlag"], {})
+pruefe("C6 im selben Halbjahr verschoben: Termin von online, Note und Ergebnis bleiben, nichts in die Bemerkung",
+       versch.lzk_datum_1 == IN14 and versch.lzk_note_1 == "best" and versch.lzk_ergebnis_1 == "2"
+       and not versch.bemerkung, versch)
+
+ziele = {}
+D.lzk_zuordnen(st, z, ("nie",), ziele)
+pruefe("C7 'nie' merkt sich nur die Wahl", ziele[z["schluessel"]]["name"] == D.LZK_ZIEL_NIE, ziele)
+
+# ===========================================================================
+# D) Danach gilt der Baustein - nicht mehr die App-Zeile
+# ===========================================================================
+LT = [{"key": "kreise", "title": "Baustein Kreise", "total": 27}]
+kr = D.Baustein(name="Kreise", lzk_datum_1=IN14, lzk_online_1={"id": 30, "datum": IN14.isoformat(), "ergebnis": ""})
+app = D.Baustein(name="Baustein Kreise", bemerkung=D.LT_MARKER + " alt", lzk_datum_1=IN21)   # veraltet
+st = person(kr, app)
+konto = {"id": 7, "lzk": [lt_lzk(30, "kreise")]}
+zeilen = D.lt_lerntheke_zeilen({"kreise": ["a", "b"]}, konto["lzk"], LT, HJ, D.verknuepfte_lzk_ids([st]))
+pruefe("D1 die App-Zeile fuehrt die zugeordnete LZK nicht mehr", zeilen and zeilen[0]["lzk_datum_1"] is None
+       and "LZK" not in zeilen[0]["bemerkung"], zeilen)
 aend, _ = D.lt_lzk_aenderungen(st, konto, TITEL)
-pruefe("B2 gleicher Termin: nichts zurueckzuschicken (vorher entstand hier eine zweite LZK)", aend == [], aend)
-zeile.lzk_datum_1 = date.fromisoformat(IN21)
-aend, _ = D.lt_lzk_aenderungen(st, konto, TITEL)
-pruefe("B3 hier verschoben: Aenderung an der LZK mit ihrer ID",
-       len(aend) == 1 and aend[0]["ueber_thema"] and aend[0]["id"] == 1, aend)
+pruefe("D2 ein alter Termin in der App-Zeile geht NICHT mehr hinaus", aend == [], aend)
+kr.lzk_datum_1 = IN21
+auf, _, _ = D.lt_freie_lzk_senden(st, konto, date.today(), TITEL)
+pruefe("D3 hier verschoben: die Lerntheken-LZK wird per ID geaendert",
+       len(auf) == 1 and auf[0]["art"] == "aendern" and auf[0]["id"] == 30 and auf[0]["felder"] == {"datum": IN21}, auf)
+kr.lzk_datum_1 = IN14
+konto2 = {"id": 7, "lzk": [lt_lzk(30, "kreise", datum=IN21, status="bestanden", pokale=2)]}
+u, _ = D.lt_freie_lzk_uebernehmen(st, konto2)
+pruefe("D4 online verschoben und bewertet: kommt in den Baustein",
+       kr.lzk_datum_1 == IN21 and kr.lzk_ergebnis_1 == "2" and len(u) == 1, (kr, u))
 
+# ===========================================================================
+# E) Falsch abgelegt: umziehen (Fall "Satz des Pythagoras")
+# ===========================================================================
+falsch = D.Baustein(name="Satz des Pythagoras", halbjahr=HJ_ALT, lzk_datum_1=IN14, lzk_note_1="best",
+                    lzk_online_1={"id": 73, "datum": IN14.isoformat(), "ergebnis": ""})
+st = person(falsch)
+t = D.lzk_falsches_halbjahr(st)
+pruefe("E1 erkannt: LZK im Baustein eines anderen Halbjahres", len(t) == 1 and t[0]["halbjahr"] == HJ14, t)
+D.lzk_umziehen(st, t[0])
+neu = st.bausteine[-1]
+pruefe("E2 neuer Baustein im richtigen Halbjahr, mit Termin und Verknuepfung",
+       neu is not falsch and neu.halbjahr == HJ14 and neu.lzk_datum_1 == IN14 and neu.lzk_online_1["id"] == 73, neu)
+pruefe("E3 der alte behaelt seine Note, verliert den fremden Termin und sagt Bescheid",
+       falsch.lzk_note_1 == "best" and falsch.lzk_datum_1 is None and falsch.lzk_online_1 is None
+       and "nachtragen" in falsch.bemerkung, falsch)
+weiter = D.Baustein(name="Kreise", halbjahr=HJ_ALT, lzk_datum_1=IN14,
+                    lzk_online_1={"id": 74, "datum": IN14.isoformat(), "ergebnis": ""})
+pruefe("E4 ein weiterlaufendes Thema (ohne Spuren einer frueheren LZK) ist kein Fall",
+       D.lzk_falsches_halbjahr(person(weiter)) == [])
+
+# ===========================================================================
+# F) Halbjahr beim Statuswechsel (Formular)
+# ===========================================================================
+f = D.hj_nach_statuswechsel
+pruefe("F1 auf 'In Bearbeitung': laufendes Halbjahr", f("Ausstehend", "In Bearbeitung", "", "", None) == (HJ, HJ))
+pruefe("F2 zurueck: alter Wert kehrt zurueck", f("Ausstehend", "Ausstehend", "", HJ, HJ) == ("", None))
+pruefe("F3 auf 'Abgeschlossen' aus altem Halbjahr: laufendes",
+       f("In Bearbeitung", "Abgeschlossen", HJ_ALT, HJ_ALT, None)[0] == HJ)
+pruefe("F4 selbst eingetragenes Halbjahr bleibt", f("Ausstehend", "Abgeschlossen", "", "2425_2", None) == ("2425_2", None))
+pruefe("F5 andere Zustaende aendern nichts", f("Ausstehend", "Nicht bestanden", "", "", None) == ("", None))
+
+# ===========================================================================
+# G) Gemerkte Wahl in der Datei
+# ===========================================================================
+az = D.Arbeitsstaende()
+az.lzk_ziele = {"lt:wz": {"name": "Glück & Zufall", "titel": "Baustein Wahrscheinlichkeit und Zufall"}}
+az2 = D.Arbeitsstaende()
+az2.aus_dict(json.loads(json.dumps(az.als_dict(), ensure_ascii=False)))
+pruefe("G1 lzk_ziele uebersteht Speichern und Laden", az2.lzk_ziele == az.lzk_ziele, az2.lzk_ziele)
+az3 = D.Arbeitsstaende()
+az3.aus_dict({"format": D.JSON_FORMAT, "version": 1, "personen": []})
+pruefe("G2 aeltere Dateien: leer", az3.lzk_ziele == {})
+
+# ===========================================================================
+# H) Synchronisieren, ganz, mit Attrappen
+# ===========================================================================
 aufrufe = []
 
 
 class Client:
-    def __init__(self, konten=None, talks=None):
-        self.konten = konten or []
-        self.talks = talks or []
+    def __init__(self, konten):
+        self.konten = konten
     def lzk_aendern(self, lzk_id, datum=None, status=None, pokale=None):
         aufrufe.append(("aendern", lzk_id, datum, status, pokale))
     def lzk_setzen(self, *a):
         aufrufe.append(("setzen",) + a)
+    def lzk_anlegen(self, *a):
+        aufrufe.append(("anlegen",) + a)
+        return 999
+    def fach_id(self, key):
+        return 1
     def halbjahr_uebersicht(self):
         return {"halbjahre": [], "subjects": [],
                 "students": [{"username": k["username"], "byHalbjahr": {}} for k in self.konten]}
     def lerntheken_meta(self):
-        return LT
+        return [{"key": k, "title": t, "total": 10} for k, t in TITEL.items()]
     def lerntheken_titel(self):
         return TITEL
     def studierende(self):
         return copy.deepcopy(self.konten)
     def mathe_talks(self):
-        return self.talks
-    def talk_bewerten(self, rolle, online_id, status, flammen, emoji):
-        aufrufe.append(("talk", rolle, online_id, status, flammen, emoji))
+        return []
 
 
-app = A.App.__new__(A.App)
-app._lt_konten = [dict(konto, username="ga.em")]
-gesendet, fehler = app._lzk_uebertragen(Client(), aend)
-pruefe("B4 gesendet wird per lzk_aendern(id) - nicht als neue Lerntheken-LZK",
-       aufrufe == [("aendern", 1, date.fromisoformat(IN21), None, None)] and not fehler, aufrufe)
-
-# ===========================================================================
-# C) Synchronisieren, ganz, mit Attrappen
-# ===========================================================================
-aufrufe.clear()
-hand = D.Baustein(name="Bruchrechnung", status="In Bearbeitung", halbjahr=D.halbjahr_fuer_datum())
-st = D.Student(vorname="Gabi", nachname="E", alias="ga.em", bausteine=[hand])
-talk = D.MatheTalk(rolle="gehalten", online_id=11, session_id=11, datum=date.today(), halbjahr=D.halbjahr_fuer_datum(),
-                   thema="Pythagoras", status="erledigt", flammen=2,
-                   online={"status": "ausstehend", "flammen": 0, "emoji": "", "thema": "Pythagoras"})
-st.talks = [talk]
-konten = [{"id": 7, "username": "ga.em", "aktiv": True,
-           "lzk": [frei(1, "Kreise und Zylinder"), frei(3, "Bruchrechnung", datum=IN21)]}]
-talk_slots = [{"id": 1, "datum": date.today().isoformat(), "uhrzeit": "10:00", "halbjahr": D.halbjahr_fuer_datum(),
-               "typ": "talk", "session_id": 11, "thema": "Pythagoras", "presentedStatus": "ausstehend",
-               "pokale": 0, "qualityEmoji": None, "presenter_username": "ga.em", "coPresenters": [], "invitees": []}]
-client = Client(konten, talk_slots)
-
+kreise = D.Baustein(name="Kreise")
+gz = D.Baustein(name="Glück & Zufall")
+falsch = D.Baustein(name="Satz des Pythagoras", halbjahr=HJ_ALT, lzk_datum_1=IN14, lzk_note_1="best",
+                    lzk_online_1={"id": 73, "datum": IN14.isoformat(), "ergebnis": ""})
+st = person(kreise, gz, falsch)
+client = Client([{"id": 7, "username": "ga.em", "aktiv": True,
+                  "lzk": [lt_lzk(40, "kreise"), lt_lzk(41, "wz", status="bestanden", pokale=3),
+                          frei(73, "Satz des Pythagoras")]}])
 gesehen = {}
 
 
 class DialogAttrappe:
-    def __init__(self, parent, posten, hinweise, klasse, abruf_text):
-        gesehen["posten"], gesehen["hinweise"] = posten, hinweise
-        self.result = set(range(len(posten)))      # alles angewaehlt
+    """Waehlt bei der unklaren LZK 'Glück & Zufall' (wie ein Klick) und nimmt alles."""
+    def __init__(self, parent, posten, hinweise, klasse, abruf_text, optionen=None, nach_name=None, text=None):
+        gesehen["posten"] = posten
+        gesehen["texte"] = [text(p) for p in posten] if text else []
+        for p in posten:
+            if p["art"] == "zuordnen" and p["ziel"] is None:
+                p["ziel"] = nach_name(p, "Glück & Zufall")
+                gesehen["optionen"] = optionen(p)
+        self.result = set(range(len(posten)))
 
 
 A.SyncDialog = DialogAttrappe
-app = A.App.__new__(A.App)
-app.az = type("AZ", (), {"students": [st], "_wb": None})()
-app._lt_client, app._lt_klasse, app._lt_konten, app._lt_titel = None, None, None, None
+app_ = A.App.__new__(A.App)
+app_.az = D.Arbeitsstaende()
+app_.az.students = [st]
+app_._lt_client, app_._lt_klasse, app_._lt_konten, app_._lt_titel = None, None, None, None
 merk = {"bericht": "", "melde": ""}
-app._dubletten_melden = lambda t: False
-app._lt_paare = lambda: [("Gabi", "E", "ga.em")]
-app._lt_anmelden = lambda still=False: (client, "M3M4")
-app.wait_window = lambda d: None
+app_._dubletten_melden = lambda t: False
+app_._lt_paare = lambda: [("Gabi", "E", "ga.em")]
+app_._lt_anmelden = lambda still=False: (client, "M3M4")
+app_.wait_window = lambda d: None
 for name in ("_detail_anzeigen", "_liste_aktualisieren", "_markiere_ungespeichert", "_talks_anzeigen"):
-    setattr(app, name, lambda *a: None)
-app._bericht = lambda t, x: merk.__setitem__("bericht", x)
-app._melde = lambda x: merk.__setitem__("melde", x)
-app.synchronisieren()
+    setattr(app_, name, lambda *a: None)
+app_._bericht = lambda t, x: merk.__setitem__("bericht", x)
+app_._melde = lambda x: merk.__setitem__("melde", x)
+app_.synchronisieren()
 
-lt_zeile = next((b for b in st.bausteine if b.name == "Kreise und Zylinder"), None)
-pruefe("C1 die LZK aus dem LZK-Reiter steht jetzt in der Lerntheken-Zeile",
-       lt_zeile is not None and lt_zeile.lzk_datum_1 == date.fromisoformat(IN14), lt_zeile)
 arten = sorted(p["art"] for p in gesehen["posten"])
-pruefe("C2 die Vorschau bietet die passende freie LZK zum Uebernehmen und den Talk zum Senden an",
-       arten == ["frei_herein", "talk"], arten)
-pruefe("C3 nach Bestaetigung: der leere Platz im Baustein ist gefuellt und verknuepft",
-       hand.lzk_datum_1 == date.fromisoformat(IN21) and (hand.lzk_online_1 or {}).get("id") == 3, hand)
-pruefe("C4 und die Talk-Bewertung ist hochgeladen", ("talk", "gehalten", 11, "erledigt", 2, "") in aufrufe, aufrufe)
-pruefe("C5 keine zweite LZK angelegt", not any(a[0] == "setzen" for a in aufrufe), aufrufe)
-pruefe("C6 der Bericht nennt beides", "Bruchrechnung" in merk["bericht"] and "Talk" in merk["bericht"], merk)
-
-# Zweiter Lauf: alles gleich -> nichts mehr zu bestaetigen
+pruefe("H1 Vorschau: zwei LZK zum Zuordnen, eine zum Umziehen", arten == ["umziehen", "zuordnen", "zuordnen"], arten)
+pruefe("H2 die Zeile nennt LZK und Ziel", any("„Baustein Kreise“ Basis-LZK" in t and "→ Kreise" in t
+                                              for t in gesehen["texte"]), gesehen["texte"])
+pruefe("H3 Kreise und Glück & Zufall sind zugeordnet und verknuepft",
+       kreise.lzk_online_1["id"] == 40 and gz.lzk_online_1["id"] == 41 and gz.lzk_ergebnis_1 == "3", (kreise, gz))
+pruefe("H4 die falsch abgelegte LZK ist umgezogen",
+       falsch.lzk_online_1 is None and any(b.lzk_online_1 and b.lzk_online_1["id"] == 73 and b.halbjahr == HJ14
+                                           for b in st.bausteine), st.bausteine)
+pruefe("H5 die Wahl fuer W&Z ist gemerkt", app_.az.lzk_ziele.get("lt:wz", {}).get("name") == "Glück & Zufall",
+       app_.az.lzk_ziele)
+pruefe("H6 nichts wurde doppelt angelegt oder ueber die App-Zeile gesetzt",
+       not any(a[0] in ("anlegen", "setzen") for a in aufrufe), aufrufe)
+pruefe("H7 der Bericht nennt die Zuordnungen", "→ Kreise" in merk["bericht"] and "Glück & Zufall" in merk["bericht"],
+       merk["bericht"])
 aufrufe.clear()
-app.synchronisieren()
-pruefe("C7 zweiter Lauf: nichts mehr zu bestaetigen, nichts gesendet",
-       gesehen["posten"] == [] and aufrufe == [], (gesehen["posten"], aufrufe))
-
-# Abgewaehlt: nichts wird geschrieben
-hand2 = D.Baustein(name="Prozente", status="In Bearbeitung")
-st.bausteine.append(hand2)
-client.konten[0]["lzk"].append(frei(8, "Prozente", datum=IN21))
-
-
-class AbwahlAttrappe(DialogAttrappe):
-    def __init__(self, *a):
-        super().__init__(*a)
-        self.result = set()
-
-
-A.SyncDialog = AbwahlAttrappe
-app.synchronisieren()
-pruefe("C8 abgewaehlt: der Baustein bleibt leer", hand2.lzk_datum_1 is None and hand2.lzk_online_1 is None, hand2)
+app_.synchronisieren()
+pruefe("H8 zweiter Lauf: nichts mehr zuzuordnen, nichts gesendet",
+       [p["art"] for p in gesehen["posten"]] == [] and aufrufe == [], ([p["art"] for p in gesehen["posten"]], aufrufe))
 
 # ===========================================================================
-# D) Die echten Fenster (nur mit Bildschirm - in der CI ohne Display uebersprungen)
+# I) Die echten Fenster (nur mit Bildschirm - in der CI ohne Display uebersprungen)
 # ===========================================================================
 try:
     import tkinter as tk
@@ -224,44 +333,62 @@ if bildschirm:
     B.App._zuletzt_oeffnen = lambda self: None
     fenster = B.App()
     fenster.withdraw()
-    posten = [{"gruppe": "herein", "person": "Gabi E", "text": "Bruchrechnung, LZK 1: 14.10.2026"},
-              {"gruppe": "raus", "person": "Gabi E", "text": "Talk 30.09.2026 „Pythagoras“: ✓ ok 🔥🔥"}]
-    dlg = B.SyncDialog(fenster, posten, [("Ben J", "„Prozente“ – kein Baustein mit diesem Namen")],
-                       "M3M4", "Tandem M3M4, nur Mathe.\n" + "Zeile\n" * 40)
-    fenster.update()
-    pruefe("D1 Vorschau: beide Gruppen und die Hinweise stehen da",
-           set(dlg.baum.get_children()) == {"herein", "raus", "hinweise"}, dlg.baum.get_children())
-    pruefe("D2 alles ist zunaechst angewaehlt", dlg.an == {0, 1} and dlg.baum.item("0", "text").startswith("☑"))
-    dlg._umschalten("0")
-    pruefe("D3 Klick waehlt ab", dlg.an == {1} and dlg.baum.item("0", "text").startswith("☐"))
-    dlg._umschalten("hinweise")
-    pruefe("D4 Gruppen- und Hinweiszeilen lassen sich nicht anwaehlen", dlg.an == {1})
-    pruefe("D5 der lange Abruf-Bericht schiebt das Fenster nicht aus dem Bild",
-           dlg.winfo_reqheight() < 900, dlg.winfo_reqheight())
-    dlg._ok()
-    pruefe("D6 Uebernehmen liefert die Auswahl", dlg.result == {1}, dlg.result)
-    leer = B.SyncDialog(fenster, [], [], "M3M4", "alles gleich")
-    fenster.update()
-    pruefe("D7 nichts zu bestaetigen: Uebernehmen ist aus", str(leer.btn_ok.cget("state")) == "disabled")
-    leer.destroy()
 
-    # Die Talk-Fenster (seit den Mathe-Talks) - bisher nur ueber Attrappen geprueft
-    t = D.MatheTalk(rolle="zugehoert", online_id=5, datum=date.today(), thema="Pythagoras", mit="an.be",
-                    online={"status": "ausstehend", "flammen": 0, "emoji": "", "thema": "Pythagoras"})
-    tdlg = B.TalkDialog(fenster, t, "Gabi E")
+    # Vorschau mit zwei Zuordnungen derselben Lerntheke (zwei Personen) und einem Talk
+    a1, a2 = person(D.Baustein(name="Glück & Zufall")), person(D.Baustein(name="Glück & Zufall"), alias="be.ja")
+    z1 = D.lzk_zuordnungen(a1, {"lzk": [lt_lzk(50, "wz")]}, TITEL, {})[0]
+    z2 = D.lzk_zuordnungen(a2, {"lzk": [lt_lzk(51, "wz")]}, TITEL, {})[0]
+    posten = [{"gruppe": "herein", "art": "zuordnen", "st": a1, "z": z1, "ziel": None, "an": False, "person": "A"},
+              {"gruppe": "herein", "art": "zuordnen", "st": a2, "z": z2, "ziel": None, "an": False, "person": "B"},
+              {"gruppe": "raus", "person": "A", "text": "Talk"}]
+    dlg = B.SyncDialog(fenster, posten, [], "M3M4", "Bericht\n" * 30,
+                       optionen=lambda p: D.lzk_ziel_optionen(p["st"], p["z"]),
+                       nach_name=lambda p, name: D.lzk_ziel_nach_name(p["st"], p["z"], name),
+                       text=B.App._sync_text)
     fenster.update()
-    tdlg.v_status.set(D.TALK_STATUS_TEXT["erledigt"])
-    tdlg.v_flammen.set("2")
-    tdlg.v_emoji.set("🌟")
-    tdlg.t_bem.insert("1.0", "gut zugehoert")
-    tdlg._uebernehmen()
-    pruefe("D8 Talk bewerten: das Fenster liefert Status, Flammen, Emoji, Bemerkung",
-           tdlg.result == {"status": "erledigt", "flammen": 2, "emoji": "🌟",
-                           "bemerkung": "gut zugehoert", "thema": "Pythagoras"}, tdlg.result)
-    hdlg = B.TalkHochladenDialog(fenster, [(st, talk, "bewertung", talk.bewertung(), talk.online)], "M3M4")
+    dlg._umschalten("0")
+    pruefe("I1 ohne Ziel ist eine Zuordnung abgewaehlt und laesst sich nicht anwaehlen", 0 not in dlg.an, dlg.an)
+    dlg.baum.selection_set("0")
+    dlg._markiert()
+    werte = list(dlg.ziel_box.cget("values"))
+    pruefe("I2 Markieren zeigt die Auswahl der Person", any(w.startswith("Glück & Zufall") for w in werte), werte)
+    dlg.ziel_box.current(next(i for i, w in enumerate(werte) if w.startswith("Glück & Zufall")))
+    dlg._ziel_gewaehlt()
+    pruefe("I3 Wahl setzt Ziel und Haken", posten[0]["ziel"][0] == "baustein" and 0 in dlg.an
+           and "→ Glück & Zufall" in dlg.baum.item("0", "values")[0], dlg.baum.item("0", "values"))
+    dlg._fuer_alle()
+    pruefe("I4 'für alle': die zweite Person bekommt IHREN Baustein",
+           ist(posten[1]["ziel"], a2.bausteine[0]) and 1 in dlg.an, posten[1]["ziel"])
+    pruefe("I5 die Fensterhoehe bleibt im Bild", dlg.winfo_reqheight() < 950, dlg.winfo_reqheight())
+    dlg._ok()
+    pruefe("I6 Uebernehmen liefert die Auswahl", dlg.result == {0, 1, 2}, dlg.result)
+
+    # Baustein-Formular: Halbjahr folgt dem Status
+    bdlg = B.BausteinDialog(fenster, D.Baustein(name="Kreise", status="Ausstehend", halbjahr=""))
     fenster.update()
-    hdlg._ok()
-    pruefe("D9 Hochladen-Vorschau oeffnet und bestaetigt", hdlg.result is True)
+    bdlg.vars["status"].set("In Bearbeitung")
+    pruefe("I7 Formular: 'In Bearbeitung' setzt das laufende Halbjahr", bdlg.vars["halbjahr"].get() == HJ,
+           bdlg.vars["halbjahr"].get())
+    bdlg.vars["status"].set("Ausstehend")
+    pruefe("I8 zurueck: das Feld ist wieder leer", bdlg.vars["halbjahr"].get() == "", bdlg.vars["halbjahr"].get())
+    bdlg.vars["halbjahr"].set("2425_2")
+    bdlg.vars["status"].set("Abgeschlossen")
+    pruefe("I9 ein selbst eingetragenes Halbjahr bleibt", bdlg.vars["halbjahr"].get() == "2425_2")
+    bdlg.destroy()
+
+    # Gemerkte Zuordnungen verwalten
+    ziele = {"lt:wz": {"name": "Glück & Zufall", "titel": "Baustein Wahrscheinlichkeit und Zufall"},
+             "thema:x": {"name": D.LZK_ZIEL_NIE, "titel": "X"}}
+    zdlg = B.LzkZieleDialog(fenster, ziele)
+    fenster.update()
+    zeilen = zdlg.liste.get(0, "end")
+    pruefe("I10 die Liste zeigt Lerntheke und Ziel", any("Wahrscheinlichkeit" in z_ and "Glück & Zufall" in z_
+                                                       for z_ in zeilen) and any("nie zuordnen" in z_ for z_ in zeilen),
+           zeilen)
+    zdlg.liste.selection_set(0)
+    zdlg._vergessen()
+    pruefe("I11 'vergessen' entfernt den Eintrag", zdlg.geaendert and len(ziele) == 1, ziele)
+    zdlg.destroy()
     fenster.destroy()
 else:
     print("--  Fenster-Pruefungen uebersprungen (kein Bildschirm)")
