@@ -4871,7 +4871,7 @@ function fabueHalbjahr(f) {
 }
 function fabueStatusPill(status) {
   const [klasse, text] = status === 'erledigt' ? ['pill-green', '✓ teilgenommen']
-    : status === 'nicht_erledigt' ? ['pill-red', '✗ gefehlt']
+    : status === 'nicht_erledigt' ? ['pill-red', '✗ unentschuldigt gefehlt']
     : ['pill-yellow', '⏳ noch offen'];
   return { klasse, text };
 }
@@ -6723,18 +6723,22 @@ function awRenderBar() {
   // Schliessen betrifft nur die Selbst-Anmeldung der Schueler:innen. Die Lernbegleitung
   // kann weiterhin Leute eintragen - deshalb bleibt "+ einladen" davon unberuehrt.
   const schliessbar = darf && s.typ === 'input';
-  // Fachbuero (seit 2026-10-04): wer eingetragen ist, hat teilgenommen - es gibt nichts mehr
-  // zu bestaetigen; wer nicht da war, wird herausgenommen (×). Die Schnell-Knoepfe bleiben
-  // nur fuer die Lernberatung. Bei Talks gehoeren Flammen und Qualitaets-Emoji zur Bewertung,
-  // und die wuerde ein blosses ✓ hier auf 0 zuruecksetzen.
-  const fachbuero = s.typ === 'input' && !subj.nurZugewiesen;
-  const schnell = darf && gelaufen && s.typ === 'input' && !fachbuero;
+  // Fachbuero und Lernberatung (seit 2026-10-04): wer eingetragen ist, hat teilgenommen - es
+  // gibt nichts zu bestaetigen. Ab dem Termintag laesst sich vermerken, wer UNENTSCHULDIGT
+  // gefehlt hat (✗, zuruecknehmbar mit ↩) - anders als ×, das jemanden ohne Vermerk austraegt
+  // (z.B. entschuldigt). Bei Talks gehoeren Flammen zur Bewertung im Talks-Reiter.
+  const fachbuero = s.typ === 'input';
+  const fehltKnopf = darf && gelaufen && fachbuero;
   // Echte <button>, keine anklickbaren <span>: nur so sind die Entscheidungen auch
   // per Tastatur erreichbar, und aria-label sagt an, was ✓/✗/× bedeuten.
   const ja = (ruf, titel) => ` <button type="button" class="aw-btn" onclick="${ruf}" title="${titel}" aria-label="${titel}">✓</button>`;
   const nein = (ruf, titel) => ` <button type="button" class="aw-btn aw-btn-rot" onclick="${ruf}" title="${titel}" aria-label="${titel}">✗</button>`;
-  // Entfernen ist etwas anderes als "hat gefehlt": der Eintrag verschwindet ganz, es bleibt
-  // keine Fehlzeit stehen - wer faelschlich auf dem Termin stand, soll keine bekommen.
+  // "Hat unentschuldigt gefehlt" vermerken bzw. zuruecknehmen.
+  const fehlt = ruf => ` <button type="button" class="aw-btn aw-btn-rot" onclick="${ruf}" title="Hat unentschuldigt gefehlt" aria-label="Hat unentschuldigt gefehlt">✗</button>`;
+  const fehltZurueck = ruf => ` <button type="button" class="aw-btn" onclick="${ruf}" title="Fehlen zurücknehmen" aria-label="Fehlen zurücknehmen">↩</button>`;
+  // Entfernen ist etwas anderes als "hat unentschuldigt gefehlt": der Eintrag verschwindet
+  // ganz, es bleibt kein Fehlen stehen - wer entschuldigt fehlte oder faelschlich auf dem
+  // Termin stand, soll keins bekommen.
   // Geht nur, solange nichts bewertet ist; genau so prueft es auch der Server.
   const weg = (id) => ` <button type="button" class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen" aria-label="Aus dem Termin entfernen">×</button>`;
   // Am Fachbüro bleibt Entfernen IMMER moeglich - ein "da gewesen"/"gefehlt" ist dort
@@ -6751,13 +6755,11 @@ function awRenderBar() {
   const leute = [];
   if (s.presenterUsername) {
     const st = s.presentedStatus;
-    const zustand = st === 'nicht_erledigt' ? (fachbuero ? '✗ gefehlt (zählt nicht)' : '✗ gefehlt')
-      : st === 'erledigt' && !fachbuero ? '✓ da gewesen'
+    const zustand = st === 'nicht_erledigt' ? (fachbuero ? '✗ unentschuldigt gefehlt' : '✗ gefehlt')
       : (s.typ === 'input' ? 'hat gebucht' : 'hält den Talk');
-    const klasse = st === 'erledigt' ? 'pill-green' : st === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
-    const knoepfe = (schnell
-      ? ja(`awVortrag(${s.session_id}, 'erledigt')`, 'War da')
-        + nein(`awVortrag(${s.session_id}, 'nicht_erledigt')`, 'Hat gefehlt')
+    const klasse = st === 'nicht_erledigt' ? 'pill-red' : (fachbuero && gelaufen) || st === 'erledigt' ? 'pill-green' : 'pill-blue';
+    const knoepfe = (fehltKnopf
+      ? (st === 'nicht_erledigt' ? fehltZurueck(`awVortrag(${s.session_id}, 'ausstehend')`) : fehlt(`awVortrag(${s.session_id}, 'nicht_erledigt')`))
       : '') + wegBuchend;
     leute.push(`<span class="pill ${klasse}" style="font-size:11px;"><strong>${escHtml(s.presenterUsername)}</strong> · ${zustand}${knoepfe}</span>`);
   }
@@ -6784,18 +6786,17 @@ function awRenderBar() {
       return;
     }
     const att = iv.attendedStatus;
-    // Fachbuero: eingetragen = dabei, ab dem Termintag = teilgenommen. Ein frueher
-    // eingetragenes "gefehlt" zaehlt weiter nicht.
+    // Fachbuero/Lernberatung: eingetragen = dabei, ab dem Termintag = teilgenommen - ausser
+    // "unentschuldigt gefehlt" ist vermerkt.
     const fbDabei = fachbuero && iv.status === 'angenommen' && att !== 'nicht_erledigt';
-    const zustand = att === 'nicht_erledigt' ? (fachbuero ? '✗ gefehlt (zählt nicht)' : '✗ gefehlt')
+    const zustand = att === 'nicht_erledigt' ? (fachbuero ? '✗ unentschuldigt gefehlt' : '✗ gefehlt')
       : fbDabei ? (gelaufen ? '✓ teilgenommen' : (invEingeteilt(iv) ? invStatusText(iv) : '✓ dabei'))
       : att === 'erledigt' ? '✓ da gewesen'
       : invStatusText(iv);
     const klasse = att === 'nicht_erledigt' ? 'pill-red'
       : (att === 'erledigt' || (fbDabei && gelaufen)) ? 'pill-green' : 'pill-blue';
-    const knoepfe = (schnell
-      ? ja(`awAnwesenheit(${iv.id}, 'erledigt')`, 'War da')
-        + nein(`awAnwesenheit(${iv.id}, 'nicht_erledigt')`, 'Hat gefehlt')
+    const knoepfe = (fehltKnopf && (fbDabei || att === 'nicht_erledigt')
+      ? (att === 'nicht_erledigt' ? fehltZurueck(`awAnwesenheit(${iv.id}, 'ausstehend')`) : fehlt(`awAnwesenheit(${iv.id}, 'nicht_erledigt')`))
       : '') + (entfernbar(iv) ? weg(iv.id) : '');
     leute.push(`<span class="pill ${klasse}" style="font-size:11px;">${name} · ${zustand}${knoepfe}</span>`);
   });
@@ -6803,7 +6804,9 @@ function awRenderBar() {
   const hinweis = !darf ? 'Termin einer anderen Lernbegleitung.'
     : !leute.length ? 'Noch niemand auf diesem Termin.'
     : (s.typ === 'talk' && gelaufen) ? 'Talks werden im Talks-Tab bewertet (Flammen).'
-    : fachbuero ? 'Wer eingetragen ist, hat teilgenommen. × nimmt jemanden heraus – dann zählt es nicht.'
+    : fachbuero ? (gelaufen
+      ? 'Wer eingetragen ist, hat teilgenommen. ✗ vermerkt: hat unentschuldigt gefehlt · × trägt aus (z.B. entschuldigt – zählt dann nicht).'
+      : 'Wer eingetragen ist, nimmt teil. × trägt jemanden aus; unentschuldigtes Fehlen vermerkst du ab dem Termintag.')
     : !gelaufen ? 'Teilnahme eintragen geht ab dem Termintag; × nimmt jemanden schon vorher wieder raus.'
     : '✓ war da · ✗ hat gefehlt · × ganz vom Termin nehmen (ohne Fehlzeit).';
   // Der Server loescht keinen gebuchten Termin (409) - sonst gingen Teilnahmen verloren.
@@ -7160,7 +7163,7 @@ function hjDetailHtml(s, subjectKey) {
   // da etwas liegengeblieben.
   const heuteHj = new Date().toISOString().slice(0, 10);
   const fabuePill = t => t.status === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ teilgenommen</span>'
-    : t.status === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ gefehlt</span>'
+    : t.status === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ unentschuldigt gefehlt</span>'
     : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
   // Lernberatung: kein Fachbüro, einfach ein Termin, an dem man teilgenommen hat (oder nicht).

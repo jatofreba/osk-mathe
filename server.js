@@ -494,17 +494,15 @@ async function initDB() {
       SELECT u.id, (SELECT id FROM subjects WHERE key='mathe'), u.kurs
       FROM users u WHERE u.role='student'
       ON CONFLICT (user_id, subject_id) DO NOTHING;
-    -- Fachbuero ohne Zusagen (2026-10-04): wer mitmachen wollte oder mitgebracht wurde, ist
-    -- seither direkt dabei. Noch offene Anfragen/Einladungen zu KOMMENDEN Fachbueros werden
-    -- deshalb zu Teilnahmen; vergangene bleiben, wie sie sind (ob die Person da war, weiss
-    -- niemand). Lernberatung (nur zugewiesen) und Talks bleiben unberuehrt. Laeuft bei jedem
-    -- Start, aendert aber nur noch Altfaelle - neue offene Zeilen entstehen beim Fachbuero nicht.
+    -- Fachbuero und Lernberatung ohne Zusagen (2026-10-04): wer mitmachen wollte, mitgebracht
+    -- oder eingeladen wurde, ist seither direkt dabei - offene Anfragen/Einladungen werden zu
+    -- Teilnahmen, auch zu vergangenen Terminen (Wunsch des Users: sie zaehlen als Teilnahme).
+    -- Absagen bleiben Absagen, Talks bleiben unberuehrt. Laeuft bei jedem Start, aendert aber
+    -- nur noch Altfaelle - neue offene Zeilen entstehen beim Fachbuero nicht mehr.
     UPDATE talking_invitations ti SET status = 'angenommen', updated_at = NOW()
       FROM talking_sessions ts, talking_slots sl
      WHERE ts.id = ti.session_id AND sl.id = ts.slot_id
-       AND sl.typ = 'input' AND sl.datum >= CURRENT_DATE
-       AND ti.status IN ('angefragt', 'eingeladen')
-       AND NOT EXISTS (SELECT 1 FROM subjects sub WHERE sub.id = sl.subject_id AND sub.nur_zugewiesen);
+       AND sl.typ = 'input' AND ti.status IN ('angefragt', 'eingeladen');
   `);
 
   // Seed admin accounts (only if they don't exist)
@@ -2351,9 +2349,9 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     res.json({
       presenting: allePraesentationen,
       invitations: invitations.rows,
-      // Fachbuero: eingetragen = teilgenommen (siehe halbjahrOverview) - ausser einem alten "gefehlt".
-      fabue: subject.nurZugewiesen ? fabue.rows
-        : fabue.rows.map(f => ({ ...f, status: f.status === 'nicht_erledigt' ? 'nicht_erledigt' : 'erledigt' })),
+      // Fachbuero/Lernberatung: eingetragen = teilgenommen (siehe halbjahrOverview) - ausser
+      // "unentschuldigt gefehlt".
+      fabue: fabue.rows.map(f => ({ ...f, status: f.status === 'nicht_erledigt' ? 'nicht_erledigt' : 'erledigt' })),
       mitVortragOffen,
       trophies
     });
@@ -3593,48 +3591,22 @@ async function halbjahrOverview(klasse, onlyUid) {
   const halbjahre = new Set();
 
   const heuteIso = new Date().toISOString().slice(0, 10);
-  // Fachbuero-Termine zaehlen nicht nur, wenn jemand da war: ein vergangener
-  // Termin ohne Eintrag ist "offen" und gehoert in die Auswertung, sonst faellt
-  // eine unbewertete Teilnahme einfach unter den Tisch. Termine, die noch
-  // bevorstehen, bleiben aussen vor - auch dann, wenn die Lernbegleitung den
-  // Haken schon gesetzt hat: das ist bis zum Termin eine Zusage und noch keine
-  // Teilnahme. Ab dem Tag des Termins zaehlt der Haken, "offen" wird ein Termin
-  // erst am Tag danach (am Termintag selbst ist noch nichts ueberfaellig).
-  const fabueGezaehlt = (s, r) => {
-    if (!r.datum) return false;
-    if (r.datum <= heuteIso) {
-      if (r.status === 'erledigt') { s.inputParticipated++; return true; }
-      if (r.status === 'nicht_erledigt') { s.inputMissed++; return true; }
-    }
-    if (r.datum < heuteIso) { s.inputOpen++; return true; }
-    // Termin steht noch bevor: zaehlt NICHT als Teilnahme, gehoert aber trotzdem in
-    // die Liste - sonst sieht die Lernbegleitung nicht, wer schon angemeldet ist.
-    s.inputUpcoming++;
-    return true;
-  };
-  // Fachbuero (seit 2026-10-04): wer eingetragen ist, hat teilgenommen - ab dem Termintag,
-  // ohne dass die Lernbegleitung etwas bestaetigt; wer nicht da war, nimmt sie heraus (dann
-  // gibt es die Zeile nicht mehr). Ein frueher eingetragenes "gefehlt" zaehlt weiter als
-  // gefehlt. Offene Einladungen/Anfragen und Absagen sind keine Teilnahme und stehen nicht in
-  // der Liste. Gemeldet wird der wirksame Stand ('erledigt' = teilgenommen) - darauf baut auch
-  // das Tool seine FB-Besuchsliste. Die Lernberatung (nur zugewiesen) bleibt beim Bestaetigen.
+  // Fachbuero und Lernberatung (seit 2026-10-04): wer eingetragen ist, hat teilgenommen - ab
+  // dem Termintag, ohne dass die Lernbegleitung etwas bestaetigt. Wer entschuldigt fehlt, wird
+  // ausgetragen (dann gibt es die Zeile nicht mehr); "hat unentschuldigt gefehlt" vermerkt die
+  // Lernbegleitung ausdruecklich (nicht_erledigt) - das zaehlt als gefehlt, nicht als Teilnahme.
+  // Absagen sind keine Teilnahme und stehen nicht in der Liste (offene Einladungen/Anfragen gibt
+  // es beim Fachbuero nicht mehr - initDB macht Altfaelle zu Teilnahmen). Gemeldet wird der
+  // wirksame Stand ('erledigt' = teilgenommen) - darauf baut auch das Tool seine FB-Besuchsliste.
   const fachbueroEingetragen = r => r.einladung === undefined     // buchende Person
     || r.einladung === 'angenommen' || (r.status && r.status !== 'ausstehend');
   const fabueEintragen = (r, rolle, extra) => {
     const hj = slotHj(r); if (!hj) return;
-    if ((subjectById[r.subjectId] || {}).nurZugewiesen) {
-      const s = ensureSubject(r.uid, hj, r.subjectId);
-      if (!fabueGezaehlt(s, r)) return;
-      halbjahre.add(hj);
-      s.inputDetails.push({ datum: r.datum, role: rolle, thema: r.thema, status: r.status, ...extra });
-      s.lastInput = maxD(s.lastInput, r.datum);
-      return;
-    }
     if (!r.datum || !fachbueroEingetragen(r)) return;
     const s = ensureSubject(r.uid, hj, r.subjectId);
     let status = r.status;
     if (r.datum > heuteIso) s.inputUpcoming++;                                   // steht noch an
-    else if (r.status === 'nicht_erledigt') s.inputMissed++;                     // altes "gefehlt"
+    else if (r.status === 'nicht_erledigt') s.inputMissed++;                     // unentschuldigt gefehlt
     else { s.inputParticipated++; status = 'erledigt'; }                        // eingetragen = teilgenommen
     halbjahre.add(hj);
     s.inputDetails.push({ datum: r.datum, role: rolle, thema: r.thema, status, ...extra });

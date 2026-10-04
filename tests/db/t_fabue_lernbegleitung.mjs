@@ -224,9 +224,9 @@ pruefe('Z9 ein altes "gefehlt" bleibt gefehlt', fb('hal', 'Vergangen')[0] && fb(
 pruefe('Z10 offene Einladung und Absage: keine Teilnahme, nicht in der Liste',
   fb('dan', 'Vergangen').length === 0 && fb('eli', 'Vergangen').length === 0, [fb('dan', 'Vergangen'), fb('eli', 'Vergangen')]);
 pruefe('Z10b beim Fachbuero gibt es kein "noch offen" mehr', hjFach('gil', 'mathe').inputOpen === 0, hjFach('gil', 'mathe'));
-pruefe('Z11 die Lernberatung bleibt beim Bestaetigen: unbestaetigt = noch offen',
-  fb('gil', 'Beratung', 'lernberatung')[0] && fb('gil', 'Beratung', 'lernberatung')[0].status === 'ausstehend'
-  && hjFach('gil', 'lernberatung').inputOpen === 1, hjFach('gil', 'lernberatung'));
+pruefe('Z11 auch die Lernberatung: eingeteilt = teilgenommen, ohne Bestaetigung (kein "noch offen")',
+  fb('gil', 'Beratung', 'lernberatung')[0] && fb('gil', 'Beratung', 'lernberatung')[0].status === 'erledigt'
+  && hjFach('gil', 'lernberatung').inputOpen === 0 && hjFach('gil', 'lernberatung').inputParticipated === 1, hjFach('gil', 'lernberatung'));
 const mineGil = (await srv.rufe('get', '/api/talking-sessions/mine', { session: S(P.gil), query: { subject: 'mathe' } })).body;
 const mineDan = (await srv.rufe('get', '/api/talking-sessions/mine', { session: S(P.dan), query: { subject: 'mathe' } })).body;
 pruefe('Z12 Meine Talks: das vergangene Fachbuero zaehlt als teilgenommen, die offene Einladung steht nicht drin',
@@ -237,11 +237,36 @@ pruefe('Z12 Meine Talks: das vergangene Fachbuero zaehlt als teilgenommen, die o
 await als('lb');
 await kalender();
 bar = leiste(v);
-pruefe('Z13 Fachbuero: keine ✓/✗ mehr, dafuer "Wer eingetragen ist, hat teilgenommen"',
-  !bar.includes('title="War da"') && !bar.includes('title="Hat gefehlt"') && bar.includes('Wer eingetragen ist, hat teilgenommen')
-  && bar.includes('✓ teilgenommen') && bar.includes('gefehlt (zählt nicht)'), bar);
+pruefe('Z13 Fachbuero: kein "War da" mehr; "Wer eingetragen ist, hat teilgenommen", ✗ fuer unentschuldigtes Fehlen',
+  !bar.includes('title="War da"') && bar.includes('Wer eingetragen ist, hat teilgenommen')
+  && bar.includes('✓ teilgenommen') && bar.includes('✗ unentschuldigt gefehlt') && bar.includes('title="Hat unentschuldigt gefehlt"')
+  && bar.includes('title="Fehlen zurücknehmen"'), bar);
 bar = leiste(lbSlot);
-pruefe('Z14 Lernberatung: die Knoepfe "War da"/"Hat gefehlt" bleiben', bar.includes('title="War da"') && bar.includes('title="Hat gefehlt"'), bar);
+pruefe('Z14 Lernberatung: genauso - kein "War da", aber "Hat unentschuldigt gefehlt"',
+  !bar.includes('title="War da"') && bar.includes('title="Hat unentschuldigt gefehlt"') && bar.includes('✓ teilgenommen'), bar);
+
+// 6c2) unentschuldigt gefehlt: vermerken, zuruecknehmen - auch bei der buchenden Person; erst ab dem Termintag
+const gilV = await zeile(vs, 'gil');
+await lauf(`awAnwesenheit(${gilV.id}, 'nicht_erledigt')`); await ruhe();
+let hjC = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;
+const fbC = (o, name, thema) => (((o.students.find(x => x.username === name).byHalbjahr['2627_1'] || {}).bySubject || {}).mathe || {}).inputDetails
+  .filter(d => d.thema === thema);
+pruefe('Z14b "hat unentschuldigt gefehlt" ist vermerkt und zaehlt als gefehlt, nicht als Teilnahme',
+  (await zeile(vs, 'gil')).attended_status === 'nicht_erledigt' && fbC(hjC, 'gil', 'Vergangen')[0].status === 'nicht_erledigt', fbC(hjC, 'gil', 'Vergangen'));
+await lauf(`awAnwesenheit(${gilV.id}, 'ausstehend')`); await ruhe();
+hjC = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;
+pruefe('Z14c zurueckgenommen (↩): zaehlt wieder als teilgenommen', fbC(hjC, 'gil', 'Vergangen')[0].status === 'erledigt', fbC(hjC, 'gil', 'Vergangen'));
+await lauf(`awVortrag(${vs}, 'nicht_erledigt')`); await ruhe();
+hjC = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;
+await kalender();
+bar = leiste(v);
+pruefe('Z14d auch die buchende Person: unentschuldigt gefehlt vermerkbar und sichtbar',
+  fbC(hjC, 'fay', 'Vergangen')[0].status === 'nicht_erledigt' && bar.includes(`awVortrag(${vs}, 'ausstehend')`), bar);
+await lauf(`awVortrag(${vs}, 'ausstehend')`); await ruhe();
+await kalender();
+bar = leiste(m1);
+pruefe('Z14e vor dem Termintag gibt es den Knopf noch nicht', !bar.includes('title="Hat unentschuldigt gefehlt"')
+  && bar.includes('unentschuldigtes Fehlen vermerkst du ab dem Termintag'), bar);
 
 // 6d) Bestand: beim Start werden offene Anfragen/Einladungen zu KOMMENDEN Fachbueros Teilnahmen
 const k = await slot(tag(12));
@@ -261,10 +286,16 @@ await ladeServer(lies('server.js'), db);   // Neustart: initDB laeuft wie auf de
 pruefe('Z15 offene Anfrage und Einladung zum kommenden Fachbuero sind jetzt Teilnahmen',
   (await zeile(ks, 'eli')).status === 'angenommen' && (await zeile(ks, 'fay')).status === 'angenommen');
 pruefe('Z16 eine Absage bleibt eine Absage', (await zeile(ks, 'gil')).status === 'abgelehnt');
-pruefe('Z17 eine offene Anfrage zu einem VERGANGENEN Fachbuero bleibt, wie sie war (ob jemand da war, weiss niemand)',
-  (await zeile(vgs, 'hal')).status === 'angefragt');
-pruefe('Z18 Lernberatung und Talks bleiben unberuehrt',
-  (await zeile(lbks, 'eli')).status === 'eingeladen' && (await zeile(talkSitzung, 'eli')).status === talkVorher && talkVorher === 'eingeladen',
+pruefe('Z17 auch eine offene Anfrage zu einem VERGANGENEN Fachbuero zaehlt jetzt als Teilnahme',
+  (await zeile(vgs, 'hal')).status === 'angenommen');
+{
+  const hjN = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;
+  pruefe('Z17b in der Halbjahr-Uebersicht: die fruehere offene Einladung (dan) zaehlt als teilgenommen, die Absage (eli) nicht',
+    fbC(hjN, 'dan', 'Vergangen').length === 1 && fbC(hjN, 'dan', 'Vergangen')[0].status === 'erledigt'
+    && fbC(hjN, 'eli', 'Vergangen').length === 0, [fbC(hjN, 'dan', 'Vergangen'), fbC(hjN, 'eli', 'Vergangen')]);
+}
+pruefe('Z18 Lernberatung ebenso - Talks bleiben unberuehrt',
+  (await zeile(lbks, 'eli')).status === 'angenommen' && (await zeile(talkSitzung, 'eli')).status === talkVorher && talkVorher === 'eingeladen',
   [await zeile(lbks, 'eli'), talkVorher]);
 
 console.log('\n' + ok + ' Pruefungen bestanden.');
