@@ -49,6 +49,8 @@ const basis = schneide('const LW_TALK_TEXT') + schneide('function lwBadge(typ, b
             + schneide('function lwThemaOhneFrei(text) {') + schneide('function lwOrtAbweichend(s) {')
             + schneide('function slotVorbei(s) {') + schneide('function invEingeteilt(iv) {')
             + schneide('function invStatusText(iv) {') + schneide('function invStatusIcon(iv) {')
+            + schneide('function lwBuchbar(s) {') + schneide('function lwPlaetzeFrei(s) {')
+            + schneide('function lwFreiKlasse(s) {') + schneide('function lwStandText(s, sonst) {')
             + schneide('function mwState(s) {');
 
 const mach = (name, extra) =>
@@ -78,6 +80,17 @@ const fabue = z => Object.assign({
   pruefe('W3d sie ist nicht mehr in Fachfarbe eingefasst',
     !h.includes('border-left-color:#2563eb'), h.slice(0, 200));
   pruefe('W3e und traegt die Zustandsklasse', h.includes('mw-zu'), h.slice(0, 200));
+}
+
+// --- 2b) Gebuchtes Fachbuero, bei dem man mitmachen anfragen kann (2026-10-04) ---
+{
+  const h = mwChip(fabue({ booked: true, thema: 'Brueche ueben' }));
+  pruefe('W7 fremd gebuchtes, offenes Fachbuero: gruen und "noch Plätze frei"',
+    h.includes('ist-frei') && h.includes('noch Plätze frei'), h.slice(0, 400));
+  pruefe('W7b in Fachfarbe eingefasst wie ein freier Termin', h.includes('border-left-color:#2563eb'), h.slice(0, 200));
+  const talk = mwChip(fabue({ booked: true, typ: 'talk' }));
+  pruefe('W7c fremd gebuchter Talk: grau und "vergeben"',
+    talk.includes('ist-vergeben') && talk.includes('vergeben'), talk.slice(0, 400));
 }
 
 // --- 3) Keine Aktion mehr ------------------------------------------------

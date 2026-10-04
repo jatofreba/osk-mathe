@@ -3054,7 +3054,10 @@ app.post('/api/admin/talking-sessions/:id/assign', requireAdmin, async (req, res
       return res.json({ ok: true, assigned, conflicts });
     }
 
-    const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, sess.rows[0].slotId, studentIds);
+    // Die buchende Person steht schon an der Buchung - nicht zusaetzlich als Teilnahme.
+    const ohneBuchende = (Array.isArray(studentIds) ? studentIds : []).map(Number)
+      .filter(id => id && id !== sess.rows[0].presenterId);
+    const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, sess.rows[0].slotId, ohneBuchende);
     for (const uid of okIds) {
       await pool.query(
         `INSERT INTO talking_invitations (session_id, listener_id, status, herkunft)
@@ -3114,6 +3117,32 @@ app.post('/api/admin/talking-sessions/:id/presenter', requireAdmin, async (req, 
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: 'Serverfehler' });
   } finally { client.release(); }
+});
+
+// Lernbegleitung nimmt die buchende Person aus einem FACHBUERO (z.B. krank) - der Termin
+// findet mit den anderen trotzdem statt, Thema und Teilnahmen bleiben. Ihr Anwesenheits-
+// Eintrag haengt an der Buchung (presented_status) und faellt mit weg - wie das × bei einer
+// Teilnahme ("ganz vom Termin nehmen, ohne Fehlzeit"). Bleibt niemand eingetragen, wird der
+// Termin wieder frei (dropEmptySession). Bei Talks haengt am Vortrag die Bewertung - dort
+// tauscht man die buchende Person aus (POST .../presenter).
+app.delete('/api/admin/talking-sessions/:id/presenter', requireAdmin, async (req, res) => {
+  try {
+    const sess = await pool.query(
+      `SELECT ts.id, ts.presenter_id AS "presenterId", sl.typ FROM talking_sessions ts
+       JOIN talking_slots sl ON sl.id = ts.slot_id WHERE ts.id=$1 AND sl.klasse=$2`,
+      [req.params.id, req.session.klasse]);
+    if (!sess.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    if ((sess.rows[0].typ || 'talk') !== 'input')
+      return res.status(400).json({ error: 'Nur beim Fachbüro - bei einem Talk die buchende Person im Fenster "Beteiligte" austauschen.' });
+    if (sess.rows[0].presenterId) {
+      await pool.query(
+        `UPDATE talking_sessions SET presenter_id=NULL, presented_status='ausstehend', pokale=0, quality_emoji=NULL
+         WHERE id=$1`, [req.params.id]);
+    }
+    await dropEmptySession(Number(req.params.id));
+    const bleibt = await pool.query('SELECT 1 FROM talking_sessions WHERE id=$1', [req.params.id]);
+    res.json({ ok: true, frei: !bleibt.rows.length });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
 app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, async (req, res) => {
@@ -3683,7 +3712,11 @@ app.get('/api/public/week', async (req, res) => {
         SELECT s.id, s.typ, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort,
                sub.id AS "subjectId", sub.key AS "subjectKey", sub.name AS "subjectName",
                sub.color AS "subjectColor",
-               (ts.id IS NOT NULL) AS booked, ts.thema, s.thema AS "slotThema"
+               (ts.id IS NOT NULL) AS booked, ts.thema, s.thema AS "slotThema",
+               -- fuer "noch Plaetze frei" (Fachbuero, mitmachen anfragen): beides ohne
+               -- Personenbezug - geschlossen ist eine Termin-Einstellung, rundeOffen sagt nur,
+               -- ob die Runde noch Anfragen annimmt (wie der Anfrage-Weg prueft)
+               s.geschlossen, (ts.presented_status = 'ausstehend') AS "rundeOffen"
         FROM talking_slots s
         LEFT JOIN subjects sub ON sub.id = s.subject_id
         LEFT JOIN talking_sessions ts ON ts.slot_id = s.id

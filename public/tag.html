@@ -140,15 +140,29 @@ function icon(typ) {
 }
 
 // Buchbar = noch frei: niemand gebucht, nicht geschlossen, nicht vorbei.
-function buchbar(s) {
+function vorbei(s) {
   var heute = new Date(); heute.setHours(0, 0, 0, 0);
-  var vorbei = s.datum && new Date(s.datum + 'T00:00:00') < heute;
-  return !s.booked && !s.geschlossen && !vorbei;
+  return !!s.datum && new Date(s.datum + 'T00:00:00') < heute;
+}
+function buchbar(s) {
+  return !s.booked && !s.geschlossen && !vorbei(s);
+}
+// Gebuchtes Fachbüro, zu dem man noch dazukommen kann (mitmachen anfragen) - wie
+// lwPlaetzeFrei() in index.html. rundeOffen liefert /api/public/week ohne Personenbezug.
+function plaetzeFrei(s) {
+  return s.typ === 'input' && !!s.booked && !s.geschlossen && !vorbei(s) && s.rundeOffen !== false;
+}
+// frei / noch Plätze frei / voll (Fachbüro ohne weitere Anmeldungen) / vergeben
+function standText(s) {
+  if (buchbar(s)) return 'frei';
+  if (plaetzeFrei(s)) return 'noch Plätze frei';
+  if (!s.booked) return 'nicht mehr buchbar';
+  return s.typ === 'input' && s.geschlossen && !vorbei(s) ? 'voll' : 'vergeben';
 }
 
 function chip(s) {
   var color = s.subjectColor || '#94a3b8';
-  var frei = buchbar(s);
+  var frei = buchbar(s) || plaetzeFrei(s);
   var typ = s.typ === 'input' ? 'Fachbüro' : 'Talk';
   var ort = s.ort ? ' · ' + esc(s.ort) : '';
   return '<div class="chip ' + (frei ? 'ist-frei' : 'ist-vergeben') + '" style="border-left-color:' + esc(color) + ';">' +
@@ -158,7 +172,7 @@ function chip(s) {
       esc(s.subjectName || '') + '</span>' + ort +
       // Ein ausgeschriebenes Thema steht auch bei noch freien Terminen schon dabei.
       (s.slotThema && !s.booked ? ' · ' + esc(s.slotThema) : '') +
-      ' · <span class="frei">' + (frei ? 'frei' : s.booked ? 'vergeben' : 'nicht mehr buchbar') + '</span></div>' +
+      ' · <span class="frei">' + standText(s) + '</span></div>' +
   '</div>';
 }
 

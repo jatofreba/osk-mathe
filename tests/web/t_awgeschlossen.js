@@ -63,13 +63,13 @@ const fabue = z => Object.assign({
     !bar(fabue({}), false).includes('calSlotGeschlossen'), '');
 }
 
-// --- 3) Vergangene Termine: Schalter bleibt, Einladen faellt weg -------
+// --- 3) Vergangene Termine: Schalter bleibt, Nachtragen geht (seit 2026-10-04) ---
 {
   const h = bar(fabue({ datum: GESTERN }));
   pruefe('A5 auch an einem vergangenen Fachbuero bleibt der Schalter bedienbar',
     h.includes('calSlotGeschlossen'), '');
-  pruefe('A5b waehrend Einladen dort schon vorher entfaellt',
-    !h.includes('openInputAssignModal'), h.slice(-400));
+  pruefe('A5b und die Lernbegleitung kann Personen nachtragen',
+    h.includes('openInputAssignModal') && h.includes('+ nachtragen'), h.slice(-400));
 }
 
 // --- 4) Einladen bleibt trotz geschlossenem Termin moeglich ------------

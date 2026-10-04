@@ -6,7 +6,8 @@ const html = lies('public/index.html');
 let ok = 0;
 const pruefe = (n, b, e) => { if (!b) { console.error('FAIL: ' + n + (e ? '\n      ' + e : '')); process.exit(1); } ok++; console.log('OK  ' + n); };
 const schneide = k => { const a = html.indexOf(k); return html.slice(a, html.indexOf('\n}\n', a) + 2); };
-const FAECHER = { 1: { name: 'Mathe', color: '#2563eb', colorBg: '#eff6ff', nurZugewiesen: false } };
+const FAECHER = { 1: { name: 'Mathe', color: '#2563eb', colorBg: '#eff6ff', nurZugewiesen: false },
+                  2: { name: 'Lernberatung', color: '#7c3aed', colorBg: '#f5f3ff', nurZugewiesen: true } };
 const stubs = `
   const escHtml = t => String(t == null ? '' : t);
   const subjectById = id => FAECHER[id] || { name: '?', color: '#999', colorBg: '#eee' };
@@ -14,7 +15,8 @@ const stubs = `
 `;
 const code = schneide('const LW_TALK_TEXT') + schneide('function lwBadge(typ, buchstabe, farbe) {') + schneide('function invEingeteilt(iv) {') + schneide('const AW_NAMEN_MAX')
            + schneide('function awPersonenHtml(leute) {') + schneide('function slotVorbei(s) {')
-           + schneide('function lwBuchbar(s) {') + schneide('function lwFreiKlasse(s) {') + schneide('function awChip(s) {');
+           + schneide('function lwBuchbar(s) {') + schneide('function lwPlaetzeFrei(s) {') + schneide('function lwFreiKlasse(s) {')
+           + schneide('function lwStandText(s, sonst) {') + schneide('function awChip(s) {');
 const bau = (me, s) => new Function('FAECHER', 'me', stubs + code + '\nreturn awChip;')(FAECHER, me)(s);
 const LB = { role: 'admin', userId: 7, username: 'herf' };
 const slot = inv => ({ id: 5, subjectId: 1, typ: 'input', datum: '2026-09-18', uhrzeit: '08:45',
@@ -34,7 +36,36 @@ const p = (name, z) => Object.assign({ id: 1, username: name, status: 'angenomme
   const zu = bau(LB, { id: 8, subjectId: 1, typ: 'input', datum: zukunft, uhrzeit: '10:00', booked: false, geschlossen: true, invitees: [] });
   pruefe('F3 geschlossen: grau', zu.includes('ist-vergeben') && !zu.includes('ist-frei'), zu);
   const gebucht = bau(LB, slot([p('merle')]));
-  pruefe('F4 gebucht: grau, Namen bleiben lesbar', gebucht.includes('ist-vergeben') && gebucht.includes('merle'), gebucht);
+  pruefe('F4 gebucht und vorbei: grau, Namen bleiben lesbar', gebucht.includes('ist-vergeben') && gebucht.includes('merle'), gebucht);
+
+  // Seit 2026-10-04: ein gebuchtes Fachbuero, bei dem man noch mitmachen anfragen kann, ist gruen.
+  const offen = z => Object.assign(slot([p('merle')]), { datum: zukunft, presentedStatus: 'ausstehend' }, z);
+  const plaetze = bau(LB, offen({}));
+  pruefe('F5 gebuchtes, offenes Fachbuero: gruen und "noch Plätze frei"',
+    plaetze.includes('ist-frei') && plaetze.includes('noch Plätze frei'), plaetze);
+  pruefe('F6 keine weiteren Anmeldungen: grau', bau(LB, offen({ geschlossen: true })).includes('ist-vergeben')
+    && !bau(LB, offen({ geschlossen: true })).includes('noch Plätze frei'));
+  pruefe('F7 Runde schon abgeschlossen (buchende Person eingetragen): grau',
+    bau(LB, offen({ presentedStatus: 'erledigt' })).includes('ist-vergeben'));
+  pruefe('F8 gebuchter Talk: grau - einen Talk kann man nicht mitbuchen',
+    bau(LB, offen({ typ: 'talk' })).includes('ist-vergeben') && !bau(LB, offen({ typ: 'talk' })).includes('noch Plätze frei'));
+  pruefe('F9 Lernberatung: grau - die vergibt die Lernbegleitung',
+    bau(LB, offen({ subjectId: 2 })).includes('ist-vergeben'));
+}
+
+// --- Stand in Worten (fuer alle Kacheln gleich) ------------------------------
+{
+  const zukunft = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  const lwStandText = new Function('FAECHER', 'me', stubs + code + '\nreturn lwStandText;')(FAECHER, LB);
+  const t = z => lwStandText(Object.assign({ id: 9, subjectId: 1, typ: 'input', datum: zukunft, booked: false }, z), 'sonst');
+  pruefe('T1 frei', t({}) === 'frei');
+  pruefe('T2 gebucht, offen: noch Plätze frei', t({ booked: true, presentedStatus: 'ausstehend' }) === 'noch Plätze frei');
+  pruefe('T3 gebucht, keine weiteren Anmeldungen: voll', t({ booked: true, presentedStatus: 'ausstehend', geschlossen: true }) === 'voll');
+  pruefe('T4 gebuchter Talk: vergeben', t({ booked: true, typ: 'talk' }) === 'vergeben');
+  pruefe('T5 gebucht und vorbei: vergeben (nicht "voll")', t({ booked: true, geschlossen: true, datum: '2020-01-01' }) === 'vergeben');
+  pruefe('T6 nicht gebucht und nicht buchbar: Text der Ansicht', t({ geschlossen: true }) === 'sonst');
+  pruefe('T7 oeffentliche Woche (ohne presentedStatus): rundeOffen entscheidet',
+    t({ booked: true, rundeOffen: true }) === 'noch Plätze frei' && t({ booked: true, rundeOffen: false }) === 'vergeben');
 }
 
 // --- klein: Namen als Text -------------------------------------------------

@@ -39,10 +39,19 @@ pruefe('E3 bei einer Lernberatung ebenso (die vergibt die Lernbegleitung ja)',
   bau(LB, { subjectId: 2 }).includes('openInputAssignModal(5)'));
 pruefe('E4 bei einem Talk nicht - dort laedt die vortragende Person ein',
   !bau(LB, { typ: 'talk' }).includes('openInputAssignModal('));
-pruefe('E5 an einem vergangenen Termin nicht mehr',
-  !bau(LB, { datum: versatz(-1) }).includes('openInputAssignModal('));
-pruefe('E6 an einem abgeschlossenen Termin nicht mehr',
-  !bau(LB, { presentedStatus: 'erledigt' }).includes('openInputAssignModal('));
+// Seit 2026-10-04 jederzeit: wer spontan dazukam, wird nachgetragen - auch wenn schon
+// Teilnahmen eingetragen sind oder der Termin vorbei ist.
+pruefe('E5 an einem vergangenen Termin heisst es "+ nachtragen"',
+  bau(LB, { datum: versatz(-1) }).includes('openInputAssignModal(5)') && bau(LB, { datum: versatz(-1) }).includes('>+ nachtragen<'),
+  bau(LB, { datum: versatz(-1) }));
+pruefe('E6 auch wenn die buchende Person schon als "war da" eingetragen ist',
+  bau(LB, { presentedStatus: 'erledigt' }).includes('openInputAssignModal(5)'));
+pruefe('E6b die buchende Person eines Fachbueros laesst sich herausnehmen (×)',
+  bau(LB, { presenterUsername: 'be.ja' }).includes('calRemoveBooker(55)'), bau(LB, { presenterUsername: 'be.ja' }));
+pruefe('E6c bei einem Talk nicht - dort wird die buchende Person ausgetauscht',
+  !bau(LB, { typ: 'talk', presenterUsername: 'be.ja' }).includes('calRemoveBooker('));
+pruefe('E6d an fremden Terminen nicht',
+  !bau(FREMD, { presenterUsername: 'be.ja' }).includes('calRemoveBooker('));
 pruefe('E7 an fremden Terminen nicht',
   !bau(FREMD, {}).includes('openInputAssignModal('));
 pruefe('E8 Bearbeiten und Stornieren bleiben daneben',
