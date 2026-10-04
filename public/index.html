@@ -1047,6 +1047,9 @@ textarea.form-input{
 .lb-val{font-size:12px;color:var(--ink2);flex-shrink:0;}
 .lb-mini-bar{width:60px;height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden;flex-shrink:0;}
 .lb-mini-fill{height:100%;border-radius:99px;}
+/* Gekuerzte Rangliste: "⋯" zwischen zwei Abschnitten, Hinweis auf den Rest am Ende */
+.lb-row.lb-luecke{justify-content:center;color:var(--ink2);padding:0 0 2px;border-bottom:none;font-size:15px;line-height:1;}
+.lb-mehr{font-size:11px;color:var(--ink2);text-align:center;padding-top:6px;}
 
 /* ── Mathe-Talks-Übersicht im Picker (angelehnt an das Papier-Arbeitsblatt) ── */
 .tsum-header{background:linear-gradient(135deg,#fde4ef,#f6c9de);border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
@@ -1941,6 +1944,81 @@ function fachKurs(kurse, subj, matheKurs) {
   return k === 'G' ? 'G' : 'E';
 }
 
+// ── Ranglisten (Startseite) ──────────────────────────────────────────────────
+// Lange Listen werden gekuerzt (Nutzerwunsch 2026-10-04): die ersten LB_TOP Plaetze,
+// dazu die eigene Zeile mit LB_UMFELD Plaetzen davor und danach, dazwischen "⋯", am
+// Ende "… und N weitere". Gleichstand = gleicher Platz: 3x 13 % sind alle "4.", danach
+// geht es mit "7." weiter (vorher bekam ein Gleichstand zufaellig verschiedene Plaetze).
+const LB_TOP = 10;
+const LB_UMFELD = 2;
+
+// Welche Zeilen einer Rangliste mit `anzahl` Eintraegen zu sehen sind (Indizes,
+// aufsteigend). `ich` = Index der eigenen Zeile, -1 wenn man nicht darin steht (etwa
+// als Lernbegleitung). Eine einzelne versteckte Zeile wird gezeigt statt "⋯".
+function lbAuswahl(anzahl, ich, top = LB_TOP, umfeld = LB_UMFELD) {
+  const sicht = new Set();
+  for (let i = 0; i < Math.min(top, anzahl); i++) sicht.add(i);
+  if (ich >= 0) {
+    for (let i = Math.max(0, ich - umfeld); i <= Math.min(anzahl - 1, ich + umfeld); i++) sicht.add(i);
+  }
+  const liste = [...sicht].sort((a, b) => a - b);
+  for (let k = 0; k < liste.length - 1; k++) {
+    if (liste[k + 1] - liste[k] === 2) sicht.add(liste[k] + 1);
+  }
+  if (liste.length && anzahl - 1 - liste[liste.length - 1] === 1) sicht.add(anzahl - 1);
+  return [...sicht].sort((a, b) => a - b);
+}
+
+// Plaetze zu einer bereits sortierten Liste von Vergleichswerten: gleicher Wert =
+// gleicher Platz ("Wettkampf-Zaehlung": 1, 2, 3, 4, 4, 4, 7).
+function lbPlaetze(werte) {
+  const platz = [];
+  werte.forEach((w, i) => platz.push(i > 0 && w === werte[i - 1] ? platz[i - 1] : i + 1));
+  return platz;
+}
+
+function lbRangSymbol(platz) {
+  return platz === 1 ? '🥇' : platz === 2 ? '🥈' : platz === 3 ? '🥉' : `${platz}.`;
+}
+
+// Quote in ganzen Prozent, wie sie angezeigt wird (null = nichts erreichbar).
+function lbQuote(s) {
+  return s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : null;
+}
+
+// Nach Quote sortiert - nach dem ANGEZEIGTEN Wert, damit Gleichstaende beieinander
+// stehen; wer (noch) nichts erreichen kann ("–"), steht am Ende.
+function lbNachQuote(rows) {
+  const schluessel = s => (lbQuote(s) === null ? -1 : lbQuote(s));
+  const genau = s => (s.ownMax ? s.pokale / s.ownMax : 0);
+  return [...rows].sort((a, b) => (schluessel(b) - schluessel(a)) || (genau(b) - genau(a)));
+}
+
+// Eine Rangliste als HTML. `wert(s)` = Text rechts, `balken(s)` = Fuellung 0-100,
+// `schluessel(s)` = Vergleichswert fuer den Platz, `farbe(p)` = Balkenfarbe.
+function ranglisteHtml(liste, { wert, balken, schluessel, ichName, farbe }) {
+  const ich = liste.findIndex(s => s.username === ichName);
+  const platz = lbPlaetze(liste.map(schluessel));
+  const zeilen = [];
+  let vorher = -1;
+  for (const i of lbAuswahl(liste.length, ich)) {
+    if (i - vorher > 1) zeilen.push('<div class="lb-row lb-luecke" aria-hidden="true">⋯</div>');
+    const s = liste[i];
+    const istIch = i === ich;
+    const bar = Math.min(100, balken(s));
+    zeilen.push(`<div class="lb-row${istIch ? ' lb-me' : ''}">
+          <span class="lb-rank">${lbRangSymbol(platz[i])}</span>
+          <span class="lb-name">${istIch ? '<strong>Du</strong>' : '–'}</span>
+          <div class="lb-mini-bar"><div class="lb-mini-fill" style="width:${bar}%;background:${farbe(bar)};"></div></div>
+          <span class="lb-val">${wert(s)}</span>
+        </div>`);
+    vorher = i;
+  }
+  const rest = liste.length - 1 - vorher;
+  if (rest > 0) zeilen.push(`<div class="lb-mehr">… und ${rest} weitere</div>`);
+  return zeilen.join('');
+}
+
 function angebotsFaecher() {
   const list = subjectsMeta.length ? subjectsMeta : [subjectByKey('mathe')];
   return list.filter(s => !s.nurZugewiesen);
@@ -2514,21 +2592,6 @@ async function loadPickerData() {
       if (lr.ok) { const d = await lr.json(); lbRows = d.rows || []; lbGlobalMax = d.globalMax || totalMax; }
     } catch {}
 
-    function rankIcon(i) { return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`; }
-    function renderLb(list, valFn, barFn) {
-      return list.map((s, i) => {
-        const isMe = s.username === me.username;
-        const displayName = isMe ? `<strong>Du</strong>` : '–';
-        const bar = Math.min(100, barFn(s));
-        const barColor = tierColor(bar);
-        return `<div class="lb-row${isMe?' lb-me':''}">
-          <span class="lb-rank">${rankIcon(i)}</span>
-          <span class="lb-name">${displayName}</span>
-          <div class="lb-mini-bar"><div class="lb-mini-fill" style="width:${bar}%;background:${barColor};"></div></div>
-          <span class="lb-val">${valFn(s)}</span>
-        </div>`;
-      }).join('');
-    }
 
     trophySummary.innerHTML = `<div class="trophy-section">
       <div class="trophy-lb-col tsum-col">
@@ -2564,17 +2627,21 @@ async function loadPickerData() {
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Quote</div>
           <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% aller aktuell für dich erreichbaren Flammen</div>
-          ${renderLb([...lbRows].sort((a,b) => (b.ownMax?b.pokale/b.ownMax:0)-(a.ownMax?a.pokale/a.ownMax:0)),
-            s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) + ' %' : '–',
-            s => s.ownMax ? Math.min(100, Math.round(s.pokale / s.ownMax * 100)) : 0
-          )}
+          ${ranglisteHtml(lbNachQuote(lbRows), {
+            wert: s => (lbQuote(s) === null ? '–' : lbQuote(s) + ' %'),
+            balken: s => lbQuote(s) || 0,
+            schluessel: s => (lbQuote(s) === null ? -1 : lbQuote(s)),
+            ichName: me.username, farbe: tierColor,
+          })}
         </div>
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Flammen gesamt</div>
-          ${renderLb(lbRows,
-            s => '🔥 ' + s.pokale,
-            s => lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0
-          )}
+          ${ranglisteHtml(lbRows, {
+            wert: s => '🔥 ' + s.pokale,
+            balken: s => (lbGlobalMax ? Math.min(100, Math.round(s.pokale / lbGlobalMax * 100)) : 0),
+            schluessel: s => s.pokale,
+            ichName: me.username, farbe: tierColor,
+          })}
         </div>
       </div>
     </div>`;
