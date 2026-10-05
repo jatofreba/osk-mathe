@@ -1636,6 +1636,14 @@ app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
 
 app.get('/api/leaderboard', requireLogin, async (req, res) => {
   try {
+    // Die Rangliste zaehlt den ZUWACHS im Halbjahr (Nutzerwunsch 2026-10-05): jedes Halbjahr
+    // starten alle bei 0. Lerntheken = Flammen, die im Halbjahr dazukamen (station_events),
+    // LZK = mit Datum im Halbjahr, Talks = dieses Halbjahr. Erreichbar = was zu Beginn noch
+    // offen war + LZK + Talk-Soll des Halbjahres. Und nur das eigene Tandem.
+    // ?halbjahr=2627_1 waehlt ein bestimmtes (sonst das laufende); Freischaltungen und
+    // aktiv/passiv gelten dabei wie heute - einen Verlauf davon gibt es nicht.
+    const hj = /^\d{4}_[12]$/.test(String(req.query.halbjahr || ''))
+      ? String(req.query.halbjahr) : halbjahrForDate(new Date());
     const allMeta = getLerntheckenMeta();
 
     // Station-ID → group lookup + group configs per lerntheke key
@@ -1658,10 +1666,11 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       return 1;
     }
 
-    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes, hjTargetsRes] = await Promise.all([
-      pool.query(`SELECT id, username, kurs, klasse, created_at FROM users WHERE role='student' AND aktiv=true`),
+    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes, hjTargetsRes, eventsRes] = await Promise.all([
+      pool.query(`SELECT id, username, kurs, klasse, created_at FROM users WHERE role='student' AND aktiv=true AND klasse=$1`,
+        [req.session.klasse]),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
-      pool.query(`SELECT user_id, lerntheke, typ, pokale, anfrage FROM lzk`),
+      pool.query(`SELECT user_id, lerntheke, typ, pokale, anfrage, to_char(datum,'YYYY-MM-DD') AS datum FROM lzk`),
       pool.query(`SELECT user_id, lerntheke, gesperrt, kurs FROM lerntheke_access`),
       pool.query(`
         SELECT ts.presenter_id AS user_id, ts.presented_status AS "presentedStatus", ts.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
@@ -1684,8 +1693,10 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         WHERE ti.status = 'angenommen' AND sl.typ = 'talk' AND ti.rolle <> 'vortrag'
       `),
       pool.query(`SELECT DISTINCT klasse, halbjahr, subject_id AS "subjectId" FROM talking_slots WHERE typ='talk'`),
-      pool.query(`SELECT id, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
+      pool.query(`SELECT id, key, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
       pool.query(`SELECT subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren FROM subject_halbjahr_targets`),
+      pool.query(`SELECT se.user_id, se.progress_key, se.station_id, se.completed_at
+                  FROM station_events se JOIN users u ON u.id = se.user_id WHERE u.klasse=$1`, [req.session.klasse]),
     ]);
 
     const progByUser = {};
@@ -1695,8 +1706,17 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
     });
     const lzkByUser = {};
     lzkRes.rows.forEach(row => {
+      // Nur LZK mit Datum in diesem Halbjahr - die Rangliste zaehlt das Halbjahr.
+      if (!row.datum || halbjahrForDate(row.datum) !== hj) return;
       if (!lzkByUser[row.user_id]) lzkByUser[row.user_id] = [];
       lzkByUser[row.user_id].push(row);
+    });
+    // In welchem Halbjahr eine Station erledigt wurde (je Person und Lerntheke). Ohne
+    // Eintrag (Altbestand vor dem Logging, 2026-08-04) gilt sie als schon vorher erledigt.
+    const stationHj = {};
+    eventsRes.rows.forEach(row => {
+      const e = row.completed_at ? halbjahrForDate(row.completed_at) : null;
+      if (e) (stationHj[row.user_id + '|' + row.progress_key] ||= {})[String(row.station_id)] = e;
     });
     // access lookup: userId → { ltKey → { gesperrt, kurs } }
     const accessByUser = {};
@@ -1712,10 +1732,13 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
     const tsHalbjahreByKlasseSubject = {};
     tsHalbjahrRes.rows.forEach(row => { const k = row.klasse + '|' + row.subjectId; (tsHalbjahreByKlasseSubject[k] ||= []).push(row.halbjahr); });
     const subjectThresholds = {};
-    subjectsRes.rows.forEach(s => { subjectThresholds[s.id] = { pflichtP: s.pflichtP, pflichtZ: s.pflichtZ }; });
+    subjectsRes.rows.forEach(s => { subjectThresholds[s.id] = { pflichtP: s.pflichtP, pflichtZ: s.pflichtZ, key: s.key }; });
+    let ich = null;
 
     const rows = usersRes.rows.map(u => {
       let pokale = 0, ownMax = 0;
+      // Aufschluesselung - nur fuer die eigene Zeile zurueckgegeben ("Meine Flammen").
+      const teile = { lerntheken: { earned: 0, max: 0 }, lzk: { earned: 0, max: 0 }, talks: {} };
       const uProg = progByUser[u.id] || {};
       const uAccess = accessByUser[u.id] || {};
       const globalKurs = u.kurs || 'E';
@@ -1726,19 +1749,37 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         if (!lu) return;
         const kurs = acc.kurs || globalKurs;
         const doneIds = uProg[lt.key] || [];
-        const doneCounts = {};
-        doneIds.forEach(id => { const g = lu.stMap[id]; if (g) doneCounts[g] = (doneCounts[g] || 0) + 1; });
+        // Je Gruppe: erledigt zu Beginn (davor) und am Ende des Halbjahres (bisEnde).
+        // Halbjahr-Codes sortieren als Text richtig ("2526_2" < "2627_1").
+        const erledigtIn = stationHj[u.id + '|' + lt.key] || {};
+        const davor = {}, bisEnde = {};
+        doneIds.forEach(id => {
+          const g = lu.stMap[id];
+          if (!g) return;
+          const e = erledigtIn[String(id)];
+          if (e && e > hj) return; // erst nach diesem Halbjahr erledigt
+          bisEnde[g] = (bisEnde[g] || 0) + 1;
+          if (!e || e < hj) davor[g] = (davor[g] || 0) + 1;
+        });
         Object.entries(lu.groups).forEach(([g, grp]) => {
           if (kurs === 'G' && g === 'Aufbau') return;
-          if (grp.total > 0) { pokale += tc(doneCounts[g] || 0, grp.required, grp.total); ownMax += 3; }
+          if (grp.total <= 0) return;
+          // Zuwachs: Flammen am Ende minus Flammen zu Beginn des Halbjahres; erreichbar
+          // ist, was zu Beginn noch offen war.
+          const vorher = tc(davor[g] || 0, grp.required, grp.total);
+          const zuwachs = Math.max(0, tc(bisEnde[g] || 0, grp.required, grp.total) - vorher);
+          pokale += zuwachs; ownMax += 3 - vorher;
+          teile.lerntheken.earned += zuwachs; teile.lerntheken.max += 3 - vorher;
         });
         (lzkByUser[u.id] || []).forEach(lzk => {
           if (lzk.lerntheke !== lt.key) return;
           if (kurs === 'G' && lzk.typ === 'Aufbau') return;
           pokale += lzk.pokale || 0;
-          if (lu.groups[lzk.typ]) ownMax += 3; // only count LZK max when entry exists (matches client)
+          teile.lzk.earned += lzk.pokale || 0;
+          if (lu.groups[lzk.typ]) { ownMax += 3; teile.lzk.max += 3; } // only count LZK max when entry exists (matches client)
         });
       });
+      const vorFrei = { pokale, ownMax };
       // Freie LZK (ohne Lerntheke, jedes Fach): ein fester Termin zaehlt wie eine
       // Lerntheken-LZK 3 Flammen ins Maximum; offene/abgelehnte Anfragen zaehlen nicht.
       (lzkByUser[u.id] || []).forEach(lzk => {
@@ -1746,6 +1787,7 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         pokale += lzk.pokale || 0;
         ownMax += 3;
       });
+      teile.lzk.earned += pokale - vorFrei.pokale; teile.lzk.max += ownMax - vorFrei.ownMax;
       // Talk-Pokale je Fach getrennt berechnen (eigene Pflicht-Schwellen), dann summieren.
       const uPres = tsPresByUser[u.id] || [];
       const uListen = tsListenByUser[u.id] || [];
@@ -1759,13 +1801,17 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         const subListen = uListen.filter(r => r.subjectId === subjectId);
         const t = computeTalkingTrophies(hjs, subPres, subListen,
           buildTargetsResolver({ id: subjectId, pflichtP: th.pflichtP, pflichtZ: th.pflichtZ }, hjTargetsRes.rows));
-        pokale += t.earned; ownMax += t.max;
+        // Nur dieses Halbjahr (byHalbjahr liefert jedes einzeln).
+        const imHj = t.byHalbjahr[hj] || { earned: 0, max: 0 };
+        pokale += imHj.earned; ownMax += imHj.max;
+        teile.talks[th.key] = { earned: imHj.earned, max: imHj.max };
       });
+      if (u.id === req.session.userId) ich = { pokale, ownMax, teile };
       return { username: u.username, pokale, ownMax };
     });
 
     rows.sort((a, b) => b.pokale - a.pokale || a.username.localeCompare(b.username));
-    res.json({ rows, globalMax });
+    res.json({ rows, globalMax, halbjahr: hj, ich });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

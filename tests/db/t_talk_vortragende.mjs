@@ -169,7 +169,8 @@ pruefe('W2 Halbjahr: der Mit-Vortrag zaehlt als gehalten, nicht als zugehoert',
   gilHj.talksPresented === 1 && gilHj.talksListened === 0 && gilHj.pokalePresented === 3
   && gilHj.talkDetails[0].role === 'gehalten' && gilHj.talkDetails[0].mit === 'dan', gilHj);
 pruefe('W3 bei der buchenden Person steht, mit wem', danHj.talksPresented === 1 && danHj.talkDetails[0].mit === 'gil', danHj);
-const rang = (await srv.rufe('get', '/api/leaderboard', { session: S(P.ada) })).body;
+// Die Rangliste zaehlt seit 2026-10-05 ein Halbjahr - hier das der Termine oben.
+const rang = (await srv.rufe('get', '/api/leaderboard', { session: S(P.ada), query: { halbjahr: '2627_1' } })).body;
 const zeile = (rang.rows || rang).find(z => z.username === 'gil');
 pruefe('W4 Rangliste: die Flammen aus dem Mit-Vortrag zaehlen', zeile && zeile.pokale >= 3, zeile);
 m = await mine(P.gil);

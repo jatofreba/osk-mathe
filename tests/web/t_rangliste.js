@@ -7,9 +7,9 @@ const pruefe = (n, b, e) => { if (!b) { console.error('FAIL: ' + n + (e ? '\n   
 const schneide = k => { const a = html.indexOf(k); if (a < 0) throw new Error('fehlt: ' + k); return html.slice(a, html.indexOf('\n}\n', a) + 2); };
 
 const code = ['function lbAuswahl(', 'function lbPlaetze(', 'function lbRangSymbol(', 'function lbQuote(',
-  'function lbNachQuote(', 'function ranglisteHtml('].map(schneide).join('\n');
+  'function lbNachQuote(', 'function ranglisteHtml(', 'function hjText(', 'function meineFlammen('].map(schneide).join('\n');
 const api = new Function('const LB_TOP = 10; const LB_UMFELD = 2;\n' + code +
-  '\nreturn { lbAuswahl, lbPlaetze, lbRangSymbol, lbQuote, lbNachQuote, ranglisteHtml };')();
+  '\nreturn { lbAuswahl, lbPlaetze, lbRangSymbol, lbQuote, lbNachQuote, ranglisteHtml, hjText, meineFlammen };')();
 
 // --- Auswahl ---------------------------------------------------------------
 const A = (n, ich) => api.lbAuswahl(n, ich);
@@ -54,8 +54,25 @@ const kurz = api.ranglisteHtml(leute.slice(0, 8), { wert: () => '', balken: () =
   ichName: 'niemand', farbe: () => '#000' });
 pruefe('H4 kurze Liste: keine Luecke, kein Rest-Hinweis', !kurz.includes('lb-luecke') && !kurz.includes('weitere'));
 
+// --- Halbjahr (2026-10-05) ---------------------------------------------------
+pruefe('J1 Halbjahr lesbar', api.hjText('2627_1') === '1. Halbjahr 2026/27' && api.hjText('2627_2') === '2. Halbjahr 2026/27');
+pruefe('J2 Unbekanntes bleibt, wie es ist', api.hjText('xy') === 'xy' && api.hjText(null) === '' && api.hjText('') === '');
+const faecher = [{ key: 'mathe', name: 'Mathe' }, { key: 'englisch', name: 'Englisch' }];
+const gesamt = { earned: 40, max: 90, teile: [['📚', 'Mathe-Lerntheken', 30, 60]] };
+let mf = api.meineFlammen({ pokale: 9, ownMax: 21, teile: { lerntheken: { earned: 4, max: 9 }, lzk: { earned: 2, max: 3 },
+  talks: { mathe: { earned: 3, max: 9 } } } }, gesamt, faecher);
+pruefe('J3 mit "ich": die Halbjahreszahlen, je Fach eine Talk-Zeile',
+  mf.imHj && mf.earned === 9 && mf.max === 21 && JSON.stringify(mf.teile) === JSON.stringify([
+    ['📚', 'Mathe-Lerntheken', 4, 9], ['🎓', 'LZK', 2, 3], ['🗣️', 'Mathe-Talks', 3, 9], ['🗣️', 'Englisch-Talks', 0, 0]]), mf);
+mf = api.meineFlammen(null, gesamt, faecher);
+pruefe('J4 ohne "ich" (aelterer Server): die Gesamtwerte wie bisher', !mf.imHj && mf.earned === 40 && mf.max === 90 && mf.teile === gesamt.teile, mf);
+mf = api.meineFlammen({ pokale: 0, ownMax: 0, teile: {} }, gesamt, faecher);
+pruefe('J5 lueckenhafte Teile: Nullen statt Absturz', mf.imHj && mf.teile.every(t => t[2] === 0 && t[3] === 0), mf);
+
 // --- Verdrahtung -----------------------------------------------------------
 pruefe('V1 beide Ranglisten nutzen die gekuerzte Darstellung',
   (html.match(/\$\{ranglisteHtml\(/g) || []).length === 2 && html.includes('ranglisteHtml(lbNachQuote(lbRows)'));
 pruefe('V2 der alte Helfer ist weg', !html.includes('function renderLb('));
+pruefe('V3 die Flammen-Rangliste misst am Spitzenwert des Halbjahres, nicht mehr am Gesamtmaximum',
+  html.includes('s.pokale / lbSpitze') && !html.includes('lbGlobalMax'));
 console.log('\n' + ok + ' Pruefungen bestanden.');
