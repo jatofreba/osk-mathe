@@ -44,7 +44,8 @@ const [gName, grp] = Object.entries(lt.groups).find(([, g]) => stufig(g));
 const ids = lt.stations.filter(s => s.group === gName).map(s => s.id).slice(0, grp.total);
 const VOLL = 3 * Object.values(lt.groups).filter(g => g.total > 0).length;
 
-// ana: die Pflicht-Anzahl vor einem Jahr, den Rest heute; LZK Basis heute mit 2 Flammen.
+// ana: die Pflicht-Anzahl vor einem Jahr, den Rest heute; LZK Basis heute mit 2 Flammen;
+// freie LZK: heute 1 Flamme, vor einem Jahr 3 Flammen, dazu eine offene Anfrage.
 // fremd (anderes Tandem): alles heute - stuende sonst ganz oben.
 for (const n of ['ana', 'fremd']) {
   await db.query(`INSERT INTO lerntheke_access (user_id, lerntheke, gesperrt) VALUES ($1,$2,false)`, [P[n], lt.key]);
@@ -58,6 +59,11 @@ for (const [uid, liste, wann] of [[P.ana, ids.slice(0, grp.required), "NOW() - I
 }
 await db.query(`INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id) VALUES ($1,$2,'Basis',$3,'bestanden',2,$4)`,
   [P.ana, lt.key, tagIso(heute), F.mathe]);
+const vorEinemJahr = new Date(heute.getTime() - 365 * 864e5);
+await db.query(`INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage) VALUES
+  ($1,NULL,'LZK',$2,'bestanden',1,$4,'Erörterung',NULL),
+  ($1,NULL,'LZK',$3,'bestanden',3,$4,'Gedicht',NULL),
+  ($1,NULL,'LZK',NULL,'ausstehend',0,$4,'Wunsch','offen')`, [P.ana, tagIso(heute), tagIso(vorEinemJahr), F.deutsch]);
 
 // ── Seite, verbunden mit dem Server ──────────────────────────────────────────
 const seite = ladeSeite();
@@ -86,20 +92,20 @@ let h = await startseite();
 const panel = h.slice(h.indexOf('Meine Flammen'), h.indexOf('trophy-lb-col rank-col'));
 pruefe('S1 "Meine Flammen" nennt das Halbjahr', h.includes('Meine Flammen – ' + HJ_TEXT), h.slice(0, 600));
 const gross = panel.match(/font-size:22px[^>]*>(\d+) <span[^>]*>von (\d+)<\/span>/);
-pruefe('S2 gross: die Flammen dieses Halbjahres (2 Zuwachs + 2 LZK) von dem, was zu Beginn offen war',
-  gross && gross[1] === '4' && gross[2] === String(VOLL - 1 + 3), gross && gross.slice(1));
-pruefe('S3 klein darunter: die Summe seit Beginn (3 + 2)',
-  panel.includes(`Insgesamt: 5 von ${VOLL + 3} Flammen`), panel.slice(0, 1500));
+pruefe('S2 gross: die Flammen dieses Halbjahres (2 Zuwachs + 2 LZK + 1 freie LZK) von dem, was zu Beginn offen war',
+  gross && gross[1] === '5' && gross[2] === String(VOLL - 1 + 6), gross && gross.slice(1));
+pruefe('S3 klein darunter: die Summe seit Beginn (3 + 2 + 1 + 3) - mit den freien LZK, ohne die Anfrage',
+  panel.includes(`Insgesamt: 9 von ${VOLL + 9} Flammen`), panel.slice(0, 1500));
 pruefe('S4 der Text unter dem Balken spricht vom Halbjahr', panel.includes('% der in diesem Halbjahr erreichbaren Flammen'), panel.slice(0, 1500));
 const zeileVon = name => (panel.match(new RegExp(name + '</span>[\\s\\S]*?<span[^>]*>(\\d+)/(\\d+) ')) || []).slice(1).join('/');
-pruefe('S5 Aufschluesselung im Halbjahr: Lerntheken 2 von ' + (VOLL - 1) + ', LZK 2 von 3',
-  zeileVon('Mathe-Lerntheken') === `2/${VOLL - 1}` && zeileVon('LZK') === '2/3', [zeileVon('Mathe-Lerntheken'), zeileVon('LZK')]);
+pruefe('S5 Aufschluesselung im Halbjahr: Lerntheken 2 von ' + (VOLL - 1) + ', LZK 3 von 6',
+  zeileVon('Mathe-Lerntheken') === `2/${VOLL - 1}` && zeileVon('LZK') === '3/6', [zeileVon('Mathe-Lerntheken'), zeileVon('LZK')]);
 const rangteil = h.slice(h.indexOf('trophy-lb-col rank-col'));
 pruefe('S6 die Ranglisten heissen nach dem Halbjahr',
   rangteil.includes('Rangliste – Flammen im Halbjahr') && rangteil.includes('% der im ' + HJ_TEXT + ' für dich erreichbaren Flammen'), rangteil.slice(0, 800));
 pruefe('S7 nur das eigene Tandem: je Liste zwei Zeilen (ana, ben), fremd fehlt',
   (rangteil.match(/class="lb-row[" ]/g) || []).length === 4, rangteil);
-pruefe('S8 du stehst vorn - mit 4 Flammen', /lb-me">\s*<span class="lb-rank">🥇<\/span>[\s\S]*?🔥 4</.test(rangteil), rangteil);
+pruefe('S8 du stehst vorn - mit 5 Flammen', /lb-me">\s*<span class="lb-rank">🥇<\/span>[\s\S]*?🔥 5</.test(rangteil), rangteil);
 
 // ── Rueckfall: ein Server ohne "ich" (aelterer Stand) - dann wie frueher die Gesamtwerte ──
 umleiten = url => (String(url).startsWith('/api/leaderboard')
@@ -108,7 +114,7 @@ h = await startseite();
 const alt = h.slice(h.indexOf('Meine Flammen'), h.indexOf('trophy-lb-col rank-col'));
 const grossAlt = alt.match(/font-size:22px[^>]*>(\d+) <span[^>]*>von (\d+)<\/span>/);
 pruefe('R1 ohne "ich": Titel ohne Halbjahr, gross die Gesamtwerte, keine doppelte Zeile',
-  alt.startsWith('Meine Flammen</div>') && grossAlt && grossAlt[1] === '5' && grossAlt[2] === String(VOLL + 3)
+  alt.startsWith('Meine Flammen</div>') && grossAlt && grossAlt[1] === '9' && grossAlt[2] === String(VOLL + 9)
   && !alt.includes('Insgesamt:') && alt.includes('% aller möglichen Flammen'), alt.slice(0, 800));
 
 console.log('\n' + ok + ' Pruefungen bestanden.');

@@ -2599,6 +2599,14 @@ async function loadPickerData() {
       if (lzk) { lzkEarned += lzk.pokale || 0; lzkMax += 3; }
     });
   });
+  // Freie LZK (ohne Lerntheke, jedes Fach) wie in der Rangliste: ein fester Termin zaehlt
+  // 3 Flammen ins Maximum, offene/abgelehnte Anfragen nicht. Vorher fehlten sie hier -
+  // "Insgesamt" laege sonst unter der Halbjahreszahl, sobald eine bewertet ist (2026-10-05).
+  lzkRows.forEach(l => {
+    if (l.lerntheke || l.anfrage) return;
+    lzkEarned += l.pokale || 0;
+    lzkMax += 3;
+  });
   const talkEarned = Object.values(talkingMineBySubject).reduce((sum, d) => sum + (d.trophies?.earned || 0), 0);
   const talkMax = Object.values(talkingMineBySubject).reduce((sum, d) => sum + (d.trophies?.max || 0), 0);
   const totalEarned = stationsEarned + lzkEarned + talkEarned;
