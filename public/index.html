@@ -2026,8 +2026,8 @@ function hjText(hj) {
   return m ? `${m[3]}. Halbjahr 20${m[1]}/${m[2]}` : String(hj || '');
 }
 
-// "Meine Flammen" zaehlt seit 2026-10-05 das laufende Halbjahr - mit genau den Zahlen
-// der Rangliste (`ich` aus /api/leaderboard: Zuwachs seit Halbjahresbeginn). Ohne
+// "Meine Flammen" zeigt seit 2026-10-05 genau die Zahlen der Rangliste (`ich` aus
+// /api/leaderboard): Lerntheken absolut, LZK und Talks im laufenden Halbjahr. Ohne
 // `ich` (aelterer Server, keine eigene Zeile) bleiben die Gesamtwerte `gesamt`.
 // Liefert { imHj, earned, max, teile: [[Symbol, Name, erreicht, erreichbar], ...] }.
 function meineFlammen(ich, gesamt, faecher) {
@@ -2035,7 +2035,7 @@ function meineFlammen(ich, gesamt, faecher) {
   const t = ich.teile;
   const zahl = (x, k) => (x && x[k]) || 0;
   return { imHj: true, earned: ich.pokale || 0, max: ich.ownMax || 0, teile: [
-    ['📚', 'Mathe-Lerntheken', zahl(t.lerntheken, 'earned'), zahl(t.lerntheken, 'max')],
+    ['📚', 'Mathe-Lerntheken (gesamt)', zahl(t.lerntheken, 'earned'), zahl(t.lerntheken, 'max')],
     ['🎓', 'LZK', zahl(t.lzk, 'earned'), zahl(t.lzk, 'max')],
     ...faecher.map(subj => {
       const f = (t.talks || {})[subj.key];
@@ -2617,9 +2617,9 @@ async function loadPickerData() {
   if (trophySummary) {
     function tierColor(p) { return p>=75?'#7c3aed':p>=50?'#2563eb':p>=25?'#16a34a':'#9ca3af'; }
 
-    // Die Ranglisten zaehlen nur das laufende Halbjahr und nur das eigene Tandem
-    // (Nutzerwunsch 2026-10-05) - "Meine Flammen" gross dieselben Halbjahreszahlen,
-    // klein darunter weiter die Summe seit Beginn.
+    // Die Ranglisten zaehlen Lerntheken absolut, LZK und Talks nur im laufenden Halbjahr,
+    // und nur das eigene Tandem (Nutzerwunsch 2026-10-05/06) - "Meine Flammen" gross
+    // dieselben Zahlen, klein darunter die Summe ueber alle Halbjahre.
     let lbRows = [], lbHj = '', lbIch = null;
     try {
       const lr = await fetch('/api/leaderboard');
@@ -2632,10 +2632,11 @@ async function loadPickerData() {
     ] }, angebotsFaecher());
     const pct = mf.max ? Math.round(mf.earned / mf.max * 100) : 0;
     const fillColor = tierColor(pct);
-    const pctText = !mf.max ? (mf.imHj ? 'In diesem Halbjahr ist noch nichts zu erreichen.' : '0 % aller möglichen Flammen')
-      : pct >= 100 ? (mf.imHj ? '🔥 Alle Flammen dieses Halbjahres gesammelt!' : '🔥 Alle Flammen gesammelt!')
-      : pct + (mf.imHj ? ' % der in diesem Halbjahr erreichbaren Flammen' : ' % aller möglichen Flammen');
-    // Balken der Flammen-Rangliste: gemessen an der Spitze dieses Halbjahres.
+    const pctText = pct >= 100 ? '🔥 Alle Flammen gesammelt!'
+      : pct + (mf.imHj ? ' % der für dich erreichbaren Flammen' : ' % aller möglichen Flammen');
+    // Was gezaehlt wird - unter beiden Ranglisten-Titeln.
+    const lbWas = lbHj ? 'Lerntheken gesamt, LZK und Talks im ' + escHtml(hjText(lbHj)) : '';
+    // Balken der Flammen-Rangliste: gemessen an der Spitze der Liste.
     const lbSpitze = Math.max(0, ...lbRows.map(s => s.pokale || 0));
 
 
@@ -2651,7 +2652,7 @@ async function loadPickerData() {
             <span>0</span><span style="color:#16a34a;">▲ 25%</span><span style="color:#2563eb;">▲ 50%</span><span style="color:#7c3aed;">▲ 75%</span><span>100%</span>
           </div>
           <div style="font-size:11px;color:var(--ink2);margin-top:8px;">${pctText}</div>
-          ${mf.imHj ? `<div style="font-size:11px;color:var(--ink2);margin-top:2px;">Insgesamt: ${totalEarned} von ${totalMax} Flammen</div>` : ''}
+          ${mf.imHj ? `<div style="font-size:11px;color:var(--ink2);margin-top:2px;">Insgesamt (alle Halbjahre): ${totalEarned} von ${totalMax} Flammen</div>` : ''}
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
             ${mf.teile.map(([icon, label, earned, max]) => {
               const subPct = max ? Math.round(earned / max * 100) : 0;
@@ -2669,7 +2670,7 @@ async function loadPickerData() {
       <div class="trophy-lb-col rank-col">
         <div class="trophy-panel">
           <div class="trophy-panel-title">Rangliste – Quote</div>
-          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% der ${lbHj ? 'im ' + escHtml(hjText(lbHj)) : 'in diesem Halbjahr'} für dich erreichbaren Flammen</div>
+          <div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">% der für dich erreichbaren Flammen${lbWas ? ' – ' + lbWas : ''}</div>
           ${ranglisteHtml(lbNachQuote(lbRows), {
             wert: s => (lbQuote(s) === null ? '–' : lbQuote(s) + ' %'),
             balken: s => lbQuote(s) || 0,
@@ -2678,7 +2679,8 @@ async function loadPickerData() {
           })}
         </div>
         <div class="trophy-panel">
-          <div class="trophy-panel-title">Rangliste – Flammen im Halbjahr</div>
+          <div class="trophy-panel-title">Rangliste – Flammen</div>
+          ${lbWas ? `<div style="font-size:11px;color:var(--ink2);margin-bottom:10px;">${lbWas}</div>` : ''}
           ${ranglisteHtml(lbRows, {
             wert: s => '🔥 ' + s.pokale,
             balken: s => (lbSpitze ? Math.min(100, Math.round(s.pokale / lbSpitze * 100)) : 0),

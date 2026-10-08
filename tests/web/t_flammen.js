@@ -47,8 +47,8 @@ pruefe('F4b LZK-Feld heisst Flammen', html.includes('id="lzk-pokal-lbl">Flammen<
 pruefe('F4c bestandene LZK wird mit der Flamme gemeldet',
   js.includes(`<span class="lzk-status-icon">🔥</span>`));
 // Ranglisten
-// Seit 2026-10-05 zaehlt die Rangliste das Halbjahr (vorher "Flammen gesamt").
-pruefe('F5 die Rangliste heisst "Flammen im Halbjahr"', html.includes('Rangliste – Flammen im Halbjahr'));
+// Seit 2026-10-06: Lerntheken absolut, LZK und Talks je Halbjahr (vorher "Flammen gesamt").
+pruefe('F5 die Rangliste heisst "Flammen"', html.includes('Rangliste – Flammen</div>'));
 pruefe('F5b und zaehlt mit der Flamme', html.includes("s => '🔥 ' + s.pokale"));
 pruefe('F5c das eigene Panel heisst "Meine Flammen"', html.includes('>Meine Flammen${'));
 pruefe('F5d der Vollstaendigkeits-Text passt',

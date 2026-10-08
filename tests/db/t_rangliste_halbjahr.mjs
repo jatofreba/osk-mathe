@@ -1,8 +1,7 @@
-// Rangliste je Halbjahr (Nutzerwunsch 2026-10-05): gezaehlt wird der ZUWACHS im Halbjahr -
-// Lerntheken-Flammen, die im Halbjahr dazukamen, LZK mit Datum im Halbjahr, Talks des
-// Halbjahres -, und nur das eigene Tandem. "ich" liefert die eigene Aufschluesselung fuer
-// "Meine Flammen". Laeuft gegen die ECHTE server.js (ganz geladen, pglite) und die echten
-// Lerntheken-Dateien.
+// Rangliste (Nutzerwunsch 2026-10-05, praezisiert 2026-10-06): Lerntheken zaehlen ABSOLUT
+// (egal, wann erledigt), LZK (nach Datum) und Talks nur im Halbjahr - und nur das eigene
+// Tandem. "ich" liefert die eigene Aufschluesselung fuer "Meine Flammen". Laeuft gegen die
+// ECHTE server.js (ganz geladen, pglite) und die echten Lerntheken-Dateien.
 import { PGlite } from '@electric-sql/pglite';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -37,13 +36,14 @@ const zeile = (b, name) => (b.rows || []).find(z => z.username === name);
 // --- eine echte Lerntheke: mit Basis-Gruppe und einer Gruppe mit Abstufungen -----
 const meta = (await srv.rufe('get', '/api/lerntheken-meta', { session: S(P.ana) })).body;
 const stufig = g => g && g.required > 0 && g.total > g.required;
-const lt = meta.find(m => m.key && m.groups && m.groups.Basis && Object.values(m.groups).some(stufig));
+const lt = meta.find(m => m.key && m.groups && m.groups.Basis && m.groups.Aufbau && m.groups.Aufbau.total > 0
+  && Object.values(m.groups).some(stufig));
 pruefe('V0 es gibt eine passende Lerntheke', !!lt, meta.map(m => m.key));
 const [gName, grp] = Object.entries(lt.groups).find(([, g]) => stufig(g));
 const ids = lt.stations.filter(s => s.group === gName).map(s => s.id).slice(0, grp.total);
 pruefe('V0b die Gruppe hat genug Stationen', ids.length === grp.total, { gName, grp, ids });
 const gruppen = Object.values(lt.groups).filter(g => g.total > 0).length;
-const VOLL = 3 * gruppen; // erreichbar in der Lerntheke, wenn zu Beginn noch nichts erledigt war
+const VOLL = 3 * gruppen; // erreichbar in der Lerntheke
 
 const fortschritt = (uid, stationen) =>
   db.query(`INSERT INTO progress (user_id, key, value) VALUES ($1,$2,$3)`, [uid, lt.key, JSON.stringify(stationen)]);
@@ -56,13 +56,17 @@ const frei = uid => db.query(`INSERT INTO lerntheke_access (user_id, lerntheke, 
 const IM_HJ = '2026-09-20T10:00:00Z', HJ_DAVOR = '2026-03-10T10:00:00Z';
 
 // ana: die ganze Gruppe in DIESEM Halbjahr; ben: dieselbe im letzten; cem: Altbestand ohne
-// Zeitstempel (vor dem Logging); dia: die Pflicht-Anzahl im letzten, den Rest jetzt.
-for (const n of ['ana', 'ben', 'cem', 'dia', 'fremd']) { await frei(P[n]); await fortschritt(P[n], ids); }
+// Zeitstempel (vor dem Logging); dia: nur die Pflicht-Anzahl, im letzten Halbjahr.
+for (const n of ['ana', 'ben', 'cem', 'fremd']) { await frei(P[n]); await fortschritt(P[n], ids); }
+await frei(P.dia); await fortschritt(P.dia, ids.slice(0, grp.required));
 await erledigt(P.ana, ids, IM_HJ);
 await erledigt(P.ben, ids, HJ_DAVOR);
 await erledigt(P.dia, ids.slice(0, grp.required), HJ_DAVOR);
-await erledigt(P.dia, ids.slice(grp.required), IM_HJ);
 await erledigt(P.fremd, ids, IM_HJ);
+// eva: G-Kurs, eigenes Tandem (stoert die Listen oben nicht), Lerntheke frei, nichts erledigt
+P.eva = await neu('eva', 'M5M6');
+await db.query(`UPDATE users SET kurs='G' WHERE id=$1`, [P.eva]);
+await frei(P.eva);
 
 // LZK: Lerntheken-LZK in diesem Halbjahr, freie LZK im letzten, offene Anfrage, ohne Datum
 await db.query(`INSERT INTO lzk (user_id, lerntheke, typ, datum, status, pokale, subject_id, thema, anfrage) VALUES
@@ -84,24 +88,27 @@ for (const hj of ['2627_1', '2526_2'])
                   VALUES ($1,$2,1,2)`, [F.mathe, hj]);
 const TALK_SOLL = 3 * 1 + 2 * 2;
 
-// ── L) Lerntheken: nur der Zuwachs im Halbjahr ─────────────────────────────────
+// ── L) Lerntheken: absolut, egal wann erledigt ─────────────────────────────────
 let b = await rang(S(P.ana));
 const teil = name => b.rows && zeile(b, name);
 pruefe('L0 die Antwort nennt das Halbjahr', b.halbjahr === '2627_1', b.halbjahr);
 const ich = b.ich;
-pruefe('L1 alles in diesem Halbjahr erledigt: die vollen 3 Flammen der Gruppe',
+pruefe('L1 in diesem Halbjahr erledigt: die vollen 3 Flammen der Gruppe',
   ich && ich.teile.lerntheken.earned === 3 && ich.teile.lerntheken.max === VOLL, ich);
 // ben/cem/dia sehen ihre eigene Aufschluesselung nur selbst - also je mit eigener Sitzung
 const ichVon = async n => (await rang(S(P[n]))).ich;
 let x = await ichVon('ben');
-pruefe('L2 im letzten Halbjahr erledigt: jetzt 0, und die Gruppe ist nicht mehr erreichbar',
-  x.teile.lerntheken.earned === 0 && x.teile.lerntheken.max === VOLL - 3, x);
+pruefe('L2 im letzten Halbjahr erledigt: zaehlt genauso voll',
+  x.teile.lerntheken.earned === 3 && x.teile.lerntheken.max === VOLL, x);
 x = await ichVon('cem');
-pruefe('L3 Altbestand ohne Zeitstempel zaehlt als vorher erledigt',
-  x.teile.lerntheken.earned === 0 && x.teile.lerntheken.max === VOLL - 3, x);
+pruefe('L3 Altbestand ohne Zeitstempel zaehlt ebenso',
+  x.teile.lerntheken.earned === 3 && x.teile.lerntheken.max === VOLL, x);
 x = await ichVon('dia');
-pruefe('L4 Pflicht vorher, Rest jetzt: nur der Zuwachs (2) zaehlt, erreichbar war noch 2',
-  x.teile.lerntheken.earned === 2 && x.teile.lerntheken.max === VOLL - 1, x);
+pruefe('L4 nur die Pflicht-Anzahl erledigt: 1 Flamme, erreichbar bleibt die ganze Lerntheke',
+  x.teile.lerntheken.earned === 1 && x.teile.lerntheken.max === VOLL, x);
+x = (await rang(S(P.eva, 'M5M6'))).ich;
+pruefe('L5 G-Kurs: die Aufbau-Gruppe zaehlt nicht ins Erreichbare',
+  x.teile.lerntheken.earned === 0 && x.teile.lerntheken.max === VOLL - 3, x);
 
 // ── K) LZK: nach Datum im Halbjahr ─────────────────────────────────────────────
 pruefe('K1 die Lerntheken-LZK dieses Halbjahres zaehlt, die freie aus dem letzten nicht',
@@ -137,21 +144,18 @@ pruefe('D1 Rangliste von M3M4: nur die vier aus M3M4 - kein fremdes Tandem, kein
 const fremd = await rang(S(P.fremd, 'M1M2'));
 pruefe('D2 im anderen Tandem steht nur, wer dort ist', fremd.rows.length === 1 && fremd.rows[0].username === 'fremd'
   && fremd.ich && fremd.ich.teile.lerntheken.earned === 3, fremd);
-pruefe('D3 sortiert nach Flammen im Halbjahr', b.rows[0].username === 'ana', b.rows);
+pruefe('D3 sortiert nach Flammen', b.rows.map(z => z.username + ':' + z.pokale).join(' ') === 'ana:8 ben:3 cem:3 dia:1', b.rows);
 
 // ── H) anderes Halbjahr ────────────────────────────────────────────────────────
 b = await rang(S(P.ana), '2526_2');
-pruefe('H1 letztes Halbjahr: Stationen, die erst danach kamen, zaehlen dort nicht',
-  b.ich.teile.lerntheken.earned === 0 && b.ich.teile.lerntheken.max === VOLL, b.ich);
-pruefe('H2 ... dafuer die freie LZK und der Vortrag von damals',
+pruefe('H1 letztes Halbjahr: die Lerntheken zaehlen absolut wie immer',
+  b.ich.teile.lerntheken.earned === 3 && b.ich.teile.lerntheken.max === VOLL, b.ich);
+pruefe('H2 ... LZK und Talks dagegen die von damals',
   b.ich.teile.lzk.earned === 3 && b.ich.teile.lzk.max === 3 && b.ich.teile.talks.mathe.earned === 2, b.ich);
-x = (await rang(S(P.ben), '2526_2')).ich;
-pruefe('H3 ben: im letzten Halbjahr die volle Gruppe', x.teile.lerntheken.earned === 3 && x.teile.lerntheken.max === VOLL, x);
-x = (await rang(S(P.dia), '2526_2')).ich;
-pruefe('H4 dia: im letzten Halbjahr nur die Pflicht-Stufe (1 Flamme)',
-  x.teile.lerntheken.earned === 1 && x.teile.lerntheken.max === VOLL, x);
 b = await rang(S(P.ana), '2627_2');
-pruefe('H5 ein neues Halbjahr startet fuer alle bei 0', b.rows.length === 4 && b.rows.every(z => z.pokale === 0), b.rows);
+pruefe('H3 neues Halbjahr: LZK und Talks starten bei 0, die Lerntheken bleiben stehen',
+  b.rows.map(z => z.username + ':' + z.pokale).join(' ') === 'ana:3 ben:3 cem:3 dia:1'
+  && b.ich.teile.lzk.earned === 0 && b.ich.teile.lzk.max === 0 && !(b.ich.teile.talks.mathe || {}).earned, b);
 
 // ── S) Standard: das laufende Halbjahr ─────────────────────────────────────────
 const jetzt = (() => {

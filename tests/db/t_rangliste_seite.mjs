@@ -1,7 +1,8 @@
-// Startseite: "Meine Flammen" und die Ranglisten zaehlen das laufende Halbjahr (Nutzerwunsch
-// 2026-10-05) - Seite und Server ZUSAMMEN: die echte public/index.html (seite_im_test.js) holt
-// ihre Daten von der echten server.js (server_im_test.js, pglite). Alle Daten liegen relativ zu
-// heute, damit der Test in jedem Halbjahr gleich laeuft.
+// Startseite: "Meine Flammen" und die Ranglisten zaehlen die Lerntheken absolut, LZK und
+// Talks im laufenden Halbjahr (Nutzerwunsch 2026-10-05, praezisiert 2026-10-06) - Seite und
+// Server ZUSAMMEN: die echte public/index.html (seite_im_test.js) holt ihre Daten von der
+// echten server.js (server_im_test.js, pglite). Alle Daten liegen relativ zu heute, damit der
+// Test in jedem Halbjahr gleich laeuft.
 import { PGlite } from '@electric-sql/pglite';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -44,7 +45,8 @@ const [gName, grp] = Object.entries(lt.groups).find(([, g]) => stufig(g));
 const ids = lt.stations.filter(s => s.group === gName).map(s => s.id).slice(0, grp.total);
 const VOLL = 3 * Object.values(lt.groups).filter(g => g.total > 0).length;
 
-// ana: die Pflicht-Anzahl vor einem Jahr, den Rest heute; LZK Basis heute mit 2 Flammen;
+// ana: die Pflicht-Anzahl vor einem Jahr, den Rest heute (fuer die Lerntheken egal - sie
+// zaehlen absolut); LZK Basis heute mit 2 Flammen;
 // freie LZK: heute 1 Flamme, vor einem Jahr 3 Flammen, dazu eine offene Anfrage.
 // fremd (anderes Tandem): alles heute - stuende sonst ganz oben.
 for (const n of ['ana', 'fremd']) {
@@ -92,20 +94,22 @@ let h = await startseite();
 const panel = h.slice(h.indexOf('Meine Flammen'), h.indexOf('trophy-lb-col rank-col'));
 pruefe('S1 "Meine Flammen" nennt das Halbjahr', h.includes('Meine Flammen – ' + HJ_TEXT), h.slice(0, 600));
 const gross = panel.match(/font-size:22px[^>]*>(\d+) <span[^>]*>von (\d+)<\/span>/);
-pruefe('S2 gross: die Flammen dieses Halbjahres (2 Zuwachs + 2 LZK + 1 freie LZK) von dem, was zu Beginn offen war',
-  gross && gross[1] === '5' && gross[2] === String(VOLL - 1 + 6), gross && gross.slice(1));
-pruefe('S3 klein darunter: die Summe seit Beginn (3 + 2 + 1 + 3) - mit den freien LZK, ohne die Anfrage',
-  panel.includes(`Insgesamt: 9 von ${VOLL + 9} Flammen`), panel.slice(0, 1500));
-pruefe('S4 der Text unter dem Balken spricht vom Halbjahr', panel.includes('% der in diesem Halbjahr erreichbaren Flammen'), panel.slice(0, 1500));
-const zeileVon = name => (panel.match(new RegExp(name + '</span>[\\s\\S]*?<span[^>]*>(\\d+)/(\\d+) ')) || []).slice(1).join('/');
-pruefe('S5 Aufschluesselung im Halbjahr: Lerntheken 2 von ' + (VOLL - 1) + ', LZK 3 von 6',
-  zeileVon('Mathe-Lerntheken') === `2/${VOLL - 1}` && zeileVon('LZK') === '3/6', [zeileVon('Mathe-Lerntheken'), zeileVon('LZK')]);
+pruefe('S2 gross: Lerntheken absolut (3) + LZK dieses Halbjahres (2 + 1 frei)',
+  gross && gross[1] === '6' && gross[2] === String(VOLL + 6), gross && gross.slice(1));
+pruefe('S3 klein darunter: die Summe ueber alle Halbjahre (3 + 2 + 1 + 3) - mit den freien LZK, ohne die Anfrage',
+  panel.includes(`Insgesamt (alle Halbjahre): 9 von ${VOLL + 9} Flammen`), panel.slice(0, 1500));
+pruefe('S4 der Text unter dem Balken', panel.includes('% der für dich erreichbaren Flammen'), panel.slice(0, 1500));
+const zeileVon = name => (panel.match(new RegExp(name.replace(/[()]/g, '\\$&') + '</span>[\\s\\S]*?<span[^>]*>(\\d+)/(\\d+) ')) || []).slice(1).join('/');
+pruefe('S5 Aufschluesselung: Lerntheken (gesamt) 3 von ' + VOLL + ', LZK 3 von 6',
+  zeileVon('Mathe-Lerntheken (gesamt)') === `3/${VOLL}` && zeileVon('LZK') === '3/6', [zeileVon('Mathe-Lerntheken (gesamt)'), zeileVon('LZK')]);
 const rangteil = h.slice(h.indexOf('trophy-lb-col rank-col'));
-pruefe('S6 die Ranglisten heissen nach dem Halbjahr',
-  rangteil.includes('Rangliste – Flammen im Halbjahr') && rangteil.includes('% der im ' + HJ_TEXT + ' für dich erreichbaren Flammen'), rangteil.slice(0, 800));
+const was = 'Lerntheken gesamt, LZK und Talks im ' + HJ_TEXT;
+pruefe('S6 unter beiden Ranglisten steht, was zaehlt',
+  rangteil.includes('Rangliste – Flammen</div>') && rangteil.includes('% der für dich erreichbaren Flammen – ' + was)
+  && rangteil.split(was).length === 3, rangteil.slice(0, 900));
 pruefe('S7 nur das eigene Tandem: je Liste zwei Zeilen (ana, ben), fremd fehlt',
   (rangteil.match(/class="lb-row[" ]/g) || []).length === 4, rangteil);
-pruefe('S8 du stehst vorn - mit 5 Flammen', /lb-me">\s*<span class="lb-rank">🥇<\/span>[\s\S]*?🔥 5</.test(rangteil), rangteil);
+pruefe('S8 du stehst vorn - mit 6 Flammen', /lb-me">\s*<span class="lb-rank">🥇<\/span>[\s\S]*?🔥 6</.test(rangteil), rangteil);
 
 // ── Rueckfall: ein Server ohne "ich" (aelterer Stand) - dann wie frueher die Gesamtwerte ──
 umleiten = url => (String(url).startsWith('/api/leaderboard')
@@ -115,6 +119,8 @@ const alt = h.slice(h.indexOf('Meine Flammen'), h.indexOf('trophy-lb-col rank-co
 const grossAlt = alt.match(/font-size:22px[^>]*>(\d+) <span[^>]*>von (\d+)<\/span>/);
 pruefe('R1 ohne "ich": Titel ohne Halbjahr, gross die Gesamtwerte, keine doppelte Zeile',
   alt.startsWith('Meine Flammen</div>') && grossAlt && grossAlt[1] === '9' && grossAlt[2] === String(VOLL + 9)
-  && !alt.includes('Insgesamt:') && alt.includes('% aller möglichen Flammen'), alt.slice(0, 800));
+  && !alt.includes('Insgesamt') && alt.includes('% aller möglichen Flammen'), alt.slice(0, 800));
+const rangAlt = h.slice(h.indexOf('trophy-lb-col rank-col'));
+pruefe('R2 ohne Halbjahr vom Server: kein Hinweis unter den Ranglisten', !rangAlt.includes('Lerntheken gesamt'), rangAlt.slice(0, 600));
 
 console.log('\n' + ok + ' Pruefungen bestanden.');

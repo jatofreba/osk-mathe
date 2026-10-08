@@ -63,7 +63,7 @@ let mf = api.meineFlammen({ pokale: 9, ownMax: 21, teile: { lerntheken: { earned
   talks: { mathe: { earned: 3, max: 9 } } } }, gesamt, faecher);
 pruefe('J3 mit "ich": die Halbjahreszahlen, je Fach eine Talk-Zeile',
   mf.imHj && mf.earned === 9 && mf.max === 21 && JSON.stringify(mf.teile) === JSON.stringify([
-    ['📚', 'Mathe-Lerntheken', 4, 9], ['🎓', 'LZK', 2, 3], ['🗣️', 'Mathe-Talks', 3, 9], ['🗣️', 'Englisch-Talks', 0, 0]]), mf);
+    ['📚', 'Mathe-Lerntheken (gesamt)', 4, 9], ['🎓', 'LZK', 2, 3], ['🗣️', 'Mathe-Talks', 3, 9], ['🗣️', 'Englisch-Talks', 0, 0]]), mf);
 mf = api.meineFlammen(null, gesamt, faecher);
 pruefe('J4 ohne "ich" (aelterer Server): die Gesamtwerte wie bisher', !mf.imHj && mf.earned === 40 && mf.max === 90 && mf.teile === gesamt.teile, mf);
 mf = api.meineFlammen({ pokale: 0, ownMax: 0, teile: {} }, gesamt, faecher);
@@ -73,6 +73,6 @@ pruefe('J5 lueckenhafte Teile: Nullen statt Absturz', mf.imHj && mf.teile.every(
 pruefe('V1 beide Ranglisten nutzen die gekuerzte Darstellung',
   (html.match(/\$\{ranglisteHtml\(/g) || []).length === 2 && html.includes('ranglisteHtml(lbNachQuote(lbRows)'));
 pruefe('V2 der alte Helfer ist weg', !html.includes('function renderLb('));
-pruefe('V3 die Flammen-Rangliste misst am Spitzenwert des Halbjahres, nicht mehr am Gesamtmaximum',
+pruefe('V3 die Flammen-Rangliste misst am Spitzenwert der Liste, nicht mehr am Gesamtmaximum',
   html.includes('s.pokale / lbSpitze') && !html.includes('lbGlobalMax'));
 console.log('\n' + ok + ' Pruefungen bestanden.');

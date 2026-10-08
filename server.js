@@ -1636,12 +1636,12 @@ app.post('/api/admin/subjects/:id', requireAdmin, async (req, res) => {
 
 app.get('/api/leaderboard', requireLogin, async (req, res) => {
   try {
-    // Die Rangliste zaehlt den ZUWACHS im Halbjahr (Nutzerwunsch 2026-10-05): jedes Halbjahr
-    // starten alle bei 0. Lerntheken = Flammen, die im Halbjahr dazukamen (station_events),
-    // LZK = mit Datum im Halbjahr, Talks = dieses Halbjahr. Erreichbar = was zu Beginn noch
-    // offen war + LZK + Talk-Soll des Halbjahres. Und nur das eigene Tandem.
-    // ?halbjahr=2627_1 waehlt ein bestimmtes (sonst das laufende); Freischaltungen und
-    // aktiv/passiv gelten dabei wie heute - einen Verlauf davon gibt es nicht.
+    // Was die Rangliste zaehlt (Nutzerwunsch 2026-10-05, am 2026-10-06 praezisiert):
+    // Lerntheken ABSOLUT - der heutige Stand aller freigeschalteten, egal wann erledigt -,
+    // LZK (nach Datum) und Talks nur im Halbjahr. Und nur das eigene Tandem.
+    // ?halbjahr=2627_1 waehlt das Halbjahr fuer LZK und Talks (sonst das laufende).
+    // (Zwischendurch zaehlte auch bei den Lerntheken nur der Zuwachs im Halbjahr - das war
+    // so nicht gewollt.)
     const hj = /^\d{4}_[12]$/.test(String(req.query.halbjahr || ''))
       ? String(req.query.halbjahr) : halbjahrForDate(new Date());
     const allMeta = getLerntheckenMeta();
@@ -1666,7 +1666,7 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       return 1;
     }
 
-    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes, hjTargetsRes, eventsRes] = await Promise.all([
+    const [usersRes, progRes, lzkRes, accessRes, tsPresRes, tsListenRes, tsHalbjahrRes, subjectsRes, hjTargetsRes] = await Promise.all([
       pool.query(`SELECT id, username, kurs, klasse, created_at FROM users WHERE role='student' AND aktiv=true AND klasse=$1`,
         [req.session.klasse]),
       pool.query(`SELECT user_id, key, value FROM progress WHERE key NOT LIKE '%_abgabe_%' AND key NOT SIMILAR TO '%[_]i[0-9]+' AND value LIKE '[%'`),
@@ -1695,8 +1695,6 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       pool.query(`SELECT DISTINCT klasse, halbjahr, subject_id AS "subjectId" FROM talking_slots WHERE typ='talk'`),
       pool.query(`SELECT id, key, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
       pool.query(`SELECT subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren FROM subject_halbjahr_targets`),
-      pool.query(`SELECT se.user_id, se.progress_key, se.station_id, se.completed_at
-                  FROM station_events se JOIN users u ON u.id = se.user_id WHERE u.klasse=$1`, [req.session.klasse]),
     ]);
 
     const progByUser = {};
@@ -1710,13 +1708,6 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       if (!row.datum || halbjahrForDate(row.datum) !== hj) return;
       if (!lzkByUser[row.user_id]) lzkByUser[row.user_id] = [];
       lzkByUser[row.user_id].push(row);
-    });
-    // In welchem Halbjahr eine Station erledigt wurde (je Person und Lerntheke). Ohne
-    // Eintrag (Altbestand vor dem Logging, 2026-08-04) gilt sie als schon vorher erledigt.
-    const stationHj = {};
-    eventsRes.rows.forEach(row => {
-      const e = row.completed_at ? halbjahrForDate(row.completed_at) : null;
-      if (e) (stationHj[row.user_id + '|' + row.progress_key] ||= {})[String(row.station_id)] = e;
     });
     // access lookup: userId → { ltKey → { gesperrt, kurs } }
     const accessByUser = {};
@@ -1749,27 +1740,15 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         if (!lu) return;
         const kurs = acc.kurs || globalKurs;
         const doneIds = uProg[lt.key] || [];
-        // Je Gruppe: erledigt zu Beginn (davor) und am Ende des Halbjahres (bisEnde).
-        // Halbjahr-Codes sortieren als Text richtig ("2526_2" < "2627_1").
-        const erledigtIn = stationHj[u.id + '|' + lt.key] || {};
-        const davor = {}, bisEnde = {};
-        doneIds.forEach(id => {
-          const g = lu.stMap[id];
-          if (!g) return;
-          const e = erledigtIn[String(id)];
-          if (e && e > hj) return; // erst nach diesem Halbjahr erledigt
-          bisEnde[g] = (bisEnde[g] || 0) + 1;
-          if (!e || e < hj) davor[g] = (davor[g] || 0) + 1;
-        });
+        // Lerntheken absolut: alle erledigten Stationen, egal in welchem Halbjahr.
+        const doneCounts = {};
+        doneIds.forEach(id => { const g = lu.stMap[id]; if (g) doneCounts[g] = (doneCounts[g] || 0) + 1; });
         Object.entries(lu.groups).forEach(([g, grp]) => {
           if (kurs === 'G' && g === 'Aufbau') return;
           if (grp.total <= 0) return;
-          // Zuwachs: Flammen am Ende minus Flammen zu Beginn des Halbjahres; erreichbar
-          // ist, was zu Beginn noch offen war.
-          const vorher = tc(davor[g] || 0, grp.required, grp.total);
-          const zuwachs = Math.max(0, tc(bisEnde[g] || 0, grp.required, grp.total) - vorher);
-          pokale += zuwachs; ownMax += 3 - vorher;
-          teile.lerntheken.earned += zuwachs; teile.lerntheken.max += 3 - vorher;
+          const f = tc(doneCounts[g] || 0, grp.required, grp.total);
+          pokale += f; ownMax += 3;
+          teile.lerntheken.earned += f; teile.lerntheken.max += 3;
         });
         (lzkByUser[u.id] || []).forEach(lzk => {
           if (lzk.lerntheke !== lt.key) return;
