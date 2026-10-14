@@ -243,7 +243,7 @@ async function initDB() {
     -- Mehrere Vortragende je Talk (2026-09-25): die weiteren Vortragenden sind Einladungen mit
     -- rolle='vortrag' - keine neue Spalte an der Buchung. So hat jede von ihnen gleich alles, was
     -- eine Person an einem Talk braucht: Zusage (status) und eigene Bewertung (attended_status,
-    -- pokale bis 3, quality_emoji). Bestehende Einladungen bekommen 'zuhoeren' - an ihnen
+    -- pokale wie ein Vortrag, quality_emoji). Bestehende Einladungen bekommen 'zuhoeren' - an ihnen
     -- aendert sich nichts.
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns
@@ -697,13 +697,18 @@ async function talkGrenzen(q, slotId) {
 const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
 // Tri-State statt Boolean, damit "nicht teilgenommen" von "noch nicht bewertet" unterscheidbar ist.
 const TALKING_STATUS_VALUES = ['ausstehend', 'erledigt', 'nicht_erledigt'];
+// Hoechstzahl Flammen je Person und Talk: Vortrag 4 (seit 2026-10-14, vorher 3) - fuer die
+// buchende Person und Mit-Vortragende gleich -, Zuhoeren 2. Dieselben Werte stehen in
+// public/index.html (TALK_MAX_*) und im Arbeitsstaende-Tool (TALK_MAX_* in arbeitsstaende_data.py).
+const TALK_MAX_VORTRAG = 4;
+const TALK_MAX_ZUHOEREN = 2;
 // Ergebnis einer Talk-Bewertung (Nutzerwunsch 2026-10-14, wie bei den LZK): Flammen heissen
 // "hat stattgefunden". Wer Flammen vergibt und den Status auf "ausstehend" laesst, meint
 // "erledigt"; "ausstehend" und "nicht_erledigt" tragen keine Flammen. Vorher blieb so ein
 // Talk auf "ausstehend" stehen - die Flammen zaehlten nirgends, und die Soll-Uebersicht
-// zeigte ihn als angemeldet statt erledigt. Deckel 3; Zuhoeren deckelt die Abfrage auf 2.
+// zeigte ihn als angemeldet statt erledigt. Deckel: der Vortrag; Zuhoeren deckelt die Abfrage.
 function talkErgebnis(status, pokale) {
-  let pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
+  let pk = Math.min(TALK_MAX_VORTRAG, Math.max(0, parseInt(pokale) || 0));
   const st = (pk > 0 && status === 'ausstehend') ? 'erledigt' : status;
   if (st !== 'erledigt') pk = 0;
   return { status: st, pokale: pk };
@@ -735,21 +740,21 @@ function computeTalkingTrophies(halbjahre, presenting, listening, targetsFor) {
     const myPresenting = presenting.filter(s => s.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     const myListening = listening.filter(i => i.halbjahr === hj).sort((a, b) => new Date(a.datum) - new Date(b.datum));
     for (let i = 0; i < pflichtP; i++) { // Pflicht-Vorträge zählen immer zum Max, auch wenn noch nicht wahrgenommen
-      hjMax += 3;
+      hjMax += TALK_MAX_VORTRAG;
       const s = myPresenting[i];
       if (s && s.presentedStatus === 'erledigt') hjEarned += s.pokale || 0;
     }
     myPresenting.slice(pflichtP).forEach(s => { // beliebig viele Zusatz-Vorträge, nur wenn angemeldet
-      hjMax += 3;
+      hjMax += TALK_MAX_VORTRAG;
       if (s.presentedStatus === 'erledigt') hjEarned += s.pokale || 0;
     });
     for (let i = 0; i < pflichtZ; i++) { // Pflicht-Zuhör-Termine zählen immer zum Max
-      hjMax += 2;
+      hjMax += TALK_MAX_ZUHOEREN;
       const iv = myListening[i];
       if (iv && iv.attendedStatus === 'erledigt') hjEarned += iv.pokale || 0;
     }
     myListening.slice(pflichtZ).forEach(iv => {
-      hjMax += 2;
+      hjMax += TALK_MAX_ZUHOEREN;
       if (iv.attendedStatus === 'erledigt') hjEarned += iv.pokale || 0;
     });
     byHalbjahr[hj] = { earned: hjEarned, max: hjMax };
@@ -3259,12 +3264,12 @@ app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, as
     if (!TALKING_STATUS_VALUES.includes(req.body.status)) return res.status(400).json({ error: 'Ungültiger Status' });
     if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
       return res.status(400).json({ error: 'Ungültiges Emoji' });
-    // Zuhoeren bis 2 Flammen, ein Mit-Vortrag bis 3 (wie der Vortrag selbst). Flammen heissen
+    // Zuhoeren bis 2 Flammen, ein Mit-Vortrag bis 4 (wie der Vortrag selbst). Flammen heissen
     // "hat stattgefunden", das Emoji aendert sich nur, wenn es mitkommt (siehe confirm-presented).
     const { status, pokale: pk } = talkErgebnis(req.body.status, req.body.pokale);
     const r = await pool.query(`
       UPDATE talking_invitations ti SET attended_status=$1,
-        pokale=LEAST($2::int, CASE WHEN ti.rolle = 'vortrag' THEN 3 ELSE 2 END),
+        pokale=LEAST($2::int, CASE WHEN ti.rolle = 'vortrag' THEN ${TALK_MAX_VORTRAG} ELSE ${TALK_MAX_ZUHOEREN} END),
         quality_emoji = CASE WHEN $7 THEN $3 ELSE ti.quality_emoji END, admin_id=$4, updated_at=NOW()
       FROM talking_sessions ts, talking_slots sl
       WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$5 AND sl.klasse=$6

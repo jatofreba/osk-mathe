@@ -86,7 +86,7 @@ await db.query(`INSERT INTO talking_sessions (slot_id, presenter_id, thema, pres
 for (const hj of ['2627_1', '2526_2'])
   await db.query(`INSERT INTO subject_halbjahr_targets (subject_id, halbjahr, pflicht_praesentieren, pflicht_zuhoeren)
                   VALUES ($1,$2,1,2)`, [F.mathe, hj]);
-const TALK_SOLL = 3 * 1 + 2 * 2;
+const TALK_SOLL = 4 * 1 + 2 * 2;   // 1 Vortrag bis 4 Flammen (seit 2026-10-14), 2x Zuhoeren bis 2
 
 // ── L) Lerntheken: absolut, egal wann erledigt ─────────────────────────────────
 let b = await rang(S(P.ana));

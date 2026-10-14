@@ -114,8 +114,9 @@ pruefe('O4 erst nach der Auswahl erscheinen die Personen', !s.includes('tzb-pers
 lauf(`talkZbWaehlen(${T1})`);
 s = sektion();
 pruefe('W1 der gewaehlte Talk ist aufgeklappt', s.includes('aria-expanded="true"') && s.includes('tzb-personen'), s);
-pruefe('W2 je Person eigene Knoepfe: rita und sven je ✗ + 3 Flammen, ulla ✗ + 2',
-  knoepfe('presented', T1) === 4 && knoepfe('mitvortrag', svenE) === 4 && knoepfe('attended', ullaE) === 3, s);
+pruefe('W2 je Person eigene Knoepfe: rita und sven je ✗ + 4 Flammen, ulla ✗ + 2',
+  knoepfe('presented', T1) === 5 && knoepfe('mitvortrag', svenE) === 5 && knoepfe('attended', ullaE) === 3
+  && s.includes('aria-label="rita: hat stattgefunden – 4 Flammen"') && !s.includes('aria-label="ulla: hat stattgefunden – 3 Flammen"'), s);
 // Seit 2026-10-14 (Wunsch des Users): wer nie geantwortet hat, laesst sich hier direkt bewerten -
 // vorher stand nur "unten an der Terminkarte bewerten".
 pruefe('W3 vera (nie geantwortet) hat eigene Knoepfe, mit "keine Antwort" - wim (abgesagt) gar nicht',
@@ -149,9 +150,9 @@ await klick('mitvortrag', svenE, 3);
 z = await zeile('i', svenE);
 pruefe('W8 sven einzeln: 3 Flammen - sein Emoji bleibt stehen', z.st === 'erledigt' && z.pokale === 3 && z.e === '🤩', z);
 await klick('attended', ullaE, 1);
-await klick('presented', T1, 3);
+await klick('presented', T1, 4);
 z = await zeile('s', T1);
-pruefe('W9 rita von ✗ auf 3 Flammen umgestellt', z.st === 'erledigt' && z.pokale === 3, z);
+pruefe('W9 rita von ✗ auf 4 Flammen umgestellt', z.st === 'erledigt' && z.pokale === 4, z);
 s = sektion();
 pruefe('W10 alle bewertet: der Talk bleibt stehen, solange er gewaehlt ist - der Zaehler sinkt',
   zaehler() === '1' && s.includes('✓ alle bewertet') && s.includes('Pythagoras'), s);
@@ -214,7 +215,7 @@ pruefe('K2 Vortragende mit 🎤, Zuhoerende mit 👂', k.includes('🎤 rita</sp
   && k.includes('👂 ulla</span>') && k.includes('👂 vera</span>'), k);
 pruefe('K3 jede Zeile oeffnet das Fenster fuer genau diese Person (Name im Aufruf)',
   k.includes(`openTalkingRateModal('attended', ${veraE}, 2, 0, null, 'ausstehend', &quot;vera&quot;)`)
-  && k.includes(`openTalkingRateModal('mitvortrag', ${svenE}, 3, 3, '🤩', 'erledigt', &quot;sven&quot;)`), k);
+  && k.includes(`openTalkingRateModal('mitvortrag', ${svenE}, 4, 3, '🤩', 'erledigt', &quot;sven&quot;)`), k);
 pruefe('K4 der erste Knopf steht nicht mehr neben "rita & sven" (bewertete nur rita)',
   !h.includes('<strong>rita & sven</strong>') && !h.includes('Vortrag bewerten</span>'), k);
 k = karte('Zukunft');

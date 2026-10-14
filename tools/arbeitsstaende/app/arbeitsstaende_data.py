@@ -1286,6 +1286,10 @@ TALK_STATUS_TEXT = {"ausstehend": "noch nicht bewertet",
                     "erledigt": "✓ ok", "nicht_erledigt": "✗ nicht ok"}
 # Auswahl wie auf dem Server (TALKING_QUALITY_EMOJIS); "" = kein Emoji.
 TALK_EMOJIS = ["", "🤩", "🌟", "👍", "🙂", "🤔", "💡", "🎯", "🔥"]
+# Hoechstzahl Flammen je Person und Talk - wie der Server (TALK_MAX_*): Vortrag und Mit-Vortrag 4
+# (seit 2026-10-14, vorher 3), Zuhoeren 2.
+TALK_MAX_VORTRAG = 4
+TALK_MAX_ZUHOEREN = 2
 TALK_BEWERTUNG = ("status", "flammen", "emoji")
 
 
@@ -1314,7 +1318,7 @@ def _flammen(wert, hoechstens: int) -> int:
     return max(0, min(hoechstens, n))
 
 
-def talk_ergebnis(status: str, flammen, hoechstens: int = 3):
+def talk_ergebnis(status: str, flammen, hoechstens: int = TALK_MAX_VORTRAG):
     """(status, flammen) einer Talk-Bewertung - dieselbe Regel wie der Server
     (talkErgebnis, 2026-10-14): Flammen heissen "✓ ok" (hat stattgefunden);
     "noch nicht bewertet" und "✗ nicht ok" tragen keine Flammen. Vorher blieb
@@ -1352,8 +1356,8 @@ class MatheTalk:
 
     @property
     def max_flammen(self) -> int:
-        # Zuhoeren bis 2 Flammen, Vortrag und Mit-Vortrag bis 3 (wie der Server).
-        return 2 if self.rolle == "zugehoert" else 3
+        # Zuhoeren bis 2 Flammen, Vortrag und Mit-Vortrag bis 4 (wie der Server).
+        return TALK_MAX_ZUHOEREN if self.rolle == "zugehoert" else TALK_MAX_VORTRAG
 
     @property
     def schluessel(self):
@@ -1426,14 +1430,14 @@ def lt_mathe_talks(slots: list) -> dict:
         dazu(vortrag, rolle="gehalten", online_id=slot["session_id"],
              mit=" & ".join(mit_namen),
              status=slot.get("presentedStatus") or "ausstehend",
-             flammen=_flammen(slot.get("pokale"), 3),
+             flammen=_flammen(slot.get("pokale"), TALK_MAX_VORTRAG),
              emoji=slot.get("qualityEmoji") or "", **gemeinsam)
         for c in mit_vortrag:
             andere = [vortrag] + [n for n in mit_namen if n != c.get("username")]
             dazu(c.get("username"), rolle="mitvortrag", online_id=c.get("id"),
                  mit=" & ".join(n for n in andere if n),
                  status=c.get("attendedStatus") or "ausstehend",
-                 flammen=_flammen(c.get("pokale"), 3),
+                 flammen=_flammen(c.get("pokale"), TALK_MAX_VORTRAG),
                  emoji=c.get("qualityEmoji") or "", **gemeinsam)
         alle_vortragenden = " & ".join(n for n in [vortrag] + mit_namen if n)
         for i in slot.get("invitees") or []:
@@ -1442,7 +1446,7 @@ def lt_mathe_talks(slots: list) -> dict:
             dazu(i.get("username"), rolle="zugehoert", online_id=i.get("id"),
                  mit=alle_vortragenden,
                  status=i.get("attendedStatus") or "ausstehend",
-                 flammen=_flammen(i.get("pokale"), 2),
+                 flammen=_flammen(i.get("pokale"), TALK_MAX_ZUHOEREN),
                  emoji=i.get("qualityEmoji") or "", **gemeinsam)
     return je_person
 

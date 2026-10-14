@@ -168,11 +168,11 @@ await lauf('loadTalkingAdmin()'); await ruhe();
 const gilZeile = () => { const h = html('talking-admin'); const a = h.indexOf('🎤 gil</span>'); return a === -1 ? '' : h.slice(a, h.indexOf('</button>', a)); };
 pruefe('D1 Terminkarte: dan und gil je mit eigener Zeile - gils Zeile bewertet gils Vortrag',
   html('talking-admin').includes('🎤 dan</span>') && html('talking-admin').includes('🎤 gil</span>')
-  && gilZeile().includes(`openTalkingRateModal('mitvortrag', ${gilE.id}, 3,`), html('talking-admin'));
-lauf(`openTalkingRateModal('mitvortrag', ${gilE.id}, 3, 0, null, 'ausstehend')`);
-pruefe('D2 das Bewerten-Fenster ist das fuer einen Vortrag (bis 3 Flammen)',
+  && gilZeile().includes(`openTalkingRateModal('mitvortrag', ${gilE.id}, 4,`), html('talking-admin'));
+lauf(`openTalkingRateModal('mitvortrag', ${gilE.id}, 4, 0, null, 'ausstehend')`);
+pruefe('D2 das Bewerten-Fenster ist das fuer einen Vortrag (bis 4 Flammen)',
   seite.element('trate-modal-title').textContent === '🎤 Vortrag bewerten'
-  && seite.element('trate-modal-status-no').textContent === '✗ Nicht gehalten' && html('trate-modal-pokale').includes('3 🔥'));
+  && seite.element('trate-modal-status-no').textContent === '✗ Nicht gehalten' && html('trate-modal-pokale').includes('4 🔥'));
 seite.element('trate-modal-status').value = 'erledigt';
 lauf('selectTalkingRatePokal(3)');
 await lauf('saveTalkingRateModal()'); await ruhe();

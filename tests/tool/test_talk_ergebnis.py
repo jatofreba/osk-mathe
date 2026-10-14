@@ -31,6 +31,8 @@ pruefe("R3 ohne Flammen bleibt 'noch nicht bewertet'", d.talk_ergebnis("ausstehe
 pruefe("R4 '✓ ok' ohne Flamme geht weiter", d.talk_ergebnis("erledigt", 0, 2) == ("erledigt", 0))
 pruefe("R5 Zuhoeren hoechstens 2 Flammen", d.talk_ergebnis("erledigt", 3, 2) == ("erledigt", 2))
 pruefe("R6 Unsinn als Flammen zaehlt als 0", d.talk_ergebnis("ausstehend", "x", 3) == ("ausstehend", 0))
+pruefe("R7 ein Vortrag bis 4 Flammen (seit 2026-10-14)", d.talk_ergebnis("erledigt", 9) == ("erledigt", 4)
+       and d.talk_ergebnis("ausstehend", 4, d.MatheTalk(rolle="gehalten").max_flammen) == ("erledigt", 4))
 
 # --- D) das Fenster ohne Oberflaeche -----------------------------------------
 QUELLE = os.path.join(WERKZEUG, "arbeitsstaende_app.py")

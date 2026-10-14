@@ -143,8 +143,8 @@ zu = dict(rolle="zugehoert", online_id=301, session_id=11, datum=None, uhrzeit="
           online={"status": "ausstehend", "flammen": 0, "emoji": "", "thema": "X"})
 d.lt_talks_uebernehmen(ben, [zu])
 d.lt_talks_uebernehmen(ben, [dict(zu, rolle="mitvortrag")])
-pruefe("B9 Rollenwechsel online kommt an (und mit ihm 3 statt 2 Flammen)",
-       len(ben.talks) == 1 and ben.talks[0].rolle == "mitvortrag" and ben.talks[0].max_flammen == 3,
+pruefe("B9 Rollenwechsel online kommt an (und mit ihm 4 statt 2 Flammen)",
+       len(ben.talks) == 1 and ben.talks[0].rolle == "mitvortrag" and ben.talks[0].max_flammen == 4,
        ben.talks)
 
 # ===========================================================================
@@ -156,8 +156,9 @@ pruefe("C1 'noch nicht bewertet' geht nie hoch (loescht online nichts)", not d.t
 t = d.MatheTalk(rolle="gehalten", online_id=5, thema="  ",
                 online={"status": "ausstehend", "flammen": 0, "emoji": "", "thema": "x"})
 pruefe("C2 leeres Thema geht nie hoch", not d.talk_wartet(t))
-pruefe("C3 Zuhoeren hoechstens 2 Flammen, Vortrag 3",
-       d.MatheTalk(rolle="zugehoert").max_flammen == 2 and d.MatheTalk(rolle="mitvortrag").max_flammen == 3)
+pruefe("C3 Zuhoeren hoechstens 2 Flammen, Vortrag 4 (seit 2026-10-14)",
+       d.MatheTalk(rolle="zugehoert").max_flammen == 2 and d.MatheTalk(rolle="mitvortrag").max_flammen == 4
+       and d.MatheTalk(rolle="gehalten").max_flammen == 4)
 
 # ===========================================================================
 # D) Speichern und Laden (JSON)

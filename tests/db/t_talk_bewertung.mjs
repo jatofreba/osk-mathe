@@ -62,7 +62,7 @@ r = await vortrag({ status: 'quatsch', pokale: 1 });
 pruefe('R5 unbekannter Status -> 400', r.code === 400, r);
 await vortrag({ status: 'erledigt', pokale: 9 });
 b = await buchungJetzt();
-pruefe('R6 hoechstens 3 Flammen fuer einen Vortrag', b.pokale === 3, b);
+pruefe('R6 hoechstens 4 Flammen fuer einen Vortrag (seit 2026-10-14, vorher 3)', b.pokale === 4, b);
 
 // ── E) Emoji nur, wenn es mitkommt ────────────────────────────────────────────
 await vortrag({ status: 'erledigt', pokale: 3, qualityEmoji: '🤩' });
@@ -75,16 +75,16 @@ pruefe('E2 das Fenster schickt "kein Emoji" ausdruecklich mit - dann ist es weg'
 r = await vortrag({ status: 'erledigt', pokale: 2, qualityEmoji: '🦄' });
 pruefe('E3 ein fremdes Emoji -> 400', r.code === 400, r);
 
-// ── T) Einladungen: Zuhoeren bis 2, Mit-Vortrag bis 3, dieselbe Regel ─────────
+// ── T) Einladungen: Zuhoeren bis 2, Mit-Vortrag bis 4, dieselbe Regel ─────────
 await teilnahme(ulla, { status: 'ausstehend', pokale: 2, qualityEmoji: '👍' });
 let e = await einladungJetzt(ulla);
 pruefe('T1 Zuhoeren: Flammen mit "ausstehend" -> "erledigt"', e.st === 'erledigt' && e.pokale === 2 && e.e === '👍', e);
 await teilnahme(ulla, { status: 'erledigt', pokale: 3 });
 e = await einladungJetzt(ulla);
 pruefe('T2 Zuhoeren hoechstens 2 Flammen - und das Emoji bleibt', e.pokale === 2 && e.e === '👍', e);
-await teilnahme(sven, { status: 'ausstehend', pokale: 3 });
+await teilnahme(sven, { status: 'ausstehend', pokale: 5 });
 e = await einladungJetzt(sven);
-pruefe('T3 Mit-Vortrag: 3 Flammen, "erledigt"', e.st === 'erledigt' && e.pokale === 3, e);
+pruefe('T3 Mit-Vortrag: bis 4 Flammen wie ein Vortrag, "erledigt"', e.st === 'erledigt' && e.pokale === 4, e);
 await teilnahme(ulla, { status: 'nicht_erledigt', pokale: 2 });
 e = await einladungJetzt(ulla);
 pruefe('T4 "nicht teilgenommen" traegt keine Flammen', e.st === 'nicht_erledigt' && e.pokale === 0, e);
@@ -104,17 +104,18 @@ const flammenVon = async uid => (await srv.rufe('get', '/api/talking-sessions/mi
 const rangVon = async (uid, name) => ((await srv.rufe('get', '/api/leaderboard', { session: ALS(uid), query: { halbjahr: '2627_1' } })).body.rows || [])
   .find(z => z.username === name);
 let fl = await flammenVon(P.vera);
-pruefe('Z0 vorher: 2 Flammen aus den zugesagten Terminen, Pflicht-Maximum 7', fl.earned === 2 && fl.max === 7, fl);
+// Pflicht-Maximum je Halbjahr: 1 Vortrag x 4 + 2x Zuhoeren x 2 = 8
+pruefe('Z0 vorher: 2 Flammen aus den zugesagten Terminen, Pflicht-Maximum 8', fl.earned === 2 && fl.max === 8, fl);
 await teilnahme(veraOhne, { status: 'erledigt', pokale: 2 });
 fl = await flammenVon(P.vera);
 pruefe('Z1 ohne Antwort, aber als "hat stattgefunden" bewertet: die 2 Flammen zaehlen bei "Meine Flammen"',
-  fl.earned === 4 && fl.max === 9, fl);
+  fl.earned === 4 && fl.max === 10, fl);
 pruefe('Z2 ... und in der Rangliste', (await rangVon(P.vera, 'vera')).pokale === 4);
 const veraSt = await eins(`SELECT status FROM talking_invitations WHERE id=$1`, [veraOhne]);
 pruefe('Z3 die Einladung selbst bleibt unbeantwortet - umgeschrieben wird nichts', veraSt.status === 'eingeladen', veraSt);
 await teilnahme(veraOhne, { status: 'nicht_erledigt', pokale: 0 });
 fl = await flammenVon(P.vera);
-pruefe('Z4 ✗ ohne Zusage: keine Flammen und kein Abzug - das Maximum ist wie vorher', fl.earned === 2 && fl.max === 7, fl);
+pruefe('Z4 ✗ ohne Zusage: keine Flammen und kein Abzug - das Maximum ist wie vorher', fl.earned === 2 && fl.max === 8, fl);
 await teilnahme(veraOhne, { status: 'ausstehend', pokale: 0 });
 
 // ── N) Nachtrag im Bestand beim Start ─────────────────────────────────────────

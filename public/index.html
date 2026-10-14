@@ -4925,6 +4925,10 @@ function formatTeacherShort(username) {
 function fmtTalkingDatum(d) {
   return d ? new Date(d).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' }) : '–';
 }
+// Hoechstzahl Flammen je Person und Talk: Vortrag 4 (seit 2026-10-14, vorher 3), Zuhoeren 2 -
+// dieselben Werte wie TALK_MAX_VORTRAG/TALK_MAX_ZUHOEREN in server.js.
+const TALK_MAX_VORTRAG = 4;
+const TALK_MAX_ZUHOEREN = 2;
 function talkingPokalStr(pokale, max) {
   return Array.from({ length: max }, (_, i) => `<span style="opacity:${i < pokale ? 1 : .18}">🔥</span>`).join('');
 }
@@ -5013,7 +5017,7 @@ function buildTalkingPickerSummaryHtml(data, subject) {
   const presentCell = (s, grey) => {
     if (!s) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
     const quality = s.presentedStatus === 'erledigt'
-      ? `${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}`
+      ? `${talkingPokalStr(s.pokale || 0, TALK_MAX_VORTRAG)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}`
       : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ ausstehend';
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Topic:</div>
@@ -5026,7 +5030,7 @@ function buildTalkingPickerSummaryHtml(data, subject) {
     if (!i) return `<div class="tsum-cell ${grey ? 'grey' : 'white'}"><span class="tsum-empty">– frei –</span></div>`;
     const missed = i.attendedStatus === 'ausstehend' && new Date(i.datum) < new Date(new Date().toDateString());
     const quality = i.attendedStatus === 'erledigt'
-      ? `${talkingPokalStr(i.pokale || 0, 2)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}`
+      ? `${talkingPokalStr(i.pokale || 0, TALK_MAX_ZUHOEREN)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}`
       : i.attendedStatus === 'nicht_erledigt' ? '✗ nicht teilgenommen' : (missed ? 'Verpasst?' : '⏳ ausstehend');
     return `<div class="tsum-cell ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Von:</div>
@@ -7435,7 +7439,7 @@ function renderTalkingStudent() {
     const weitere = (s.coPresenters || []).filter(c => !(me && c.userId === me.userId));
     const weitereList = weitere.map(c => {
       const icon = c.status === 'angenommen' ? '✓' : '⏳';
-      const rating = c.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(c.pokale || 0, 3)}${c.qualityEmoji ? ' ' + c.qualityEmoji : ''}` : (c.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
+      const rating = c.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(c.pokale || 0, TALK_MAX_VORTRAG)}${c.qualityEmoji ? ' ' + c.qualityEmoji : ''}` : (c.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
       const weg = !mitVortrag && offenBuchung && c.attendedStatus === 'ausstehend'
         ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${c.id})">✕</span>` : '';
       return `<span class="pill pill-purple">🎤 ${escHtml(c.username)} ${icon}${rating}${weg}</span>`;
@@ -7447,13 +7451,13 @@ function renderTalkingStudent() {
     const mitZeile = [weitereList, abgesagtList].filter(Boolean).join(' ');
     const inviteeList = invitees.map(iv => {
       const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
-      const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : (iv.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
+      const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, TALK_MAX_ZUHOEREN)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : (iv.attendedStatus === 'nicht_erledigt' ? ' ✗' : '');
       const canRemove = !mitVortrag && s.presentedStatus === 'ausstehend' && iv.attendedStatus === 'ausstehend';
       const removeBtn = canRemove ? ` <span style="cursor:pointer;opacity:.55;" title="Ausladen" onclick="uninviteFromSession(${iv.id})">✕</span>` : '';
       return `<span class="pill pill-blue">${escHtml(iv.username)} ${statusIcon}${rating}${removeBtn}</span>`;
     }).join(' ');
     const quality = s.presentedStatus === 'erledigt'
-      ? `${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}`
+      ? `${talkingPokalStr(s.pokale || 0, TALK_MAX_VORTRAG)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}`
       : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ ausstehend';
     return `<div class="tsum-cell tsum-cell-wide ${grey ? 'grey' : 'white'}">
       <div class="tsum-field-label">Datum:</div>
@@ -7492,7 +7496,7 @@ function renderTalkingStudent() {
         </div>` : `
         <div class="tsum-field-label">Quality:</div>
         <div class="tsum-field-value">${i.attendedStatus === 'erledigt'
-          ? `${talkingPokalStr(i.pokale || 0, 2)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}`
+          ? `${talkingPokalStr(i.pokale || 0, TALK_MAX_ZUHOEREN)}${i.qualityEmoji ? ' ' + i.qualityEmoji : ''}`
           : i.attendedStatus === 'nicht_erledigt' ? '✗ nicht teilgenommen' : (missed ? 'Verpasst?' : '⏳ ausstehend')}</div>`}
     </div>`;
   };
@@ -7985,13 +7989,13 @@ async function talkBeteiligteEntfernen(invitationId) {
 function talkPersonen(s) {
   const leute = [];
   if (s.session_id && s.presenter_username) leute.push({ typ: 'presented', id: s.session_id,
-    name: s.presenter_username, vortrag: true, max: 3, status: s.presentedStatus || 'ausstehend',
+    name: s.presenter_username, vortrag: true, max: TALK_MAX_VORTRAG, status: s.presentedStatus || 'ausstehend',
     pokale: s.pokale || 0, emoji: s.qualityEmoji || null, einladung: null });
   (s.coPresenters || []).forEach(c => leute.push({ typ: 'mitvortrag', id: c.id, name: c.username,
-    vortrag: true, max: 3, status: c.attendedStatus || 'ausstehend', pokale: c.pokale || 0,
+    vortrag: true, max: TALK_MAX_VORTRAG, status: c.attendedStatus || 'ausstehend', pokale: c.pokale || 0,
     emoji: c.qualityEmoji || null, einladung: c.status }));
   (s.invitees || []).forEach(iv => leute.push({ typ: 'attended', id: iv.id, name: iv.username,
-    vortrag: false, max: 2, status: iv.attendedStatus || 'ausstehend', pokale: iv.pokale || 0,
+    vortrag: false, max: TALK_MAX_ZUHOEREN, status: iv.attendedStatus || 'ausstehend', pokale: iv.pokale || 0,
     emoji: iv.qualityEmoji || null, einladung: iv.status }));
   return leute;
 }
@@ -8085,7 +8089,7 @@ function talkZuBewertenHtml(slots, auswahl, heute, herkunft, bewertetOffen) {
   const unten = imOben ? fertig.filter(x => x.session_id !== sel.session_id)
     : (imUnten && !hat(fertig, sel)) ? [...fertig, sel].sort((a, b) => talkFrueher(b, a)) : fertig;
   const kopf = `<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten <span class="pill">${offen.length}</span></h3>
-    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🔥 bis 🔥🔥🔥 hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji, ohne Flamme).</div>`;
+    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🔥 bis 🔥🔥🔥🔥 (Zuhören bis 🔥🔥) hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji, ohne Flamme).</div>`;
   const obenHtml = oben.length ? oben.map(s => talkZbTalkHtml(s, s.session_id === auswahl, 'offen')).join('')
     : '<div class="lzk-ue-leer">Nichts zu bewerten.</div>';
   const untenHtml = !unten.length ? '' : `<details class="lzk-ue-bewertet"${(bewertetOffen || imUnten) ? ' open' : ''} ontoggle="talkBewertetUmschalten(this.open)">
@@ -8169,7 +8173,7 @@ async function talkingAdminAktualisieren() {
 let _talkingRateModal = {};
 function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentStatus, name) {
   _talkingRateModal = { type, id, pokale: currentPokale || 0, emoji: currentEmoji || null };
-  // 'mitvortrag' = weitere vortragende Person: bewertet wie ein Vortrag (bis 3 Flammen),
+  // 'mitvortrag' = weitere vortragende Person: bewertet wie ein Vortrag (bis 4 Flammen),
   // gespeichert an ihrer Einladung (confirm-attended). Mit Namen im Titel: bewertet wird
   // immer genau EINE Person - beim gemeinsamen Talk jede fuer sich.
   const vortrag = type === 'presented' || type === 'mitvortrag';

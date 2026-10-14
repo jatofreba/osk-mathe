@@ -159,7 +159,7 @@ pruefe('M9b bis zur Grenze geht es', r.code === 200, r.body);
 const gilId = (await einl(paar, P.gil)).id, eliId = (await einl(paar, P.eli)).id;
 r = await srv.rufe('post', '/api/admin/talking-invitations/:id/confirm-attended', { session: A, params: { id: gilId }, body: { status: 'erledigt', pokale: 3, qualityEmoji: '🤩' } });
 await srv.rufe('post', '/api/admin/talking-invitations/:id/confirm-attended', { session: A, params: { id: eliId }, body: { status: 'erledigt', pokale: 3 } });
-pruefe('W1 Mit-Vortrag bis 3 Flammen, Zuhoeren weiter bis 2',
+pruefe('W1 Mit-Vortrag mit Flammen wie ein Vortrag (3 bleibt 3), Zuhoeren weiter bis 2',
   r.code === 200 && (await einl(paar, P.gil)).pokale === 3 && (await einl(paar, P.eli)).pokale === 2);
 await srv.rufe('post', '/api/admin/talking-sessions/:id/confirm-presented', { session: A, params: { id: paar }, body: { status: 'erledigt', pokale: 2 } });
 const hj = (await srv.rufe('get', '/api/admin/halbjahr-uebersicht', { session: A })).body;

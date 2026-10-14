@@ -296,7 +296,7 @@ laufende Halbjahr ist aufgeklappt.
   abrufen"). Neue Talks kommen dazu; Datum, Uhrzeit, Rolle und wer dabei ist, kommen
   immer vom Server.
 - **Bewerten:** Doppelklick auf einen Talk oder „Bewerten…": ok / nicht ok, Flammen
-  (Zuhören bis 2, Vortrag bis 3), Emoji, eine Bemerkung (bleibt nur hier). Beim
+  (Zuhören bis 2, Vortrag bis 4), Emoji, eine Bemerkung (bleibt nur hier). Beim
   gehaltenen Talk lässt sich auch das Thema schärfen. Eine Flamme setzt „✓ ok“ (hat
   stattgefunden) gleich mit – wie in der App; „noch nicht bewertet“ und „✗ nicht ok“
   tragen keine Flammen.
