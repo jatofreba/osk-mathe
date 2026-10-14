@@ -680,8 +680,9 @@ html.lt-vollbild, html.lt-vollbild body{height:100%;min-height:0;overflow:hidden
 .tzb-was{flex:1 1 200px;min-width:0;font-size:13px;}
 .tzb-personen{margin:-2px 0 10px 12px;padding:4px 0 4px 10px;border-left:3px solid var(--md-primary);}
 .tzb-karte{margin-top:6px;}
-.tzb-person{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:3px 0;}
-.tzb-name{font-size:13px;min-width:0;}
+.tzb-person{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:3px 0;}
+.tzb-name{font-size:13px;min-width:150px;}
+.tzb-zusatz{font-size:11px;color:var(--md-on-surface-variant);}
 .tzb-knoepfe{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
 .tzb-hinweis{font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;}
 .tzb-pille{border:none;cursor:pointer;font-family:inherit;}
@@ -4962,7 +4963,9 @@ function talkingPokalStr(pokale, max) {
 // Gruppiert präsentierte/angenommene Sessions je Halbjahr, sortiert nach Datum
 // (1. präsentierte Session bzw. erste 2 angenommene Zuhör-Termine gelten als Pflicht).
 function talkingGroupByHalbjahr(presenting, invitations) {
-  const accepted = (invitations || []).filter(i => i.status === 'angenommen');
+  // Zugesagt oder als "hat stattgefunden" bewertet (auch ohne Antwort) - wie talkZuhoerenZaehlt
+  // auf dem Server, sonst fehlten hier Flammen, die "Meine Flammen" schon zaehlt.
+  const accepted = (invitations || []).filter(i => i.status === 'angenommen' || i.attendedStatus === 'erledigt');
   const halbjahre = [...new Set([...(presenting || []).map(s => s.halbjahr), ...accepted.map(i => i.halbjahr)])].sort();
   return halbjahre.map(hj => ({
     halbjahr: hj,
@@ -4975,7 +4978,9 @@ function talkingGroupByHalbjahr(presenting, invitations) {
 // einsortiert wird (mit Annehmen/Ablehnen statt Bewertung). Abgelehnte bleiben weiterhin ausgeblendet.
 function talkingGroupByHalbjahrFull(presenting, invitations) {
   // Offene Anfragen sind noch keine Teilnahme und gehören deshalb nicht in die Zuhören-Tabelle.
-  const relevant = (invitations || []).filter(i => i.status !== 'abgelehnt' && i.status !== 'angefragt');
+  // Wer trotz Absage da war und bewertet ist, steht aber drin.
+  const relevant = (invitations || []).filter(i => (i.status !== 'abgelehnt' && i.status !== 'angefragt')
+    || i.attendedStatus === 'erledigt');
   const halbjahre = [...new Set([...(presenting || []).map(s => s.halbjahr), ...relevant.map(i => i.halbjahr)])].sort();
   return halbjahre.map(hj => ({
     halbjahr: hj,
@@ -8441,9 +8446,11 @@ function talkZbTalkHtml(s, offen) {
       <span class="pill ${nOffen ? 'pill-yellow' : 'pill-green'}">${nOffen ? nOffen + ' offen' : '✓ alle bewertet'}</span>
     </button>`;
   if (!offen) return knopf;
-  const ohneAntwort = leute.filter(p => !talkPersonDabei(p) && p.einladung === 'eingeladen');
-  return knopf + `<div class="tzb-personen">${dabei.map(talkZbPersonHtml).join('')}${ohneAntwort.length
-    ? `<div class="tzb-hinweis">Ohne Antwort eingeladen: ${ohneAntwort.map(p => escHtml(p.name)).join(', ')} – falls doch dabei: unten an der Terminkarte bewerten.</div>` : ''}</div>`;
+  // Wer auf die Einladung nie geantwortet hat, steht mit eigenen Knoepfen dabei (vorher nur
+  // als Hinweis "unten an der Terminkarte bewerten" - Wunsch des Users 2026-10-14). Zaehlt
+  // nicht zu "offen": ohne Zusage muss niemand bewertet werden. Absagen bleiben draussen.
+  const zeigen = leute.filter(p => talkPersonDabei(p) || p.einladung === 'eingeladen');
+  return knopf + `<div class="tzb-personen">${zeigen.map(talkZbPersonHtml).join('')}</div>`;
 }
 function talkZbPersonHtml(p) {
   const an = n => n === -1 ? p.status === 'nicht_erledigt' : (p.status === 'erledigt' && p.pokale === n);
@@ -8455,8 +8462,10 @@ function talkZbPersonHtml(p) {
   const ohneFlamme = p.status === 'erledigt' && !p.pokale
     ? ' <span class="pill pill-green" style="font-size:10px;">✓ ohne Flamme</span>' : '';
   const emoji = p.status === 'erledigt' && p.emoji ? ' ' + p.emoji : '';
+  const ohneAntwort = !talkPersonDabei(p)
+    ? ' <span class="tzb-zusatz" title="Hat auf die Einladung nicht geantwortet – nur bewerten, wenn sie oder er da war.">· keine Antwort</span>' : '';
   return `<div class="tzb-person">
-    <span class="tzb-name">${p.vortrag ? '🎤' : '👂'} ${name}${emoji}${ohneFlamme}</span>
+    <span class="tzb-name">${p.vortrag ? '🎤' : '👂'} ${name}${emoji}${ohneFlamme}${ohneAntwort}</span>
     <span class="tzb-knoepfe">${knoepfe.join('')}<button type="button" class="btn-icon" title="Alle Angaben" aria-label="${name}: alle Angaben" onclick="${talkRateAufruf(p)}">✎</button></span>
   </div>`;
 }

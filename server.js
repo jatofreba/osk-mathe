@@ -710,6 +710,11 @@ function talkErgebnis(status, pokale) {
 }
 // Kommt ein Feld im Body mit? (undefined zaehlt nicht - wie lzkErgebnis)
 const talkFeldMit = (body, k) => Object.prototype.hasOwnProperty.call(body, k) && body[k] !== undefined;
+// Zaehlt ein Zuhoeren fuer Flammen und Pflicht? Wer zugesagt hat - oder nachweislich da war,
+// also von der Lernbegleitung als "hat stattgefunden" bewertet, auch ohne Antwort auf die
+// Einladung (2026-10-14; vorher bekam so jemand die Flammen nicht, obwohl Soll- und
+// Halbjahr-Uebersicht den Talk zaehlten). Ein ✗ ohne Zusage zaehlt nicht - verabredet war nichts.
+const talkZuhoerenZaehlt = i => i.status === 'angenommen' || i.attendedStatus === 'erledigt';
 
 // Pokale-Gesamtcount für Mathe-Talks: Pflicht (1. Vortrag, erste 2 Zuhör-Termine
 // je Halbjahr) zählt immer zum Max, auch wenn noch nicht wahrgenommen. Zusatz/Bonus
@@ -1718,7 +1723,8 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE ti.status = 'angenommen' AND sl.typ = 'talk' AND ti.rolle <> 'vortrag'
+        -- wie talkZuhoerenZaehlt: zugesagt oder als "hat stattgefunden" bewertet
+        WHERE (ti.status = 'angenommen' OR ti.attended_status = 'erledigt') AND sl.typ = 'talk' AND ti.rolle <> 'vortrag'
       `),
       pool.query(`SELECT DISTINCT klasse, halbjahr, subject_id AS "subjectId" FROM talking_slots WHERE typ='talk'`),
       pool.query(`SELECT id, key, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
@@ -2390,7 +2396,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
     const allePraesentationen = [...presenting.rows, ...mitDabei]
       .sort((a, b) => new Date(b.datum) - new Date(a.datum));
 
-    const accepted = invitations.rows.filter(i => i.status === 'angenommen');
+    const accepted = invitations.rows.filter(talkZuhoerenZaehlt);
     // Halbjahre vor der Account-Erstellung und nach dem Passiv-Setzen zählen nicht mit - sonst
     // hätte eine später dazugekommene Person von Anfang an ein unerreichbares Pflicht-Maximum,
     // und bei einer passiv gesetzten Person würde es mit jedem neuen Halbjahr weiterwachsen.

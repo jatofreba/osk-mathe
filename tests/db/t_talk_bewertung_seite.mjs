@@ -103,10 +103,25 @@ s = sektion();
 pruefe('W1 der gewaehlte Talk ist aufgeklappt', s.includes('aria-expanded="true"') && s.includes('tzb-personen'), s);
 pruefe('W2 je Person eigene Knoepfe: rita und sven je ✗ + 3 Flammen, ulla ✗ + 2',
   knoepfe('presented', T1) === 4 && knoepfe('mitvortrag', svenE) === 4 && knoepfe('attended', ullaE) === 3, s);
-pruefe('W3 vera (nie geantwortet) steht als Hinweis, wim (abgesagt) gar nicht',
-  s.includes('Ohne Antwort eingeladen: vera') && knoepfe('attended', veraE) === 0 && !s.includes('wim'), s);
+// Seit 2026-10-14 (Wunsch des Users): wer nie geantwortet hat, laesst sich hier direkt bewerten -
+// vorher stand nur "unten an der Terminkarte bewerten".
+pruefe('W3 vera (nie geantwortet) hat eigene Knoepfe, mit "keine Antwort" - wim (abgesagt) gar nicht',
+  knoepfe('attended', veraE) === 3 && s.includes('👂 vera') && s.includes('· keine Antwort') && !s.includes('wim')
+  && !s.includes('Ohne Antwort eingeladen'), s);
+await klick('attended', veraE, 1);
+let z = await zeile('i', veraE);
+const veraEinladung = await eins(`SELECT status FROM talking_invitations WHERE id=$1`, [veraE]);
+pruefe('W3b vera direkt bewertet: hat stattgefunden, 1 Flamme - ihre Einladung bleibt, wie sie war',
+  z.st === 'erledigt' && z.pokale === 1 && veraEinladung.status === 'eingeladen', { z, veraEinladung });
+s = sektion();
+pruefe('W3c danach ohne "keine Antwort" - und "offen" zaehlt sie nicht (weiter 3 offen)',
+  !s.includes('· keine Antwort') && s.includes('3 offen'), s);
+await klick('attended', veraE, 1);
+z = await zeile('i', veraE);
+pruefe('W3d nochmal tippen: wieder unbewertet, wieder "keine Antwort"',
+  z.st === 'ausstehend' && z.pokale === 0 && sektion().includes('· keine Antwort'), z);
 await klick('attended', ullaE, 2);
-let z = await zeile('i', ullaE);
+z = await zeile('i', ullaE);
 pruefe('W4 ein Klick auf 🔥🔥 bei ulla: hat stattgefunden, 2 Flammen', z.st === 'erledigt' && z.pokale === 2, z);
 s = sektion();
 pruefe('W5 der Knopf ist danach gedrueckt, der Talk zaehlt "2 offen", die Auswahl bleibt',

@@ -92,6 +92,31 @@ await teilnahme(ulla, { status: 'nicht_erledigt', pokale: 0 });
 e = await einladungJetzt(ulla);
 pruefe('T5 die Wochenleiste (✗ ohne Emoji) laesst das Emoji stehen', e.e === '👍', e);
 
+// ── Z) Zuhoeren ohne Antwort: wer als "hat stattgefunden" bewertet ist, bekommt die Flammen ──
+// vera hoert zweimal zugesagt zu (je 1 Flamme) und ist zu s1 eingeladen, ohne je zu antworten.
+for (const datum of ['2026-10-05', '2026-10-06']) {
+  const sid = await buchung(await slot(datum), P.rita);
+  await teilnahme(await einladung(sid, P.vera), { status: 'erledigt', pokale: 1 });
+}
+const veraOhne = await einladung(s1, P.vera, 'zuhoeren', 'eingeladen');
+const ALS = uid => ({ userId: uid, role: 'student', klasse: 'M3M4' });
+const flammenVon = async uid => (await srv.rufe('get', '/api/talking-sessions/mine', { session: ALS(uid), query: { subject: 'mathe' } })).body.trophies;
+const rangVon = async (uid, name) => ((await srv.rufe('get', '/api/leaderboard', { session: ALS(uid), query: { halbjahr: '2627_1' } })).body.rows || [])
+  .find(z => z.username === name);
+let fl = await flammenVon(P.vera);
+pruefe('Z0 vorher: 2 Flammen aus den zugesagten Terminen, Pflicht-Maximum 7', fl.earned === 2 && fl.max === 7, fl);
+await teilnahme(veraOhne, { status: 'erledigt', pokale: 2 });
+fl = await flammenVon(P.vera);
+pruefe('Z1 ohne Antwort, aber als "hat stattgefunden" bewertet: die 2 Flammen zaehlen bei "Meine Flammen"',
+  fl.earned === 4 && fl.max === 9, fl);
+pruefe('Z2 ... und in der Rangliste', (await rangVon(P.vera, 'vera')).pokale === 4);
+const veraSt = await eins(`SELECT status FROM talking_invitations WHERE id=$1`, [veraOhne]);
+pruefe('Z3 die Einladung selbst bleibt unbeantwortet - umgeschrieben wird nichts', veraSt.status === 'eingeladen', veraSt);
+await teilnahme(veraOhne, { status: 'nicht_erledigt', pokale: 0 });
+fl = await flammenVon(P.vera);
+pruefe('Z4 ✗ ohne Zusage: keine Flammen und kein Abzug - das Maximum ist wie vorher', fl.earned === 2 && fl.max === 7, fl);
+await teilnahme(veraOhne, { status: 'ausstehend', pokale: 0 });
+
 // ── N) Nachtrag im Bestand beim Start ─────────────────────────────────────────
 // So sah es frueher aus: Flammen vergeben, Status nicht umgestellt.
 const s2 = await buchung(await slot('2026-10-02'), P.sven);
