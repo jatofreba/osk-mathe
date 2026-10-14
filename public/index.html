@@ -354,27 +354,6 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .bar-kurs-fach{display:inline-flex;align-items:center;gap:3px;font-weight:700;}
 /* Aufklappbare Rubriken in der Halbjahr-Auswertung. Das Standard-Dreieck des Browsers
    sitzt je nach System woanders, deshalb ein eigenes vor der Überschrift. */
-/* Werkzeugleiste der Soll-Übersicht: Suche + Statusfilter mit Anzahl. */
-.tov-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 8px;}
-.tov-suche{width:auto;flex:0 1 200px;padding:5px 9px;font-size:12.5px;}
-.tov-chip{
-  cursor:pointer;font-family:inherit;font-size:11.5px;padding:4px 10px;
-  border:1px solid var(--md-outline-variant);border-radius:99px;
-  background:var(--md-surface);color:var(--md-on-surface-variant);
-}
-.tov-chip:hover{background:var(--md-outline-variant);}
-.tov-chip.aktiv{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary);}
-.tov-chip:focus-visible{outline:2px solid var(--md-primary);outline-offset:1px;}
-.tov-zahl{font-size:11px;color:var(--md-on-surface-variant);margin-left:auto;}
-/* Ausgeblendete Zeilen: [hidden] gegen die tr-Standardanzeige durchsetzen. */
-.tov-table tr[hidden]{display:none;}
-/* Eigener Rollbereich statt einer 50 Zeilen langen Wand - sonst liegt alles
-   Folgende (die Termine) unerreichbar weit unten. Die Kopfzeile bleibt stehen,
-   damit beim Rollen klar bleibt, welche Spalte man liest. */
-.tov-table{max-height:46vh;overflow-y:auto;}
-.tov-table thead th{position:sticky;top:0;z-index:1;background:var(--md-surface);}
-.tov-pfeil{color:var(--md-on-surface-variant);}
-.tov-leer{padding:14px;font-size:13px;color:var(--md-on-surface-variant);font-style:italic;}
 .hj-rubrik{margin:8px 0 2px;}
 .hj-rubrik>summary{
   cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;
@@ -1647,7 +1626,6 @@ textarea.form-input{
   </div>
 </div>
 
-<!-- ══ MODAL: Mathe-Talks Detailübersicht pro Schüler:in (Admin) ═══════════════════ -->
 <!-- ══ MODAL: Halbjahr-Detailansicht pro Schüler:in (Admin) ═══════════════════════ -->
 <div class="overlay" id="modal-hj-detail">
   <div class="modal" style="max-width:600px;">
@@ -1655,16 +1633,6 @@ textarea.form-input{
     <div id="hjd-content"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('modal-hj-detail')">Schließen</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="modal-talking-student-detail">
-  <div class="modal" style="max-width:620px;">
-    <div class="modal-title" id="tsdetail-name">Mathe-Talks</div>
-    <div id="tsdetail-content"></div>
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal('modal-talking-student-detail')">Schließen</button>
     </div>
   </div>
 </div>
@@ -7676,340 +7644,6 @@ async function loadTalkingAdmin() {
   renderTalkingAdmin();
 }
 
-// Aggregiert Soll-Erfüllung je Halbjahr+Schüler:in aus den Slot-Daten (presenter/invitees per username,
-// da die Slot-API keine User-IDs für Presenter liefert - Usernamen sind je Tandem eindeutig).
-function computeTalkingOverview(slots) {
-  const byHalbjahr = {};
-  const halbjahrOrder = [];
-  const ensure = (hj, uname) => {
-    if (!byHalbjahr[hj]) { byHalbjahr[hj] = {}; halbjahrOrder.push(hj); }
-    if (!byHalbjahr[hj][uname]) byHalbjahr[hj][uname] = {
-      presentDone: 0, presentPending: 0, presentFailed: 0,
-      listenDone: 0, listenPending: 0, listenFailed: 0
-    };
-    return byHalbjahr[hj][uname];
-  };
-  slots.forEach(s => {
-    if (!byHalbjahr[s.halbjahr]) { byHalbjahr[s.halbjahr] = {}; halbjahrOrder.push(s.halbjahr); }
-    if (!s.session_id) return;
-    const pRow = ensure(s.halbjahr, s.presenter_username);
-    if (s.presentedStatus === 'erledigt') pRow.presentDone++;
-    else if (s.presentedStatus === 'nicht_erledigt') pRow.presentFailed++;
-    else pRow.presentPending++;
-    // Weitere Vortragende: ihr Vortrag zaehlt wie ein eigener - sobald sie zugesagt haben
-    // oder schon bewertet sind (dieselbe Regel wie beim Zuhoeren).
-    (s.coPresenters || []).forEach(c => {
-      if (c.status !== 'angenommen' && c.attendedStatus === 'ausstehend') return;
-      const cRow = ensure(s.halbjahr, c.username);
-      if (c.attendedStatus === 'erledigt') cRow.presentDone++;
-      else if (c.attendedStatus === 'nicht_erledigt') cRow.presentFailed++;
-      else cRow.presentPending++;
-    });
-    (s.invitees || []).forEach(iv => {
-      // Ein/e Zuhörer:in zählt mit, wenn die Einladung angenommen wurde ODER der Admin trotzdem
-      // schon ein Ergebnis eingetragen hat (z.B. "nicht teilgenommen" direkt gesetzt, ohne dass die
-      // Einladung formal angenommen wurde). Reines "eingeladen" ohne jedes Ergebnis zählt nicht.
-      if (iv.status !== 'angenommen' && iv.attendedStatus === 'ausstehend') return;
-      const lRow = ensure(s.halbjahr, iv.username);
-      if (iv.attendedStatus === 'erledigt') lRow.listenDone++;
-      else if (iv.attendedStatus === 'nicht_erledigt') lRow.listenFailed++;
-      else lRow.listenPending++;
-    });
-  });
-  return { byHalbjahr, halbjahre: [...new Set(halbjahrOrder)].sort().reverse() };
-}
-
-// Gibt { current, past } zurück: current = Übersicht für laufende/künftige Halbjahre (immer offen),
-// past = kollabierte <details>-Blöcke für Halbjahre, deren Termine alle schon stattgefunden haben
-// (gehört unter "Vergangene Termine" in renderTalkingAdmin(), nicht mit an die Spitze der Ansicht).
-// Suche und Statusfilter der Soll-Übersicht. Gefiltert wird im DOM (Zeilen aus- und
-// einblenden) statt neu zu zeichnen: so bleibt der Fokus im Suchfeld und die Eingabe
-// geht beim Tippen nicht verloren. Je Halbjahr eine eigene Leiste - die Halbjahre
-// stehen untereinander und haben unterschiedliche Vorgaben.
-function talkOvSetzeFilter(hj, wert) {
-  const tools = document.getElementById('tov-tools-' + hj);
-  if (!tools) return;
-  // Nochmal auf denselben Knopf hebt den Filter wieder auf.
-  tools.dataset.filter = (tools.dataset.filter === wert && wert !== 'alle') ? 'alle' : wert;
-  tools.querySelectorAll('.tov-chip').forEach(b =>
-    b.classList.toggle('aktiv', b.dataset.w === tools.dataset.filter));
-  talkOvFiltern(hj);
-}
-
-// Sortieren wie in der Halbjahr-Übersicht: erster Klick aufsteigend, zweiter umgekehrt,
-// dritter zurück zur alphabetischen Reihenfolge. Sortiert wird - wie gefiltert - IM DOM:
-// die Zeilen werden umgehängt, damit Suchtext und Statusfilter erhalten bleiben.
-function talkOvSortieren(hj, spalte) {
-  const tools = document.getElementById('tov-tools-' + hj);
-  const body = document.getElementById('tov-body-' + hj);
-  if (!tools || !body) return;
-  if (tools.dataset.sort !== spalte) { tools.dataset.sort = spalte; tools.dataset.sortab = ''; }
-  else if (!tools.dataset.sortab) { tools.dataset.sortab = '1'; }
-  else { tools.dataset.sort = ''; tools.dataset.sortab = ''; }
-
-  const spalten = ['name', 'p', 'z', 'st'];
-  const aktiv = tools.dataset.sort, ab = !!tools.dataset.sortab;
-  spalten.forEach(s => {
-    const pfeil = document.getElementById('tov-pf-' + hj + '-' + s);
-    if (pfeil) pfeil.textContent = (s === aktiv) ? (ab ? ' ▾' : ' ▴') : '';
-  });
-
-  const wert = (tr) => {
-    if (aktiv === 'p') return Number(tr.dataset.p || 0);
-    if (aktiv === 'z') return Number(tr.dataset.z || 0);
-    if (aktiv === 'st') return Number(tr.dataset.rang || 0);
-    return tr.dataset.name || '';          // 'name' und der Standardfall
-  };
-  const zeilen = [...body.querySelectorAll('tr[data-name]')];
-  zeilen.sort((a, b) => {
-    const va = wert(a), vb = wert(b);
-    const cmp = (typeof va === 'string') ? va.localeCompare(vb) : va - vb;
-    // Bei Gleichstand alphabetisch - sonst springen die Zeilen bei jedem Klick.
-    return (ab ? -cmp : cmp) || (a.dataset.name || '').localeCompare(b.dataset.name || '');
-  });
-  zeilen.forEach(tr => body.appendChild(tr));
-}
-
-function talkOvFiltern(hj) {
-  const tools = document.getElementById('tov-tools-' + hj);
-  const body = document.getElementById('tov-body-' + hj);
-  if (!tools || !body) return;
-  const feld = document.getElementById('tov-such-' + hj);
-  const suche = ((feld && feld.value) || '').trim().toLowerCase();
-  const filter = tools.dataset.filter || 'alle';
-  let sichtbar = 0, gesamt = 0;
-  body.querySelectorAll('tr[data-name]').forEach(tr => {
-    gesamt++;
-    const passt = (!suche || tr.dataset.name.indexOf(suche) !== -1)
-               && (filter === 'alle' || tr.dataset.st === filter);
-    tr.hidden = !passt;
-    if (passt) sichtbar++;
-  });
-  const zahl = document.getElementById('tov-zahl-' + hj);
-  if (zahl) zahl.textContent = (sichtbar === gesamt) ? `${gesamt} Personen` : `${sichtbar} von ${gesamt}`;
-  const leer = document.getElementById('tov-leer-' + hj);
-  if (leer) leer.hidden = sichtbar > 0;
-}
-
-function renderTalkingOverview(slots, roster) {
-  if (!slots.length || !roster.length) return { current: '', past: '' };
-  const { byHalbjahr, halbjahre } = computeTalkingOverview(slots);
-  if (!halbjahre.length) return { current: '', past: '' };
-
-  const badge = (cls, style, text) => `<span class="gpill ${cls}" style="${style || ''}">${text}</span>`;
-  const nothingStyle = 'background:#fef2f2;color:var(--md-error);';
-  const today = new Date(new Date().toDateString());
-
-  const ovSubj = subjectByKey(activeSubject);
-  const buildRows = (hj) => {
-    const data = byHalbjahr[hj] || {};
-    const pflichtP = subjPflichtP(ovSubj, hj), pflichtZ = subjPflichtZ(ovSubj, hj);
-    let nothingCount = 0;
-    const zaehler = { ok: 0, arbeit: 0, nichts: 0 };
-    // Accounts, die es in diesem Halbjahr noch nicht gab, gehören hier nicht in die Liste -
-    // sonst würden sie rückwirkend als "nichts los" gewertet.
-    const rows = roster.filter(stu => hjCountsForUser(hj, halbjahrForDateClient(stu.createdAt))).map(stu => {
-      const d = data[stu.username] || { presentDone: 0, presentPending: 0, presentFailed: 0, listenDone: 0, listenPending: 0, listenFailed: 0 };
-      // "nichts los" = weder erledigt noch aktiv/ausstehend etwas dran - eine reine "nicht teilgenommen"-Historie
-      // ist KEIN Fortschritt und zählt hier bewusst nicht als "in Arbeit".
-      const nothing = d.presentDone === 0 && d.presentPending === 0 && d.listenDone === 0 && d.listenPending === 0;
-      if (nothing) nothingCount++;
-      const complete = d.presentDone >= pflichtP && d.listenDone >= pflichtZ;
-
-      const presentBadge = d.presentDone >= pflichtP
-        ? badge('gpill-ok', '', `✓ erledigt${d.presentDone > pflichtP ? ' (+' + (d.presentDone - pflichtP) + ' freiwillig)' : ''}`)
-        : d.presentPending >= 1
-          ? badge('gpill-partial', '', `📅 angemeldet (${d.presentDone}/${pflichtP})`)
-          : d.presentFailed >= 1
-            ? badge('gpill-none', nothingStyle, '✗ nicht gehalten')
-            : badge('gpill-none', nothingStyle, '– offen –');
-
-      const listenPendingNote = d.listenPending > 0 ? ` (+${d.listenPending} angemeldet)` : '';
-      const listenFailedNote = d.listenFailed > 0 ? ` · ${d.listenFailed}x nicht teilgenommen` : '';
-      const listenBadge = d.listenDone >= pflichtZ
-        ? badge('gpill-ok', '', `✓ ${d.listenDone}/${pflichtZ}${listenPendingNote}`)
-        : (d.listenDone > 0 || d.listenPending > 0)
-          ? badge('gpill-partial', '', `${d.listenDone}/${pflichtZ}${listenPendingNote}${listenFailedNote}`)
-          : d.listenFailed > 0
-            ? badge('gpill-none', nothingStyle, `0/${pflichtZ}${listenFailedNote}`)
-            : badge('gpill-none', nothingStyle, `0/${pflichtZ} – offen –`);
-
-      const statusBadge = complete
-        ? badge('gpill-ok', '', '✅ Soll komplett')
-        : nothing
-          ? badge('gpill-none', nothingStyle, '⚠️ nichts los')
-          : badge('gpill-partial', '', '… in Arbeit');
-
-      // Name und Status als Merkmal an der Zeile: danach filtert die Werkzeugleiste,
-      // ohne die Tabelle neu zu zeichnen.
-      const st = complete ? 'ok' : nothing ? 'nichts' : 'arbeit';
-      zaehler[st]++;
-      // Zum Sortieren: die erledigten Zahlen und ein Rang fuer den Status. Aufsteigend
-      // steht damit oben, wer am wenigsten hat - das ist die Frage an diese Liste.
-      const rang = st === 'nichts' ? 0 : st === 'arbeit' ? 1 : 2;
-      return `<tr data-name="${escHtml(stu.username.toLowerCase())}" data-st="${st}"
-        data-p="${d.presentDone}" data-z="${d.listenDone}" data-rang="${rang}"
-        style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openTalkingStudentDetail('${stu.username}', '${hj}')" title="Details anzeigen">
-        <td>${escHtml(stu.username)}</td>
-        <td>${presentBadge}</td>
-        <td>${listenBadge}</td>
-        <td>${statusBadge}</td>
-      </tr>`;
-    }).join('');
-    return { rows, nothingCount, zaehler };
-  };
-
-  // Werkzeugleiste je Halbjahr: Suche + Filter nach Status. Bei ~50 Namen ist die
-  // Tabelle sonst eine Wand, in der die wenigen interessanten Zeilen untergehen -
-  // und genau die sucht man hier ("wer hat sein Soll schon?", "wer hat noch nichts?").
-  // Die Zahlen an den Knöpfen sind zugleich die Zusammenfassung, die man sonst zählen müsste.
-  const werkzeuge = (hj, z) => {
-    const gesamt = z.ok + z.arbeit + z.nichts;
-    const knopf = (wert, text, n) =>
-      `<button type="button" class="tov-chip${wert === 'alle' ? ' aktiv' : ''}" data-w="${wert}"`
-      + ` onclick="talkOvSetzeFilter('${hj}','${wert}')">${text} <b>${n}</b></button>`;
-    return `<div class="tov-tools" id="tov-tools-${hj}" data-filter="alle">
-      <input class="form-input tov-suche" id="tov-such-${hj}" type="search" placeholder="Name suchen…"
-             oninput="talkOvFiltern('${hj}')" aria-label="Nach Namen suchen">
-      ${knopf('alle', 'Alle', gesamt)}
-      ${knopf('ok', '✅ Soll komplett', z.ok)}
-      ${knopf('arbeit', '… in Arbeit', z.arbeit)}
-      ${knopf('nichts', '⚠️ nichts los', z.nichts)}
-      <span class="tov-zahl" id="tov-zahl-${hj}">${gesamt} Personen</span>
-    </div>`;
-  };
-
-  // Spaltenkopf zum Anklicken - wie in der Halbjahr-Übersicht: erster Klick aufsteigend
-  // (wer am wenigsten hat, steht oben), zweiter dreht um, dritter zurück auf alphabetisch.
-  const kopf = (hj, spalte, text) =>
-    `<th onclick="talkOvSortieren('${hj}','${spalte}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`
-    + ` title="Nach ${escHtml(text.replace(/[^\wÄÖÜäöüß ]/g, '').trim())} sortieren">${text}`
-    + `<span class="tov-pfeil" id="tov-pf-${hj}-${spalte}"></span></th>`;
-
-  // Feste Höhe mit eigenem Rollbereich: bei ~50 Zeilen schob die Tabelle sonst alles
-  // Folgende (die Termine!) weit nach unten. Die Kopfzeile bleibt dabei stehen.
-  const table = (rows, hj, z) => werkzeuge(hj, z) + `
-    <div class="tbl-wrap tov-table">
-      <table>
-        <thead><tr>${kopf(hj, 'name', 'Name')}${kopf(hj, 'p', '🎤 Präsentieren')}${kopf(hj, 'z', '👂 Zuhören')}${kopf(hj, 'st', 'Status')}</tr></thead>
-        <tbody id="tov-body-${hj}">${rows}</tbody>
-      </table>
-      <div class="tov-leer" id="tov-leer-${hj}" hidden>Niemand passt zu dieser Suche.</div>
-    </div>`;
-  // Die Vorgabe steht AM HALBJAHR, nicht als eine Zeile über allem: sie ist je Fach UND
-  // je Halbjahr einstellbar (subject_halbjahr_targets), und unter dieser Überschrift
-  // stehen mehrere Halbjahre untereinander. Vorher war hier "1x präsentieren · mind. 2x
-  // zuhören" fest eingetragen - wer die Vorgabe umstellte, sah oben weiter die alte.
-  const hjLabel = (hj, nothingCount) =>
-    `Halbjahr ${escHtml(hj)}`
-    + ` <span style="font-weight:500;color:var(--md-on-surface-variant);">`
-    + `· Pflicht: 🎤 ${subjPflichtP(ovSubj, hj)}× präsentieren, 👂 ${subjPflichtZ(ovSubj, hj)}× zuhören</span>`
-    + (nothingCount ? ` <span style="color:var(--md-error);font-weight:500;">– ${nothingCount} ohne jeden Fortschritt</span>` : '');
-
-  // Ein Halbjahr gilt als "vergangen", wenn es Termine hat und KEINER davon noch in der Zukunft liegt.
-  const isPastHalbjahr = (hj) => {
-    const hjSlots = slots.filter(s => s.halbjahr === hj);
-    return hjSlots.length > 0 && !hjSlots.some(s => new Date(s.datum) >= today);
-  };
-
-  const currentHj = halbjahre.filter(hj => !isPastHalbjahr(hj));
-  const pastHj = halbjahre.filter(hj => isPastHalbjahr(hj));
-
-  // Auch die laufenden Halbjahre sind aufklappbar (offen als Startzustand) - bei
-  // mehreren gleichzeitig war sonst nur noch Scrollen.
-  const currentSections = currentHj.map(hj => {
-    const { rows, nothingCount, zaehler } = buildRows(hj);
-    return `<details class="hj-rubrik" open>
-      <summary style="font-weight:700;font-size:13px;">${hjLabel(hj, nothingCount)}</summary>
-      ${table(rows, hj, zaehler)}
-    </details>`;
-  }).join('');
-
-  const pastSections = pastHj.map(hj => {
-    const { rows, nothingCount, zaehler } = buildRows(hj);
-    return `<details class="hj-rubrik">
-      <summary style="font-weight:700;font-size:13px;">${hjLabel(hj, nothingCount)}</summary>
-      ${table(rows, hj, zaehler)}
-    </details>`;
-  }).join('');
-
-  const current = currentSections ? `
-    <div class="admin-top">
-      <div class="admin-title" style="font-size:16px;">👥 Übersicht: Wer hat sein Soll erledigt?</div>
-    </div>
-    ${currentSections}
-  ` : '';
-
-  const past = pastSections ? `
-    <div style="font-weight:700;font-size:13px;margin:20px 0 6px;">Übersicht vergangener Halbjahre</div>
-    ${pastSections}
-  ` : '';
-
-  return { current, past };
-}
-
-// Detailauflistung für eine Schüler:in (Klick auf Zeile in renderTalkingOverview): alle Mathe-Talks
-// als Presenter bzw. als (angenommene) Zuhörer:in, gruppiert nach presentedStatus/attendedStatus.
-function openTalkingStudentDetail(username, halbjahr) {
-  // Eigene Buchungen und Talks, an denen die Person MIT vortraegt (Bewertung an ihrer Einladung).
-  const presenting = talkingAdminSlots
-    .filter(s => s.session_id && (!halbjahr || s.halbjahr === halbjahr))
-    .flatMap(s => {
-      if (s.presenter_username === username) return [s];
-      const c = (s.coPresenters || []).find(x => x.username === username
-        && (x.status === 'angenommen' || x.attendedStatus !== 'ausstehend'));
-      return c ? [{ ...s, presentedStatus: c.attendedStatus, pokale: c.pokale, qualityEmoji: c.qualityEmoji }] : [];
-    })
-    .sort((a, b) => new Date(b.datum) - new Date(a.datum));
-
-  const listening = [];
-  talkingAdminSlots.forEach(s => {
-    (s.invitees || []).forEach(iv => {
-      // Wie in computeTalkingOverview(): auch zeigen, wenn Admin schon ein Ergebnis eingetragen hat,
-      // selbst wenn die Einladung formal nie "angenommen" wurde.
-      if (iv.username === username && (iv.status === 'angenommen' || iv.attendedStatus !== 'ausstehend') && (!halbjahr || s.halbjahr === halbjahr)) listening.push({ ...iv, slot: s });
-    });
-  });
-  listening.sort((a, b) => new Date(b.slot.datum) - new Date(a.slot.datum));
-
-  const presentGroups = { erledigt: [], ausstehend: [], nicht_erledigt: [] };
-  presenting.forEach(s => (presentGroups[s.presentedStatus] || presentGroups.ausstehend).push(s));
-  const listenGroups = { erledigt: [], ausstehend: [], nicht_erledigt: [] };
-  listening.forEach(iv => (listenGroups[iv.attendedStatus] || listenGroups.ausstehend).push(iv));
-
-  const presentItem = s => `
-    <div class="stat-card" style="margin-bottom:6px;">
-      <strong>${escHtml(s.thema)}</strong><br>
-      <span style="color:var(--md-on-surface-variant);font-size:12px;">${fmtTalkingDatum(s.datum)} · ${escHtml(s.uhrzeit || '')} ${escHtml(s.ort || '')} · ${escHtml(s.halbjahr)}</span>
-      ${s.presentedStatus === 'erledigt' ? `<div style="margin-top:4px;">${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}</div>` : ''}
-    </div>`;
-
-  const listenItem = iv => `
-    <div class="stat-card" style="margin-bottom:6px;">
-      <strong>${escHtml(iv.slot.presenter_username)}</strong> · ${escHtml(iv.slot.thema)}<br>
-      <span style="color:var(--md-on-surface-variant);font-size:12px;">${fmtTalkingDatum(iv.slot.datum)} · ${escHtml(iv.slot.uhrzeit || '')} ${escHtml(iv.slot.ort || '')} · ${escHtml(iv.slot.halbjahr)}</span>
-      ${iv.attendedStatus === 'erledigt' ? `<div style="margin-top:4px;">${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}</div>` : ''}
-    </div>`;
-
-  const section = (title, items, renderItem, emptyText) => `
-    <div style="font-weight:600;font-size:12.5px;margin:10px 0 4px;color:var(--md-on-surface-variant);">${title}</div>
-    ${items.length ? items.map(renderItem).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:4px;">${emptyText}</div>`}
-  `;
-
-  document.getElementById('tsdetail-name').textContent = `🗣️ ${subjectByKey(activeSubject).name}-Talks: ${username}${halbjahr ? ' · Halbjahr ' + halbjahr : ''}`;
-  document.getElementById('tsdetail-content').innerHTML = `
-    <div class="admin-top" style="margin-bottom:2px;"><div class="admin-title" style="font-size:14px;">🎤 Präsentieren</div></div>
-    ${section('✓ Gehalten', presentGroups.erledigt, presentItem, 'Noch keinen Vortrag gehalten.')}
-    ${section('📅 Angemeldet, ausstehend', presentGroups.ausstehend, presentItem, 'Keine offenen Anmeldungen.')}
-    ${section('✗ Nicht teilgenommen', presentGroups.nicht_erledigt, presentItem, 'Keine.')}
-    <div class="admin-top" style="margin:18px 0 2px;"><div class="admin-title" style="font-size:14px;">👂 Zuhören</div></div>
-    ${section('✓ Zugehört', listenGroups.erledigt, listenItem, 'Noch keine Session besucht.')}
-    ${section('📅 Angemeldet, ausstehend', listenGroups.ausstehend, listenItem, 'Keine offenen Anmeldungen.')}
-    ${section('✗ Nicht teilgenommen', listenGroups.nicht_erledigt, listenItem, 'Keine.')}
-  `;
-  openModal('modal-talking-student-detail');
-}
-
 function renderTalkingAdmin() {
   const el = document.getElementById('talking-admin');
   const today = new Date(new Date().toDateString());
@@ -8052,11 +7686,11 @@ function renderTalkingAdmin() {
   const upcomingHtml = upcoming.map(renderSlotCard).join('');
   const recentPastHtml = recentPast.map(renderSlotCard).join('');
   const olderPastHtml = olderPast.map(renderSlotCard).join('');
-  const overview = renderTalkingOverview(talkingAdminSlots, talkingAdminRoster);
 
+  // Die Soll-Uebersicht (wer sein Pflicht-Soll schon hat) stand bis 2026-10-14 hier - sie ist in
+  // der Halbjahr-Uebersicht enthalten und flog auf Wunsch des Users raus.
   el.innerHTML = `
     ${talkZuBewertenHtml(talkingAdminSlots, _talkZbAuswahl, today)}
-    ${overview.current}
     <div class="admin-top" style="margin-top:24px;">
       <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
       <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
@@ -8074,7 +7708,6 @@ function renderTalkingAdmin() {
         <div style="margin-top:8px;">${olderPastHtml}</div>
       </details>` : ''}
     `}
-    ${overview.past}
   `;
 }
 

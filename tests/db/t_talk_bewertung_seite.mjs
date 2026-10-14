@@ -1,7 +1,7 @@
 // Talks bewerten im Talks-Reiter der Lernbegleitung (Nutzerwunsch 2026-10-14) - Seite und Server
 // ZUSAMMEN (seite_im_test + server_im_test, pglite): "✍️ Noch zu bewerten" ganz oben, erst den
 // Talk waehlen, dann je Person ein Klick; Terminkarten mit einer Zeile je Person; im Fenster
-// springt der Status mit der Flamme auf "hat stattgefunden"; die Soll-Uebersicht zaehlt den Talk.
+// springt der Status mit der Flamme auf "hat stattgefunden"; die Halbjahr-Uebersicht zaehlt den Talk.
 // Alle Termine liegen relativ zu heute.
 import { PGlite } from '@electric-sql/pglite';
 import { createRequire } from 'module';
@@ -78,7 +78,7 @@ await lauf('loadTalkingAdmin()'); await ruhe();
 
 const sektion = () => {
   const h = html('talking-admin');
-  return h.slice(h.indexOf('✍️ Noch zu bewerten'), h.indexOf('Übersicht: Wer hat sein Soll erledigt?'));
+  return h.slice(h.indexOf('✍️ Noch zu bewerten'), h.indexOf('📅 Termine verwalten'));
 };
 const zaehler = () => (sektion().match(/Noch zu bewerten <span class="pill">(\d+)<\/span>/) || [])[1];
 const knoepfe = (typ, id) => (sektion().match(new RegExp(`talkZbBewerten\\('${typ}', ${id}, `, 'g')) || []).length;
@@ -88,8 +88,11 @@ const klick = async (typ, id, n) => { await lauf(`talkZbBewerten('${typ}', ${id}
 
 // ── O) oben: "Noch zu bewerten" ──────────────────────────────────────────────
 let h = html('talking-admin');
-pruefe('O1 "✍️ Noch zu bewerten" steht ganz oben - vor der Soll-Uebersicht',
-  h.indexOf('✍️ Noch zu bewerten') !== -1 && h.indexOf('✍️ Noch zu bewerten') < h.indexOf('Übersicht: Wer hat sein Soll erledigt?'), h.slice(0, 600));
+pruefe('O1 "✍️ Noch zu bewerten" steht ganz oben, gleich vor den Terminen',
+  h.indexOf('✍️ Noch zu bewerten') !== -1 && h.indexOf('✍️ Noch zu bewerten') < h.indexOf('📅 Termine verwalten')
+  && h.trimStart().startsWith('<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten'), h.slice(0, 600));
+pruefe('O1b die Soll-Uebersicht ist raus (steht in der Halbjahr-Uebersicht)',
+  !h.includes('Wer hat sein Soll erledigt') && !h.includes('Übersicht vergangener Halbjahre') && !h.includes('tov-'), h.slice(0, 600));
 let s = sektion();
 pruefe('O2 zwei Talks offen, aelteste zuerst - der kuenftige und der fertig bewertete fehlen',
   zaehler() === '2' && (s.match(/class="tzb-talk/g) || []).length === 2 && s.indexOf('Brüche') < s.indexOf('Pythagoras')
@@ -187,17 +190,19 @@ await lauf('saveTalkingRateModal()'); await ruhe();
 z = await zeile('i', veraE);
 pruefe('F4 gespeichert: vera hat teilgenommen, 1 Flamme', z.st === 'erledigt' && z.pokale === 1, z);
 
-// ── U) Uebersicht (Punkt 2): auch eine Flamme mit liegengebliebenem Status zaehlt ──
+// ── U) Halbjahr-Uebersicht: auch eine Flamme mit liegengebliebenem Status zaehlt ──
 lauf(`openTalkingRateModal('attended', ${ullaE2}, 2, 0, null, 'ausstehend', "ulla")`);
 lauf('selectTalkingRatePokal(2)');
 seite.element('trate-modal-status').value = 'ausstehend';   // wie frueher: Status nicht umgestellt
 await lauf('saveTalkingRateModal()'); await ruhe();
 z = await zeile('i', ullaE2);
 pruefe('U1 der Server macht daraus "hat stattgefunden"', z.st === 'erledigt' && z.pokale === 2, z);
-const soll = JSON.parse(lauf('JSON.stringify(computeTalkingOverview(talkingAdminSlots))'));
 const hjT2 = hjVon(tag(-3));
-pruefe('U2 Soll-Uebersicht: ullas Zuhoeren bei T2 zaehlt als erledigt, nicht als angemeldet',
-  soll.byHalbjahr[hjT2].ulla.listenDone >= 1 && soll.byHalbjahr[hjT2].ulla.listenPending === 0, soll.byHalbjahr[hjT2]);
+const hjUe = await (await serverFetch('/api/admin/halbjahr-uebersicht')).json();
+const ullaHj = ((hjUe.students.find(x => x.username === 'ulla') || {}).byHalbjahr || {})[hjT2];
+const ullaMathe = ullaHj && ullaHj.bySubject && ullaHj.bySubject.mathe;
+pruefe('U2 Halbjahr-Uebersicht: ullas Zuhoeren bei T2 zaehlt mit seinen 2 Flammen',
+  ullaMathe && ullaMathe.talkDetails.some(d => d.role === 'zugehört' && d.thema === 'Brüche' && d.pokale === 2), ullaHj);
 pruefe('U3 nichts mehr zu bewerten', zaehler() === '0' && sektion().includes('Nichts zu bewerten.'), sektion());
 
 console.log('\n' + ok + ' Pruefungen bestanden.');

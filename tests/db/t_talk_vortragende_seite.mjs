@@ -179,10 +179,8 @@ await lauf('saveTalkingRateModal()'); await ruhe();
 const gilNach = await einladungVon(sess1, 'gil');
 pruefe('D3 gespeichert an gils Einladung: erledigt, 3 Flammen', gilNach.attended_status === 'erledigt' && gilNach.pokale === 3, gilNach);
 pruefe('D4 die Karte zeigt die Bewertung in gils Zeile', gilZeile().includes('✓ '), gilZeile());
-const soll = JSON.parse(lauf('JSON.stringify(computeTalkingOverview(talkingAdminSlots))'));
-const zeilen = soll.byHalbjahr['2627_1'];
-pruefe('D5 Soll-Uebersicht: gils Mit-Vortrag zaehlt als gehalten, nicht als zugehoert',
-  zeilen.gil.presentDone === 1 && zeilen.gil.listenDone + zeilen.gil.listenPending === 0 && zeilen.dan.presentPending === 1, soll);
+// D5 (Soll-Uebersicht im Talks-Reiter) entfiel 2026-10-14 mit der Uebersicht selbst - dieselbe
+// Zaehlung pruefen W2 in t_talk_vortragende und D6 hier in der Halbjahr-Uebersicht.
 const hj = await (await serverFetch('/api/admin/halbjahr-uebersicht')).json();
 const hjGil = lauf(`hjSelected = '2627_1'; hjDetailHtml(__werte.s, 'mathe')`, { s: hj.students.find(s => s.username === 'gil') });
 pruefe('D6 Halbjahr-Uebersicht: "gehalten mit dan"', hjGil.includes('gehalten mit dan'), hjGil);

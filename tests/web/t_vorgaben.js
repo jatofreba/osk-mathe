@@ -23,30 +23,8 @@ const schneide = k => { const a = html.indexOf(k); return html.slice(a, html.ind
     f.subjPflichtP({}, '2627_1') === 1 && f.subjPflichtZ({}, '2627_1') === 2);
 }
 
-// --- 2: die Ueberschrift zeigt genau diese Werte --------------------------
-{
-  const FAECHER = { englisch: { key: 'englisch', name: 'Englisch',
-    pflichtPraesentieren: 2, pflichtZuhoeren: 3,
-    halbjahrTargets: { '2627_2': { pflichtPraesentieren: 1, pflichtZuhoeren: 4 } } } };
-  const code = schneide('function subjTargetRaw(subj, hj, field) {')
-             + html.slice(html.indexOf('function subjPflichtP'), html.indexOf('function subjOptionalP'))
-             + html.slice(html.indexOf('  const hjLabel = (hj, nothingCount) =>'), html.indexOf('  // Ein Halbjahr gilt als "vergangen"'));
-  const hjLabel = new Function('FAECHER', 'activeSubject', `
-    const escHtml = t => String(t == null ? '' : t);
-    const subjectByKey = k => FAECHER[k];
-    const ovSubj = subjectByKey(activeSubject);
-  ` + code + '\nreturn hjLabel;')(FAECHER, 'englisch');
-
-  const a = hjLabel('2627_1', 0);
-  pruefe('V4 die Ueberschrift nennt die eingestellte Vorgabe',
-    a.includes('🎤 2× präsentieren') && a.includes('👂 3× zuhören'), a);
-  pruefe('V4b und das Halbjahr selbst', a.includes('Halbjahr 2627_1'), a);
-  const b = hjLabel('2627_2', 0);
-  pruefe('V5 ein Halbjahr mit eigener Vorgabe zeigt seine eigene',
-    b.includes('🎤 1× präsentieren') && b.includes('👂 4× zuhören'), b);
-  pruefe('V6 "ohne Fortschritt" bleibt daneben erhalten',
-    hjLabel('2627_1', 3).includes('3 ohne jeden Fortschritt'), '');
-}
+// --- 2: (V4-V6) pruefte die Halbjahr-Ueberschrift der Soll-Uebersicht im Talks-Reiter - die
+// Uebersicht flog 2026-10-14 raus (steht in der Halbjahr-Uebersicht).
 
 // --- 3: die feste Zeile ist weg -------------------------------------------
 pruefe('V7 keine fest eingetragene Vorgabe mehr im Kopf',
@@ -55,9 +33,9 @@ pruefe('V7b und ueberhaupt keine harte Soll-Zahl mehr in der Uebersicht',
   !/Pflicht je Halbjahr/.test(html), '');
 
 // --- 4: die uebrigen Anzeigen lasen die Einstellung schon vorher ----------
+// Die Admin-Uebersicht (renderTalkingOverview) gibt es seit 2026-10-14 nicht mehr.
 for (const [n, s] of [['Schueler-Karte', 'function buildTalkingPickerSummaryHtml'],
-                      ['Talks-Tab', 'function renderTalkingStudent'],
-                      ['Admin-Uebersicht', 'function renderTalkingOverview']]) {
+                      ['Talks-Tab', 'function renderTalkingStudent']]) {
   const teil = schneide(s);
   pruefe('V8 ' + n + ' fragt die Einstellung ab',
     teil.includes('subjPflichtP(') && teil.includes('subjPflichtZ('), '');
