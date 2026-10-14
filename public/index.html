@@ -7690,7 +7690,7 @@ function renderTalkingAdmin() {
   // Die Soll-Uebersicht (wer sein Pflicht-Soll schon hat) stand bis 2026-10-14 hier - sie ist in
   // der Halbjahr-Uebersicht enthalten und flog auf Wunsch des Users raus.
   el.innerHTML = `
-    ${talkZuBewertenHtml(talkingAdminSlots, _talkZbAuswahl, today)}
+    ${talkZuBewertenHtml(talkingAdminSlots, _talkZbAuswahl, today, _talkZbHerkunft, _talkBewertetOffen)}
     <div class="admin-top" style="margin-top:24px;">
       <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
       <button class="btn-act btn-green" onclick="openTalkingSlotModal()">+ Termin anlegen</button>
@@ -8053,27 +8053,61 @@ function talkKarteHtml(s, heute) {
 }
 
 // "✍️ Noch zu bewerten" ganz oben im Talks-Reiter (Nutzerwunsch 2026-10-14, wie bei den LZK):
-// erst den Talk antippen, dann je Person mit einem Klick bewerten. Der gewaehlte Talk bleibt
-// stehen, auch wenn gerade die letzte Person bewertet wurde - sonst verschwaende er unter dem
-// Finger, und die letzte Bewertung liesse sich nicht mehr pruefen.
+// erst den Talk antippen, dann je Person mit einem Klick bewerten. Darunter, zugeklappt,
+// "✅ Bewertet in diesem Halbjahr" - dort findet man einen gerade fertig bewerteten Talk wieder
+// (vorher rutschte er weg und war nur unter den vergangenen Terminen zu finden).
+// Der gewaehlte Talk bleibt in der Liste stehen, aus der er gewaehlt wurde, bis man ihn wieder
+// zuklappt - auch wenn er durch die Bewertung in die andere gehoerte. Sonst verschwaende er
+// unter dem Finger, und die letzte Bewertung liesse sich nicht mehr pruefen.
 let _talkZbAuswahl = null;
-function talkZuBewertenHtml(slots, auswahl, heute) {
+let _talkZbHerkunft = 'offen';          // 'offen' | 'bewertet' - woraus der Talk gewaehlt wurde
+// "✅ Bewertet" aufgeklappt? Ueberlebt das Neuzeichnen nach jedem Klick (sonst klappte die Liste
+// bei jeder Bewertung zu); nach dem Neuladen der Seite wieder zu - wie bei den LZK.
+let _talkBewertetOffen = false;
+// Fertig bewertete Talks dieses Halbjahres (nach Datum): Termintag erreicht, niemand, der dabei
+// ist, mehr offen. Neueste zuerst.
+function talksBewertet(slots, heute) {
+  const hj = halbjahrForDateClient(heute || new Date());
+  return (slots || [])
+    .filter(s => s.session_id && talkTagErreicht(s, heute) && halbjahrForDateClient(new Date(s.datum)) === hj
+      && !talkPersonen(s).some(p => talkPersonDabei(p) && p.status === 'ausstehend'))
+    .sort((a, b) => talkFrueher(b, a));
+}
+function talkZuBewertenHtml(slots, auswahl, heute, herkunft, bewertetOffen) {
   const offen = talksZuBewerten(slots, heute);
-  const gewaehlt = auswahl && !offen.some(s => s.session_id === auswahl)
-    ? (slots || []).find(s => s.session_id === auswahl) : null;
-  const liste = gewaehlt ? [...offen, gewaehlt].sort(talkFrueher) : offen;
+  const fertig = talksBewertet(slots, heute);
+  const sel = auswahl ? (slots || []).find(s => s.session_id === auswahl) || null : null;
+  const imUnten = !!sel && herkunft === 'bewertet';
+  const imOben = !!sel && !imUnten;
+  const hat = (liste, x) => liste.some(y => y.session_id === x.session_id);
+  const oben = imUnten ? offen.filter(x => x.session_id !== sel.session_id)
+    : (imOben && !hat(offen, sel)) ? [...offen, sel].sort(talkFrueher) : offen;
+  const unten = imOben ? fertig.filter(x => x.session_id !== sel.session_id)
+    : (imUnten && !hat(fertig, sel)) ? [...fertig, sel].sort((a, b) => talkFrueher(b, a)) : fertig;
   const kopf = `<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten <span class="pill">${offen.length}</span></h3>
     <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🔥 bis 🔥🔥🔥 hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji, ohne Flamme).</div>`;
-  if (!liste.length) return kopf + '<div class="lzk-ue-leer">Nichts zu bewerten.</div>';
-  return kopf + liste.map(s => talkZbTalkHtml(s, s.session_id === auswahl)).join('');
+  const obenHtml = oben.length ? oben.map(s => talkZbTalkHtml(s, s.session_id === auswahl, 'offen')).join('')
+    : '<div class="lzk-ue-leer">Nichts zu bewerten.</div>';
+  const untenHtml = !unten.length ? '' : `<details class="lzk-ue-bewertet"${(bewertetOffen || imUnten) ? ' open' : ''} ontoggle="talkBewertetUmschalten(this.open)">
+      <summary>✅ Bewertet in diesem Halbjahr <span class="pill">${fertig.length}</span></summary>
+      <div class="lzk-ue-erkl">Neueste zuerst – antippen, um eine Bewertung zu ändern.</div>
+      ${unten.map(s => talkZbTalkHtml(s, s.session_id === auswahl, 'bewertet')).join('')}
+    </details>`;
+  return kopf + obenHtml + untenHtml;
 }
-function talkZbTalkHtml(s, offen) {
+function talkBewertetUmschalten(auf) {
+  _talkBewertetOffen = !!auf;
+  // Zugeklappt, waehrend ein Talk daraus offen war: der ist dann auch abgewaehlt - sonst
+  // oeffnete das naechste Neuzeichnen die Liste gleich wieder.
+  if (!auf && _talkZbHerkunft === 'bewertet') _talkZbAuswahl = null;
+}
+function talkZbTalkHtml(s, offen, herkunft) {
   const leute = talkPersonen(s);
   const dabei = leute.filter(talkPersonDabei);
   const nOffen = dabei.filter(p => p.status === 'ausstehend').length;
   const vortragende = leute.filter(p => p.vortrag).map(p => escHtml(p.name)).join(' & ');
   const tag = new Date(s.datum).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
-  const knopf = `<button type="button" class="tzb-talk${offen ? ' aktiv' : ''}" aria-expanded="${offen}" onclick="talkZbWaehlen(${s.session_id})">
+  const knopf = `<button type="button" class="tzb-talk${offen ? ' aktiv' : ''}" aria-expanded="${offen}" onclick="talkZbWaehlen(${s.session_id}, '${herkunft === 'bewertet' ? 'bewertet' : 'offen'}')">
       <span class="tzb-wann">${escHtml(tag)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''}</span>
       <span class="tzb-was">${s.thema ? `„${escHtml(s.thema)}“ · ` : ''}🎤 ${vortragende}</span>
       <span class="pill ${nOffen ? 'pill-yellow' : 'pill-green'}">${nOffen ? nOffen + ' offen' : '✓ alle bewertet'}</span>
@@ -8102,9 +8136,10 @@ function talkZbPersonHtml(p) {
     <span class="tzb-knoepfe">${knoepfe.join('')}<button type="button" class="btn-icon" title="Alle Angaben" aria-label="${name}: alle Angaben" onclick="${talkRateAufruf(p)}">✎</button></span>
   </div>`;
 }
-function talkZbWaehlen(sessionId) {
+function talkZbWaehlen(sessionId, herkunft) {
   // Nochmal antippen klappt wieder zu.
-  _talkZbAuswahl = _talkZbAuswahl === sessionId ? null : sessionId;
+  if (_talkZbAuswahl === sessionId) _talkZbAuswahl = null;
+  else { _talkZbAuswahl = sessionId; _talkZbHerkunft = herkunft === 'bewertet' ? 'bewertet' : 'offen'; }
   renderTalkingAdmin();
 }
 // Ein Klick bewertet eine Person; derselbe Klick nochmal setzt sie zurueck auf "ausstehend"

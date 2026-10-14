@@ -60,6 +60,9 @@ const T4 = await buchung(tag(-2), '08:00', P.sven, 'Fertig');
 await db.query(`UPDATE talking_sessions SET presented_status='erledigt', pokale=2 WHERE id=$1`, [T4]);
 const ritaE4 = await einl(T4, P.rita);
 await db.query(`UPDATE talking_invitations SET attended_status='erledigt', pokale=1 WHERE id=$1`, [ritaE4]);
+// T5 vor 200 Tagen (anderes Halbjahr), fertig bewertet - gehoert nicht unter "Bewertet in diesem Halbjahr"
+const T5 = await buchung(tag(-200), '08:00', P.xaver, 'Altjahr');
+await db.query(`UPDATE talking_sessions SET presented_status='erledigt', pokale=1 WHERE id=$1`, [T5]);
 
 // ── Seite, verbunden mit dem Server ──────────────────────────────────────────
 const seite = ladeSeite();
@@ -76,9 +79,16 @@ await lauf(`me = __werte.me; activeSubject = 'mathe'; subjectsMeta = []; loadSub
 await ruhe();
 await lauf('loadTalkingAdmin()'); await ruhe();
 
+// Nur "Noch zu bewerten" - darunter steht (zugeklappt) "✅ Bewertet in diesem Halbjahr".
 const sektion = () => {
   const h = html('talking-admin');
-  return h.slice(h.indexOf('✍️ Noch zu bewerten'), h.indexOf('📅 Termine verwalten'));
+  const ende = h.indexOf('✅ Bewertet in diesem Halbjahr') !== -1 ? h.indexOf('✅ Bewertet in diesem Halbjahr') : h.indexOf('📅 Termine verwalten');
+  return h.slice(h.indexOf('✍️ Noch zu bewerten'), ende);
+};
+const bewertetTeil = () => {
+  const h = html('talking-admin');
+  const a = h.indexOf('<details class="lzk-ue-bewertet"');
+  return a === -1 ? '' : h.slice(a, h.indexOf('📅 Termine verwalten'));
 };
 const zaehler = () => (sektion().match(/Noch zu bewerten <span class="pill">(\d+)<\/span>/) || [])[1];
 const knoepfe = (typ, id) => (sektion().match(new RegExp(`talkZbBewerten\\('${typ}', ${id}, `, 'g')) || []).length;
@@ -149,6 +159,43 @@ lauf(`talkZbWaehlen(${T1})`);
 s = sektion();
 pruefe('W11 abgewaehlt: der fertige Talk ist weg', !s.includes('Pythagoras') && s.includes('Brüche') && !s.includes('tzb-personen'), s);
 pruefe('W12 keine Fehlermeldung unterwegs', meldungen.length === 0, meldungen);
+
+// ── B) "✅ Bewertet in diesem Halbjahr" (wie bei den LZK) ─────────────────────
+// Wunsch des Users: ein gerade fertig bewerteter Talk "rutschte weg". Am 1.2./1.8. liegen gestern
+// und vorgestern im alten Halbjahr - dann gibt es nichts zu pruefen.
+if (hjVon(tag(-2)) === hjVon(tag(0))) {
+  let b = bewertetTeil();
+  pruefe('B1 fertig bewertet stehen darunter, neueste zuerst - unbewertete und alte Halbjahre nicht',
+    b.includes('Pythagoras') && b.includes('Fertig') && b.indexOf('Pythagoras') < b.indexOf('Fertig')
+    && !b.includes('Brüche') && !b.includes('Altjahr') && b.includes('Bewertet in diesem Halbjahr <span class="pill">2</span>'), b);
+  pruefe('B2 zugeklappt wie bei den LZK, ohne aufgeklappten Talk - die Zeilen merken sich, woher sie kommen',
+    !b.startsWith('<details class="lzk-ue-bewertet" open') && !b.includes('tzb-personen')
+    && b.includes(`talkZbWaehlen(${T4}, 'bewertet')`) && sektion().includes(`talkZbWaehlen(${T2}, 'offen')`), b.slice(0, 600));
+  lauf(`talkZbWaehlen(${T1}, 'bewertet')`);
+  b = bewertetTeil();
+  pruefe('B3 antippen: die Liste ist offen, der Talk aufgeklappt - mit denselben Knoepfen',
+    b.startsWith('<details class="lzk-ue-bewertet" open') && b.includes('tzb-personen')
+    && b.includes(`talkZbBewerten('presented', ${T1}, 3)`) && !sektion().includes('Pythagoras'), b);
+  await klick('attended', ullaE, 1);        // ullas Flamme zuruecknehmen -> T1 wieder offen
+  b = bewertetTeil();
+  pruefe('B4 eine Bewertung zurueckgenommen: der Talk bleibt, wo er gewaehlt wurde ("1 offen"), oben zaehlt er mit',
+    b.includes('Pythagoras') && b.includes('1 offen') && b.includes('tzb-personen') && !sektion().includes('Pythagoras')
+    && zaehler() === '2', b);
+  await klick('attended', ullaE, 1);        // und wieder vergeben
+  z = await zeile('i', ullaE);
+  pruefe('B5 wieder vergeben: 1 Flamme, "✓ alle bewertet", oben wieder 1 offener Talk',
+    z.st === 'erledigt' && z.pokale === 1 && bewertetTeil().includes('✓ alle bewertet') && zaehler() === '1', z);
+  lauf('talkBewertetUmschalten(false)');
+  pruefe('B6 zuklappen waehlt den Talk ab', lauf('_talkZbAuswahl') === null);
+  lauf('renderTalkingAdmin()');
+  b = bewertetTeil();
+  pruefe('B7 neu gezeichnet: zu und ohne aufgeklappten Talk', !b.startsWith('<details class="lzk-ue-bewertet" open') && !b.includes('tzb-personen'), b.slice(0, 200));
+  lauf('talkBewertetUmschalten(true); renderTalkingAdmin()');
+  pruefe('B8 aufgeklappt bleibt aufgeklappt, auch nach dem Neuzeichnen', bewertetTeil().startsWith('<details class="lzk-ue-bewertet" open'));
+  lauf('talkBewertetUmschalten(false); renderTalkingAdmin()');
+} else {
+  console.log('--  B uebersprungen: gestern lag noch im alten Halbjahr');
+}
 
 // ── K) Terminkarten: je Person eine Zeile ────────────────────────────────────
 h = html('talking-admin');
