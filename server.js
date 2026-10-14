@@ -505,6 +505,21 @@ async function initDB() {
        AND sl.typ = 'input' AND ti.status IN ('angefragt', 'eingeladen');
   `);
 
+  // Talks mit Flammen, die noch auf "ausstehend" stehen (2026-10-14): bewertet, ohne den Status
+  // umzustellen - die Flammen zaehlten nirgends, die Soll-Uebersicht zeigte "angemeldet".
+  // Flammen heissen "hat stattgefunden" (talkErgebnis). Nichts geht verloren: Flammen, Emoji
+  // und alles andere bleiben, nur der Status folgt. Laeuft bei jedem Start, findet aber nur
+  // Altfaelle - so etwas speichert der Server nicht mehr. Gezaehlt fuers Server-Log.
+  const talkNachtrag = await pool.query(`
+    WITH s AS (UPDATE talking_sessions SET presented_status = 'erledigt'
+                WHERE presented_status = 'ausstehend' AND pokale > 0 RETURNING id),
+         i AS (UPDATE talking_invitations SET attended_status = 'erledigt'
+                WHERE attended_status = 'ausstehend' AND pokale > 0 RETURNING id)
+    SELECT (SELECT count(*) FROM s)::int AS s, (SELECT count(*) FROM i)::int AS i`);
+  const tn = talkNachtrag.rows[0] || {};
+  if (tn.s || tn.i)
+    console.log(`✓ Talks: ${tn.s} Vortrags- und ${tn.i} Einladungs-Bewertung(en) mit Flammen auf "hat stattgefunden" gesetzt`);
+
   // Seed admin accounts (only if they don't exist)
   const admins = [
     { username: 'admin_m1m2', klasse: 'M1M2', password: 'admin123', mustChange: false },
@@ -682,6 +697,19 @@ async function talkGrenzen(q, slotId) {
 const TALKING_QUALITY_EMOJIS = ['🤩','🌟','👍','🙂','🤔','💡','🎯','🔥'];
 // Tri-State statt Boolean, damit "nicht teilgenommen" von "noch nicht bewertet" unterscheidbar ist.
 const TALKING_STATUS_VALUES = ['ausstehend', 'erledigt', 'nicht_erledigt'];
+// Ergebnis einer Talk-Bewertung (Nutzerwunsch 2026-10-14, wie bei den LZK): Flammen heissen
+// "hat stattgefunden". Wer Flammen vergibt und den Status auf "ausstehend" laesst, meint
+// "erledigt"; "ausstehend" und "nicht_erledigt" tragen keine Flammen. Vorher blieb so ein
+// Talk auf "ausstehend" stehen - die Flammen zaehlten nirgends, und die Soll-Uebersicht
+// zeigte ihn als angemeldet statt erledigt. Deckel 3; Zuhoeren deckelt die Abfrage auf 2.
+function talkErgebnis(status, pokale) {
+  let pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
+  const st = (pk > 0 && status === 'ausstehend') ? 'erledigt' : status;
+  if (st !== 'erledigt') pk = 0;
+  return { status: st, pokale: pk };
+}
+// Kommt ein Feld im Body mit? (undefined zaehlt nicht - wie lzkErgebnis)
+const talkFeldMit = (body, k) => Object.prototype.hasOwnProperty.call(body, k) && body[k] !== undefined;
 
 // Pokale-Gesamtcount für Mathe-Talks: Pflicht (1. Vortrag, erste 2 Zuhör-Termine
 // je Halbjahr) zählt immer zum Max, auch wenn noch nicht wahrgenommen. Zusatz/Bonus
@@ -3199,17 +3227,21 @@ app.delete('/api/admin/talking-sessions/:id/presenter', requireAdmin, async (req
 
 app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, async (req, res) => {
   try {
-    const { status, pokale, qualityEmoji } = req.body;
-    if (!TALKING_STATUS_VALUES.includes(status)) return res.status(400).json({ error: 'Ungültiger Status' });
+    const { qualityEmoji } = req.body;
+    if (!TALKING_STATUS_VALUES.includes(req.body.status)) return res.status(400).json({ error: 'Ungültiger Status' });
     if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
       return res.status(400).json({ error: 'Ungültiges Emoji' });
-    const pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
+    const { status, pokale: pk } = talkErgebnis(req.body.status, req.body.pokale);
+    // Das Emoji aendert sich nur, wenn es mitkommt: ein Klick auf die Flammen unter
+    // "Noch zu bewerten" (oder ✗ in der Wochenleiste) laesst ein vergebenes Emoji stehen.
     const r = await pool.query(`
-      UPDATE talking_sessions ts SET presented_status=$1, pokale=$2, quality_emoji=$3, admin_id=$4, updated_at=NOW()
+      UPDATE talking_sessions ts SET presented_status=$1, pokale=$2,
+        quality_emoji = CASE WHEN $7 THEN $3 ELSE ts.quality_emoji END, admin_id=$4, updated_at=NOW()
       FROM talking_slots sl
       WHERE ts.slot_id = sl.id AND ts.id=$5 AND sl.klasse=$6
       RETURNING ts.id
-    `, [status, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
+    `, [status, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse,
+        talkFeldMit(req.body, 'qualityEmoji')]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -3217,19 +3249,22 @@ app.post('/api/admin/talking-sessions/:id/confirm-presented', requireAdmin, asyn
 
 app.post('/api/admin/talking-invitations/:id/confirm-attended', requireAdmin, async (req, res) => {
   try {
-    const { status, pokale, qualityEmoji } = req.body;
-    if (!TALKING_STATUS_VALUES.includes(status)) return res.status(400).json({ error: 'Ungültiger Status' });
+    const { qualityEmoji } = req.body;
+    if (!TALKING_STATUS_VALUES.includes(req.body.status)) return res.status(400).json({ error: 'Ungültiger Status' });
     if (qualityEmoji && !TALKING_QUALITY_EMOJIS.includes(qualityEmoji))
       return res.status(400).json({ error: 'Ungültiges Emoji' });
-    // Zuhoeren bis 2 Flammen, ein Mit-Vortrag bis 3 (wie der Vortrag selbst).
-    const pk = Math.min(3, Math.max(0, parseInt(pokale) || 0));
+    // Zuhoeren bis 2 Flammen, ein Mit-Vortrag bis 3 (wie der Vortrag selbst). Flammen heissen
+    // "hat stattgefunden", das Emoji aendert sich nur, wenn es mitkommt (siehe confirm-presented).
+    const { status, pokale: pk } = talkErgebnis(req.body.status, req.body.pokale);
     const r = await pool.query(`
       UPDATE talking_invitations ti SET attended_status=$1,
-        pokale=LEAST($2::int, CASE WHEN ti.rolle = 'vortrag' THEN 3 ELSE 2 END), quality_emoji=$3, admin_id=$4, updated_at=NOW()
+        pokale=LEAST($2::int, CASE WHEN ti.rolle = 'vortrag' THEN 3 ELSE 2 END),
+        quality_emoji = CASE WHEN $7 THEN $3 ELSE ti.quality_emoji END, admin_id=$4, updated_at=NOW()
       FROM talking_sessions ts, talking_slots sl
       WHERE ti.session_id = ts.id AND ts.slot_id = sl.id AND ti.id=$5 AND sl.klasse=$6
       RETURNING ti.id
-    `, [status, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse]);
+    `, [status, pk, qualityEmoji || null, req.session.userId, req.params.id, req.session.klasse,
+        talkFeldMit(req.body, 'qualityEmoji')]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }

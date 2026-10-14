@@ -297,7 +297,9 @@ laufende Halbjahr ist aufgeklappt.
   immer vom Server.
 - **Bewerten:** Doppelklick auf einen Talk oder „Bewerten…": ok / nicht ok, Flammen
   (Zuhören bis 2, Vortrag bis 3), Emoji, eine Bemerkung (bleibt nur hier). Beim
-  gehaltenen Talk lässt sich auch das Thema schärfen.
+  gehaltenen Talk lässt sich auch das Thema schärfen. Eine Flamme setzt „✓ ok“ (hat
+  stattgefunden) gleich mit – wie in der App; „noch nicht bewertet“ und „✗ nicht ok“
+  tragen keine Flammen.
 - **Hochladen:** beim Synchronisieren (einzeln: „Einzelne Schritte →
   Mathe-Talk-Bewertungen hochladen…"), jeweils mit Vorschau. Gelb markierte Talks
   warten noch darauf.

@@ -1314,6 +1314,19 @@ def _flammen(wert, hoechstens: int) -> int:
     return max(0, min(hoechstens, n))
 
 
+def talk_ergebnis(status: str, flammen, hoechstens: int = 3):
+    """(status, flammen) einer Talk-Bewertung - dieselbe Regel wie der Server
+    (talkErgebnis, 2026-10-14): Flammen heissen "✓ ok" (hat stattgefunden);
+    "noch nicht bewertet" und "✗ nicht ok" tragen keine Flammen. Vorher blieb
+    "noch nicht bewertet" mit Flammen stehen - und wurde nie hochgeladen."""
+    n = _flammen(flammen, hoechstens)
+    if n > 0 and status == "ausstehend":
+        status = "erledigt"
+    if status != "erledigt":
+        n = 0
+    return status, n
+
+
 @dataclass
 class MatheTalk:
     rolle: str = "zugehoert"           # siehe TALK_ROLLEN

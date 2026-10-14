@@ -264,8 +264,9 @@ class AppClient:
         return self._get("/api/admin/talking-slots?typ=talk&subject=mathe")
 
     def talk_bewerten(self, rolle: str, online_id, status: str, flammen: int, emoji: str) -> None:
-        """Bewertung eines Talks setzen. Der Endpunkt schreibt Status, Flammen und
-        Emoji immer zusammen -- deshalb wird auch immer alles mitgeschickt.
+        """Bewertung eines Talks setzen. Das Emoji schreibt der Endpunkt nur, wenn es
+        mitkommt (seit 2026-10-14) -- deshalb geht es hier immer mit: None loescht es.
+        Flammen mit "ausstehend" macht der Server zu "erledigt" (wie talk_ergebnis).
 
         rolle "gehalten": die Buchung selbst; sonst die Einladung (Mit-Vortrag
         oder Zuhoeren).

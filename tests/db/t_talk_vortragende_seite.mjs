@@ -164,10 +164,11 @@ pruefe('C3 im Talks-Reiter bei den Einladungen: "Von: dan & gil"', html('talking
 // ── D) die Lernbegleitung bewertet ───────────────────────────────────────────
 await als('lb');
 await lauf('loadTalkingAdmin()'); await ruhe();
-pruefe('D1 Terminkarte: "dan & gil" und eine eigene Pille, um gils Vortrag zu bewerten',
-  html('talking-admin').includes('<strong>dan & gil</strong>')
-  && html('talking-admin').includes(`openTalkingRateModal('mitvortrag', ${gilE.id}, 3,`)
-  && html('talking-admin').includes('🎤 gil · ⏳ Vortrag bewerten'), html('talking-admin'));
+// Seit 2026-10-14 je Person eine Zeile (vorher "dan & gil" mit einem Knopf, der nur dan bewertete).
+const gilZeile = () => { const h = html('talking-admin'); const a = h.indexOf('🎤 gil</span>'); return a === -1 ? '' : h.slice(a, h.indexOf('</button>', a)); };
+pruefe('D1 Terminkarte: dan und gil je mit eigener Zeile - gils Zeile bewertet gils Vortrag',
+  html('talking-admin').includes('🎤 dan</span>') && html('talking-admin').includes('🎤 gil</span>')
+  && gilZeile().includes(`openTalkingRateModal('mitvortrag', ${gilE.id}, 3,`), html('talking-admin'));
 lauf(`openTalkingRateModal('mitvortrag', ${gilE.id}, 3, 0, null, 'ausstehend')`);
 pruefe('D2 das Bewerten-Fenster ist das fuer einen Vortrag (bis 3 Flammen)',
   seite.element('trate-modal-title').textContent === '🎤 Vortrag bewerten'
@@ -177,7 +178,7 @@ lauf('selectTalkingRatePokal(3)');
 await lauf('saveTalkingRateModal()'); await ruhe();
 const gilNach = await einladungVon(sess1, 'gil');
 pruefe('D3 gespeichert an gils Einladung: erledigt, 3 Flammen', gilNach.attended_status === 'erledigt' && gilNach.pokale === 3, gilNach);
-pruefe('D4 die Karte zeigt die Bewertung', html('talking-admin').includes('🎤 gil · ✓'), html('talking-admin'));
+pruefe('D4 die Karte zeigt die Bewertung in gils Zeile', gilZeile().includes('✓ '), gilZeile());
 const soll = JSON.parse(lauf('JSON.stringify(computeTalkingOverview(talkingAdminSlots))'));
 const zeilen = soll.byHalbjahr['2627_1'];
 pruefe('D5 Soll-Uebersicht: gils Mit-Vortrag zaehlt als gehalten, nicht als zugehoert',

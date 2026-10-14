@@ -21,7 +21,7 @@ from arbeitsstaende_data import (
     lt_freie_lzk_abgleich, lt_freie_lzk_senden, lt_freie_lzk_uebernehmen, lzk_verknuepfung,
     FREIE_LZK_FACH,
     LZK_ERGEBNIS_TEXT, LZK_ERGEBNIS_SYMBOL,
-    MatheTalk, TALK_ROLLEN_TEXT, TALK_STATUS_WERTE, TALK_STATUS_TEXT, TALK_EMOJIS,
+    MatheTalk, TALK_ROLLEN_TEXT, TALK_STATUS_WERTE, TALK_STATUS_TEXT, TALK_EMOJIS, talk_ergebnis,
     lt_mathe_talks, lt_talks_uebernehmen, lt_talks_hochladen_liste, talk_hochgeladen,
     talk_wartet, talks_je_halbjahr, talks_zusammenfassung,
     hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
@@ -529,15 +529,19 @@ class TalkDialog(tk.Toplevel):
         ttk.Label(self, text="Bewertung").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
         self._status_texte = [TALK_STATUS_TEXT[w] for w in TALK_STATUS_WERTE]
         self.v_status = tk.StringVar(value=TALK_STATUS_TEXT.get(talk.status, self._status_texte[0]))
-        ttk.Combobox(self, textvariable=self.v_status, values=self._status_texte,
-                     state="readonly", width=24).grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        cb_status = ttk.Combobox(self, textvariable=self.v_status, values=self._status_texte,
+                                 state="readonly", width=24)
+        cb_status.grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        cb_status.bind("<<ComboboxSelected>>", self._status_gewaehlt)
         zeile += 1
 
         ttk.Label(self, text="Flammen").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
         self.v_flammen = tk.StringVar(value=str(talk.flammen or 0))
-        ttk.Combobox(self, textvariable=self.v_flammen,
-                     values=[str(n) for n in range(talk.max_flammen + 1)],
-                     state="readonly", width=6).grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        cb_flammen = ttk.Combobox(self, textvariable=self.v_flammen,
+                                  values=[str(n) for n in range(talk.max_flammen + 1)],
+                                  state="readonly", width=6)
+        cb_flammen.grid(row=zeile, column=1, sticky="w", padx=8, pady=4)
+        cb_flammen.bind("<<ComboboxSelected>>", self._flammen_gewaehlt)
         zeile += 1
 
         ttk.Label(self, text="Emoji").grid(row=zeile, column=0, sticky="e", padx=8, pady=4)
@@ -553,7 +557,7 @@ class TalkDialog(tk.Toplevel):
         self.t_bem.bind("<Return>", BausteinDialog._zeilenumbruch)
         zeile += 1
 
-        ttk.Label(self, text="Flammen zählen nur bei „✓ ok“. „Noch nicht bewertet“ wird nie hochgeladen.",
+        ttk.Label(self, text="Eine Flamme setzt „✓ ok“ (hat stattgefunden). „Noch nicht bewertet“ wird nie hochgeladen.",
                   foreground="#555").grid(row=zeile, column=0, columnspan=2, sticky="w", padx=8)
         zeile += 1
         btns = ttk.Frame(self)
@@ -563,6 +567,20 @@ class TalkDialog(tk.Toplevel):
         self.bind("<Return>", lambda e: self._uebernehmen())
         self.bind("<Escape>", lambda e: self.destroy())
 
+    def _flammen_gewaehlt(self, _e=None):
+        # Eine Flamme heisst: hat stattgefunden - der Status springt mit (wie in der App).
+        try:
+            n = int(self.v_flammen.get() or 0)
+        except ValueError:
+            n = 0
+        if n > 0:
+            self.v_status.set(TALK_STATUS_TEXT["erledigt"])
+
+    def _status_gewaehlt(self, _e=None):
+        # "Noch nicht bewertet" und "✗ nicht ok" tragen keine Flammen.
+        if self.v_status.get() != TALK_STATUS_TEXT["erledigt"]:
+            self.v_flammen.set("0")
+
     def _uebernehmen(self):
         t = self.talk
         status = TALK_STATUS_WERTE[self._status_texte.index(self.v_status.get())]
@@ -570,9 +588,10 @@ class TalkDialog(tk.Toplevel):
             flammen = int(self.v_flammen.get() or 0)
         except ValueError:
             flammen = 0
+        status, flammen = talk_ergebnis(status, flammen, t.max_flammen)
         self.result = {
             "status": status,
-            "flammen": max(0, min(t.max_flammen, flammen)),
+            "flammen": flammen,
             "emoji": self.v_emoji.get() if self.v_emoji.get() in TALK_EMOJIS else "",
             "bemerkung": self.t_bem.get("1.0", "end").rstrip("\n"),
             "thema": self.v_thema.get().strip() if t.rolle == "gehalten" else t.thema,

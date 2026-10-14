@@ -670,6 +670,21 @@ html.lt-vollbild, html.lt-vollbild body{height:100%;min-height:0;overflow:hidden
 .lzk-ue-tag{font-size:12.5px;font-weight:700;color:var(--md-on-surface-variant);margin:12px 0 6px;}
 .lzk-ue-leer{font-size:13px;color:var(--md-on-surface-variant);padding:2px 0 6px;}
 .lzk-ue-doppelt{font-size:12px;color:#b45309;margin:0 0 3px 4px;}
+/* Talks bewerten - je Person eine Zeile (2026-10-14): "Noch zu bewerten" und Terminkarten */
+.tzb-talk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;text-align:left;margin:0 0 6px;
+  padding:8px 10px;border:1px solid var(--md-outline-variant);border-radius:var(--md-r-sm);
+  background:var(--md-surface);color:inherit;font:inherit;cursor:pointer;}
+.tzb-talk:hover{background:var(--md-surface-container);}
+.tzb-talk.aktiv{border-color:var(--md-primary);background:var(--md-surface-container);}
+.tzb-wann{font-weight:700;font-size:13px;}
+.tzb-was{flex:1 1 200px;min-width:0;font-size:13px;}
+.tzb-personen{margin:-2px 0 10px 12px;padding:4px 0 4px 10px;border-left:3px solid var(--md-primary);}
+.tzb-karte{margin-top:6px;}
+.tzb-person{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:3px 0;}
+.tzb-name{font-size:13px;min-width:0;}
+.tzb-knoepfe{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
+.tzb-hinweis{font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;}
+.tzb-pille{border:none;cursor:pointer;font-family:inherit;}
 /* Talk buchen/nachladen: wer traegt mit vor, wer hoert zu */
 .talk-auswahl{max-height:180px;overflow-y:auto;}
 .talk-auswahl input:disabled + span{opacity:.45;}
@@ -1610,7 +1625,7 @@ textarea.form-input{
     <div class="modal-title" id="trate-modal-title">Bewerten</div>
     <div class="form-group">
       <label class="form-label" for="trate-modal-status">Status</label>
-      <select class="form-input" id="trate-modal-status">
+      <select class="form-input" id="trate-modal-status" onchange="talkRateStatusGeaendert()">
         <option value="ausstehend">⏳ Ausstehend</option>
         <option value="erledigt">✓ Hat stattgefunden</option>
         <option value="nicht_erledigt" id="trate-modal-status-no">✗ Nicht teilgenommen</option>
@@ -8007,18 +8022,6 @@ function renderTalkingAdmin() {
 
   const renderSlotCard = (s) => {
     const booked = !!s.session_id;
-    const invitees = s.invitees || [];
-    const inviteesHtml = invitees.map(iv => {
-      const statusIcon = iv.status === 'angenommen' ? '✓' : iv.status === 'abgelehnt' ? '✗' : '⏳';
-      const rating = iv.attendedStatus === 'erledigt' ? ` ${talkingPokalStr(iv.pokale || 0, 2)}${iv.qualityEmoji ? ' ' + iv.qualityEmoji : ''}` : '';
-      const attCls = iv.attendedStatus === 'erledigt' ? 'pill-green' : iv.attendedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-blue';
-      return `<span class="pill ${attCls}" style="cursor:pointer;" title="Teilnahme bewerten" onclick="openTalkingRateModal('attended', ${iv.id}, 2, ${iv.pokale || 0}, ${iv.qualityEmoji ? `'${iv.qualityEmoji}'` : 'null'}, '${iv.attendedStatus || 'ausstehend'}')">
-        ${escHtml(iv.username)} ${statusIcon}${rating}
-      </span>`;
-    }).join(' ');
-    const presentRating = s.presentedStatus === 'erledigt' ? ` ${talkingPokalStr(s.pokale || 0, 3)}${s.qualityEmoji ? ' ' + s.qualityEmoji : ''}` : '';
-    const presentCls = s.presentedStatus === 'erledigt' ? 'pill-green' : s.presentedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
-    const presentTxt = s.presentedStatus === 'erledigt' ? '✓ bewertet' : s.presentedStatus === 'nicht_erledigt' ? '✗ nicht gehalten' : '⏳ Vortrag bewerten';
     return `
       <div class="stat-card" style="margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap;">
@@ -8032,21 +8035,11 @@ function renderTalkingAdmin() {
         </div>
         ${booked ? `
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            🎤 <strong>${[s.presenter_username, ...(s.coPresenters || []).map(c => c.username)].map(escHtml).join(' & ')}</strong> · ${escHtml(s.thema)}
-            <span class="pill ${presentCls}" style="cursor:pointer;" title="Vortrag bewerten" onclick="openTalkingRateModal('presented', ${s.session_id}, 3, ${s.pokale || 0}, ${s.qualityEmoji ? `'${s.qualityEmoji}'` : 'null'}, '${s.presentedStatus || 'ausstehend'}')">
-              ${presentTxt}${presentRating}
-            </span>
+            <span>${s.thema ? `„${escHtml(s.thema)}“` : 'Talk'}</span>
             <button class="btn-icon" onclick="openTalkBeteiligte(${s.session_id}, 'talks')" title="Beteiligte bearbeiten" aria-label="Beteiligte bearbeiten">👥</button>
             <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
           </div>
-          ${(s.coPresenters || []).length ? `<div style="margin-top:6px;">${(s.coPresenters || []).map(c => {
-            const cls = c.attendedStatus === 'erledigt' ? 'pill-green' : c.attendedStatus === 'nicht_erledigt' ? 'pill-red' : 'pill-yellow';
-            const txt = c.attendedStatus === 'erledigt' ? `✓ ${talkingPokalStr(c.pokale || 0, 3)}${c.qualityEmoji ? ' ' + c.qualityEmoji : ''}`
-              : c.attendedStatus === 'nicht_erledigt' ? '✗ nicht gehalten'
-              : c.status === 'angenommen' ? '⏳ Vortrag bewerten' : '⏳ noch keine Antwort';
-            return `<span class="pill ${cls}" style="cursor:pointer;" title="Mit-Vortrag bewerten" onclick="openTalkingRateModal('mitvortrag', ${c.id}, 3, ${c.pokale || 0}, ${c.qualityEmoji ? `'${c.qualityEmoji}'` : 'null'}, '${c.attendedStatus || 'ausstehend'}')">🎤 ${escHtml(c.username)} · ${txt}</span>`;
-          }).join(' ')}</div>
-          ` : ''}<div style="margin-top:6px;">${inviteesHtml || '<span style="color:var(--md-on-surface-variant);font-size:12px;">Niemand eingeladen</span>'}</div>
+          <div class="tzb-karte">${talkKarteHtml(s, today)}</div>
         ` : `<div style="margin-top:8px;color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</div>`}
       </div>`;
   };
@@ -8057,6 +8050,7 @@ function renderTalkingAdmin() {
   const overview = renderTalkingOverview(talkingAdminSlots, talkingAdminRoster);
 
   el.innerHTML = `
+    ${talkZuBewertenHtml(talkingAdminSlots, _talkZbAuswahl, today)}
     ${overview.current}
     <div class="admin-top" style="margin-top:24px;">
       <div class="admin-title" style="font-size:16px;">📅 Termine verwalten</div>
@@ -8345,13 +8339,165 @@ async function talkBeteiligteEntfernen(invitationId) {
   await talkBeteiligteNeuLaden();
 }
 
+// ── Talks bewerten: je Person (Nutzerwunsch 2026-10-14) ───────────────────────────
+// Jede vortragende und jede zuhoerende Person hat ihre EIGENE Bewertung: die buchende Person
+// an der Buchung (confirm-presented), weitere Vortragende und Zuhoerende an ihrer Einladung
+// (confirm-attended). talkPersonen() legt sie fuer einen Termin nebeneinander - fuer die
+// Terminkarte und fuer "Noch zu bewerten".
+function talkPersonen(s) {
+  const leute = [];
+  if (s.session_id && s.presenter_username) leute.push({ typ: 'presented', id: s.session_id,
+    name: s.presenter_username, vortrag: true, max: 3, status: s.presentedStatus || 'ausstehend',
+    pokale: s.pokale || 0, emoji: s.qualityEmoji || null, einladung: null });
+  (s.coPresenters || []).forEach(c => leute.push({ typ: 'mitvortrag', id: c.id, name: c.username,
+    vortrag: true, max: 3, status: c.attendedStatus || 'ausstehend', pokale: c.pokale || 0,
+    emoji: c.qualityEmoji || null, einladung: c.status }));
+  (s.invitees || []).forEach(iv => leute.push({ typ: 'attended', id: iv.id, name: iv.username,
+    vortrag: false, max: 2, status: iv.attendedStatus || 'ausstehend', pokale: iv.pokale || 0,
+    emoji: iv.qualityEmoji || null, einladung: iv.status }));
+  return leute;
+}
+// Ist die Person beim Talk dabei, also zu bewerten? Die buchende Person immer; sonst wer
+// zugesagt hat oder schon bewertet ist - dieselbe Regel wie in der Soll-Uebersicht.
+function talkPersonDabei(p) {
+  return p.typ === 'presented' || p.einladung === 'angenommen' || p.status !== 'ausstehend';
+}
+// Bewertet wird ab dem Termintag (wie Anwesenheit und LZK). Verglichen wird der Kalendertag -
+// datum kommt als Zeitstempel der lokalen Mitternacht.
+function talkTagErreicht(s, heute) {
+  return calDateStr(new Date(s.datum)) <= calDateStr(heute || new Date());
+}
+function talkFrueher(a, b) {
+  return calDateStr(new Date(a.datum)).localeCompare(calDateStr(new Date(b.datum)))
+    || (a.uhrzeit || '').localeCompare(b.uhrzeit || '');
+}
+// Termine fuer "Noch zu bewerten": gebucht, Termintag erreicht, und mindestens eine Person,
+// die dabei ist, hat noch keine Bewertung. Aelteste zuerst (wie bei den LZK).
+function talksZuBewerten(slots, heute) {
+  return (slots || [])
+    .filter(s => s.session_id && talkTagErreicht(s, heute)
+      && talkPersonen(s).some(p => talkPersonDabei(p) && p.status === 'ausstehend'))
+    .sort(talkFrueher);
+}
+// Bewertung einer Person als Text (Terminkarte).
+function talkBewertungText(p, tagErreicht) {
+  if (p.status === 'erledigt')
+    return (p.pokale ? '✓ ' + talkingPokalStr(p.pokale, p.max) : '✓ hat stattgefunden') + (p.emoji ? ' ' + p.emoji : '');
+  if (p.status === 'nicht_erledigt') return p.vortrag ? '✗ nicht gehalten' : '✗ nicht teilgenommen';
+  if (p.einladung === 'abgelehnt') return '✗ abgesagt';
+  if (p.einladung === 'eingeladen') return '⏳ noch keine Antwort';
+  if (tagErreicht) return '⏳ bewerten';
+  return p.typ === 'presented' ? 'hält den Talk' : p.vortrag ? 'trägt mit vor' : '✓ zugesagt';
+}
+// Aufruf des Bewertungsfensters fuer genau diese Person (fuer ein onclick-Attribut); ihr
+// Name steht im Fenstertitel.
+function talkRateAufruf(p) {
+  return `openTalkingRateModal('${p.typ}', ${p.id}, ${p.max}, ${p.pokale}, ${p.emoji ? `'${p.emoji}'` : 'null'}, '${p.status}', ${escHtml(JSON.stringify(p.name))})`;
+}
+// Terminkarte im Talks-Reiter: je Person eine Zeile mit ihrer eigenen Bewertung zum Antippen.
+// Vorher stand der erste Bewerten-Knopf neben "A & B" und bewertete nur A, und den Pillen der
+// Zuhoerenden sah man nicht an, dass sie sich antippen lassen.
+function talkKarteHtml(s, heute) {
+  const tag = talkTagErreicht(s, heute);
+  const leute = talkPersonen(s);
+  const zeilen = leute.map(p => {
+    const offen = p.status === 'ausstehend' && tag && talkPersonDabei(p);
+    const cls = p.status === 'erledigt' ? 'pill-green' : p.status === 'nicht_erledigt' ? 'pill-red'
+      : offen ? 'pill-yellow' : 'pill-blue';
+    return `<div class="tzb-person">
+      <span class="tzb-name">${p.vortrag ? '🎤' : '👂'} ${escHtml(p.name)}</span>
+      <button type="button" class="pill ${cls} tzb-pille" title="${p.vortrag ? 'Vortrag' : 'Teilnahme'} von ${escHtml(p.name)} bewerten"
+        onclick="${talkRateAufruf(p)}">${talkBewertungText(p, tag)}</button>
+    </div>`;
+  });
+  if (!leute.some(p => !p.vortrag)) zeilen.push('<div class="tzb-hinweis">Niemand eingeladen</div>');
+  return zeilen.join('');
+}
+
+// "✍️ Noch zu bewerten" ganz oben im Talks-Reiter (Nutzerwunsch 2026-10-14, wie bei den LZK):
+// erst den Talk antippen, dann je Person mit einem Klick bewerten. Der gewaehlte Talk bleibt
+// stehen, auch wenn gerade die letzte Person bewertet wurde - sonst verschwaende er unter dem
+// Finger, und die letzte Bewertung liesse sich nicht mehr pruefen.
+let _talkZbAuswahl = null;
+function talkZuBewertenHtml(slots, auswahl, heute) {
+  const offen = talksZuBewerten(slots, heute);
+  const gewaehlt = auswahl && !offen.some(s => s.session_id === auswahl)
+    ? (slots || []).find(s => s.session_id === auswahl) : null;
+  const liste = gewaehlt ? [...offen, gewaehlt].sort(talkFrueher) : offen;
+  const kopf = `<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten <span class="pill">${offen.length}</span></h3>
+    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🔥 bis 🔥🔥🔥 hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji, ohne Flamme).</div>`;
+  if (!liste.length) return kopf + '<div class="lzk-ue-leer">Nichts zu bewerten.</div>';
+  return kopf + liste.map(s => talkZbTalkHtml(s, s.session_id === auswahl)).join('');
+}
+function talkZbTalkHtml(s, offen) {
+  const leute = talkPersonen(s);
+  const dabei = leute.filter(talkPersonDabei);
+  const nOffen = dabei.filter(p => p.status === 'ausstehend').length;
+  const vortragende = leute.filter(p => p.vortrag).map(p => escHtml(p.name)).join(' & ');
+  const tag = new Date(s.datum).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const knopf = `<button type="button" class="tzb-talk${offen ? ' aktiv' : ''}" aria-expanded="${offen}" onclick="talkZbWaehlen(${s.session_id})">
+      <span class="tzb-wann">${escHtml(tag)}${s.uhrzeit ? ' · ' + escHtml(s.uhrzeit) : ''}</span>
+      <span class="tzb-was">${s.thema ? `„${escHtml(s.thema)}“ · ` : ''}🎤 ${vortragende}</span>
+      <span class="pill ${nOffen ? 'pill-yellow' : 'pill-green'}">${nOffen ? nOffen + ' offen' : '✓ alle bewertet'}</span>
+    </button>`;
+  if (!offen) return knopf;
+  const ohneAntwort = leute.filter(p => !talkPersonDabei(p) && p.einladung === 'eingeladen');
+  return knopf + `<div class="tzb-personen">${dabei.map(talkZbPersonHtml).join('')}${ohneAntwort.length
+    ? `<div class="tzb-hinweis">Ohne Antwort eingeladen: ${ohneAntwort.map(p => escHtml(p.name)).join(', ')} – falls doch dabei: unten an der Terminkarte bewerten.</div>` : ''}</div>`;
+}
+function talkZbPersonHtml(p) {
+  const an = n => n === -1 ? p.status === 'nicht_erledigt' : (p.status === 'erledigt' && p.pokale === n);
+  const name = escHtml(p.name);
+  const k = (n, text, titel) => `<button type="button" class="lzk-pokal-btn${an(n) ? ' active' : ''}" title="${titel}"`
+    + ` aria-label="${name}: ${titel}" aria-pressed="${an(n)}" onclick="talkZbBewerten('${p.typ}', ${p.id}, ${n})">${text}</button>`;
+  const knoepfe = [k(-1, '✗', p.vortrag ? 'nicht gehalten' : 'nicht teilgenommen')];
+  for (let n = 1; n <= p.max; n++) knoepfe.push(k(n, '🔥'.repeat(n), `hat stattgefunden – ${n} Flamme${n > 1 ? 'n' : ''}`));
+  const ohneFlamme = p.status === 'erledigt' && !p.pokale
+    ? ' <span class="pill pill-green" style="font-size:10px;">✓ ohne Flamme</span>' : '';
+  const emoji = p.status === 'erledigt' && p.emoji ? ' ' + p.emoji : '';
+  return `<div class="tzb-person">
+    <span class="tzb-name">${p.vortrag ? '🎤' : '👂'} ${name}${emoji}${ohneFlamme}</span>
+    <span class="tzb-knoepfe">${knoepfe.join('')}<button type="button" class="btn-icon" title="Alle Angaben" aria-label="${name}: alle Angaben" onclick="${talkRateAufruf(p)}">✎</button></span>
+  </div>`;
+}
+function talkZbWaehlen(sessionId) {
+  // Nochmal antippen klappt wieder zu.
+  _talkZbAuswahl = _talkZbAuswahl === sessionId ? null : sessionId;
+  renderTalkingAdmin();
+}
+// Ein Klick bewertet eine Person; derselbe Klick nochmal setzt sie zurueck auf "ausstehend"
+// (wie lzkBewerten). Das Emoji bleibt dabei stehen - es wird nicht mitgeschickt.
+async function talkZbBewerten(typ, id, n) {
+  let p = null;
+  (talkingAdminSlots || []).some(s => (p = talkPersonen(s).find(x => x.typ === typ && x.id === id)));
+  const schonSo = p && (n === -1 ? p.status === 'nicht_erledigt' : (p.status === 'erledigt' && p.pokale === n));
+  const body = schonSo ? { status: 'ausstehend', pokale: 0 }
+    : n === -1 ? { status: 'nicht_erledigt', pokale: 0 } : { status: 'erledigt', pokale: n };
+  const url = typ === 'presented' ? `/api/admin/talking-sessions/${id}/confirm-presented`
+    : `/api/admin/talking-invitations/${id}/confirm-attended`;
+  const r = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Bewerten.'); return; }
+  await talkingAdminAktualisieren();
+}
+// Neu laden ohne "Lade…" dazwischen: nach einer Bewertung bleibt die Ansicht stehen (kein
+// Springen nach oben, die Auswahl unter "Noch zu bewerten" bleibt).
+async function talkingAdminAktualisieren() {
+  try {
+    const r = await fetch('/api/admin/talking-slots?subject=' + encodeURIComponent(activeSubject));
+    if (r.ok) talkingAdminSlots = await r.json();
+  } catch (e) { /* der alte Stand bleibt stehen */ }
+  renderTalkingAdmin();
+}
+
 let _talkingRateModal = {};
-function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentStatus) {
+function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, currentStatus, name) {
   _talkingRateModal = { type, id, pokale: currentPokale || 0, emoji: currentEmoji || null };
   // 'mitvortrag' = weitere vortragende Person: bewertet wie ein Vortrag (bis 3 Flammen),
-  // gespeichert an ihrer Einladung (confirm-attended).
+  // gespeichert an ihrer Einladung (confirm-attended). Mit Namen im Titel: bewertet wird
+  // immer genau EINE Person - beim gemeinsamen Talk jede fuer sich.
   const vortrag = type === 'presented' || type === 'mitvortrag';
-  document.getElementById('trate-modal-title').textContent = vortrag ? '🎤 Vortrag bewerten' : '👂 Teilnahme bewerten';
+  document.getElementById('trate-modal-title').textContent =
+    (vortrag ? '🎤 Vortrag bewerten' : '👂 Teilnahme bewerten') + (name ? ' – ' + name : '');
   document.getElementById('trate-modal-status-no').textContent = vortrag ? '✗ Nicht gehalten' : '✗ Nicht teilgenommen';
   document.getElementById('trate-modal-status').value = currentStatus || 'ausstehend';
   document.getElementById('trate-modal-pokale').innerHTML = Array.from({ length: maxPokale + 1 }, (_, v) =>
@@ -8366,6 +8512,14 @@ function openTalkingRateModal(type, id, maxPokale, currentPokale, currentEmoji, 
 function selectTalkingRatePokal(v) {
   _talkingRateModal.pokale = v;
   document.querySelectorAll('#trate-modal-pokale .lzk-pokal-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.v) === v));
+  // Eine Flamme heisst: hat stattgefunden (Nutzerwunsch 2026-10-14) - der Status springt mit.
+  // Vorher blieb er auf "Ausstehend", und der Talk zaehlte trotz Flammen nirgends.
+  if (v > 0) document.getElementById('trate-modal-status').value = 'erledigt';
+}
+// "Ausstehend" und "nicht gehalten/teilgenommen" tragen keine Flammen - die Knoepfe zeigen
+// das gleich, statt dass der Server sie beim Speichern stillschweigend wegnimmt.
+function talkRateStatusGeaendert() {
+  if (document.getElementById('trate-modal-status').value !== 'erledigt') selectTalkingRatePokal(0);
 }
 
 function selectTalkingRateEmoji(e) {
@@ -8379,12 +8533,13 @@ async function saveTalkingRateModal() {
   const url = type === 'presented'
     ? `/api/admin/talking-sessions/${id}/confirm-presented`
     : `/api/admin/talking-invitations/${id}/confirm-attended`;
-  await fetch(url, {
+  const r = await fetch(url, {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ status, pokale, qualityEmoji: emoji })
   });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Speichern.'); return; }
   closeModal('modal-talking-rate');
-  loadTalkingAdmin();
+  await talkingAdminAktualisieren();
 }
 
 let viewingStudent = null;
