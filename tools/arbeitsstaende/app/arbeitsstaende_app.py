@@ -33,6 +33,7 @@ from arbeitsstaende_data import (
     notenspiegel_werte, notenspiegel_tabelle, lzk_auswertung, lzk_auswertung_text,
     baustein_auswertung, noten_neu_berechnen, zahl_lesen, zahl_text, prozent_text,
     lzk_note_in_bemerkung,
+    DRINGLICHKEIT, dringlichkeit,
     LZK_NUMMERN, LZK_ANZAHL_OPTIONEN, LZK_ANZAHL_STANDARD, lzk_anzahl, lzk_vorgabe, lzk_hoechster_platz,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
@@ -2001,9 +2002,15 @@ class App(tk.Tk):
         self.suche_var.trace_add("write", lambda *a: self._liste_aktualisieren())
         ttk.Entry(suchzeile, textvariable=self.suche_var).pack(side="left", fill="x", expand=True, padx=6)
 
-        ttk.Label(links, text="Sortiert nach Deadline, die früheste zuerst. "
+        ttk.Label(links, text="Sortiert nach Dringlichkeit, darin nach Deadline (die früheste zuerst). "
                               "Spaltenkopf anklicken sortiert danach.",
-                  font=("", 10, "italic"), wraplength=520, justify="left").pack(fill="x", pady=(0, 4))
+                  font=("", 10, "italic"), wraplength=520, justify="left").pack(fill="x", pady=(0, 2))
+        # Legende der Zeilenfarben, in der Reihenfolge der Sortierung.
+        legende = ttk.Frame(links)
+        legende.pack(fill="x", pady=(0, 4))
+        for stufe in DRINGLICHKEIT:
+            tk.Label(legende, text=self.DRINGLICHKEIT_TEXT[stufe], background=self.DRINGLICHKEIT_FARBEN[stufe],
+                     foreground="#222", padx=6, pady=1).pack(side="left", padx=(0, 4))
 
         self.liste = ttk.Treeview(links, columns=("jahrgang", "deadline", "anlass", "baustein", "kursung", "fb"),
                                    show="tree headings", height=20)
@@ -2032,8 +2039,8 @@ class App(tk.Tk):
         self.liste.column("fb", width=115, anchor="center")
         self.liste.pack(fill="both", expand=True)
         self.liste.bind("<<TreeviewSelect>>", self._auswahl_geaendert)
-        self.liste.tag_configure("dringend", background="#FFC7CE")
-        self.liste.tag_configure("bevorstehend", background="#FFEB9C")
+        for stufe, farbe in self.DRINGLICHKEIT_FARBEN.items():
+            self.liste.tag_configure(stufe, background=farbe)
 
         listen_btns = ttk.Frame(links)
         listen_btns.pack(fill="x", pady=(6, 0))
@@ -2473,6 +2480,11 @@ class App(tk.Tk):
     FB_GRUEN_TAGE = 7
     FB_GELB_TAGE = 14
 
+    # Zeilenfarben der Liste nach Dringlichkeit der Deadline (siehe dringlichkeit()).
+    DRINGLICHKEIT_FARBEN = {"rot": "#FFC7CE", "lila": "#E4D6F5", "gelb": "#FFEB9C", "gruen": "#C6EFCE"}
+    DRINGLICHKEIT_TEXT = {"rot": "bis 7 Tage / überfällig", "lila": "nichts vereinbart",
+                          "gelb": "bis 14 Tage", "gruen": "später"}
+
     def _fb_symbol(self, student: Student, heute: date) -> str:
         """Farbindikator nur für die FB-Spalte (Treeview-Zeilen können nur
         eine Hintergrundfarbe insgesamt haben, die ist schon für die
@@ -2487,8 +2499,9 @@ class App(tk.Tk):
             return "🟡"
         return "🔴"
 
-    # Standard beim Start: nach Deadline, die frueheste zuerst - streng nach Datum,
-    # 01.10. vor 02.10. auch am 04.10. (Nutzerwunsch 2026-10-04).
+    # Standard beim Start: nach Dringlichkeit (rot, lila, gelb, gruen - Nutzerwunsch
+    # 2026-10-31), darin nach Deadline streng nach Datum: 01.10. vor 02.10. auch am 04.10.
+    # (Nutzerwunsch 2026-10-04).
     STANDARD_SORTIERUNG = "deadline"
 
     def _liste_sortieren(self, spalte):
@@ -2519,15 +2532,15 @@ class App(tk.Tk):
             baustein, _ = self.az.berechne_status(student)
             return (0, str(baustein).lower()) if baustein else (1, "")
         if spalte == "deadline":
-            # Streng nach Datum, die frueheste zuerst; dahinter ein blosser Hinweis
-            # ("Frist vereinbaren!"), ganz unten ohne Frist. Bei gleichem Tag nach Namen.
+            # Nach Dringlichkeit: rot (bis 7 Tage, auch Vergangenes), lila (nichts
+            # vereinbart), gelb (bis 14 Tage), gruen. Darin streng nach Datum, die frueheste
+            # zuerst; bei lila erst "Frist vereinbaren!", dann ohne Frist. Gleicher Tag: Name.
             deadline, _ = self.az.deadline_info(student, heute)
             name = (student.nachname.lower(), student.vorname.lower())
+            stufe = DRINGLICHKEIT.index(dringlichkeit(deadline, heute))
             if isinstance(deadline, date):
-                return (0, deadline) + name
-            if deadline:
-                return (1, heute) + name      # Hinweistext direkt hinter den echten Terminen
-            return (2, date.min) + name
+                return (stufe, 0, deadline) + name
+            return (stufe, 1 if deadline else 2, heute) + name
         if spalte == "anlass":
             _, anlass = self.az.deadline_info(student, heute)
             return (0, anlass.lower()) if anlass else (1, "")
@@ -2551,15 +2564,9 @@ class App(tk.Tk):
             # Angezeigt wird die naechste Frist ueberhaupt -- LZK oder frei
             # gesetzte Deadline -- mit ihrem Anlass in der Spalte daneben.
             deadline, anlass = self.az.deadline_info(s, heute)
-            if isinstance(deadline, date):
-                deadline_text = fmt_datum(deadline)
-                tag = "dringend" if deadline < heute else "bevorstehend"
-            elif deadline:
-                deadline_text = str(deadline)
-                tag = "dringend"
-            else:
-                deadline_text = ""
-                tag = ""
+            deadline_text = fmt_datum(deadline) if isinstance(deadline, date) else str(deadline or "")
+            # Zeilenfarbe nach Dringlichkeit (rot, lila, gelb, gruen).
+            tag = dringlichkeit(deadline, heute)
             jahrgang_text = str(s.jahrgangsstufe) if s.jahrgangsstufe is not None else ""
             fb_symbol = self._fb_symbol(s, heute)
             fb_text = f"{fb_symbol} {fmt_datum(s.letzter_besuch_fb)}" if s.fb_besuche else f"{fb_symbol} nie"

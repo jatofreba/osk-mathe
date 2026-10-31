@@ -2237,6 +2237,27 @@ def student_aus_dict(d: dict) -> "Student":
     return s
 
 
+# Dringlichkeit in der Uebersicht (Nutzerwunsch 2026-10-31): rot = die Frist ist in den
+# naechsten 7 Tagen (oder schon vorbei), lila = nichts vereinbart - ein Gespraech suchen
+# ("Frist vereinbaren!" oder gar keine Frist), gelb = in den naechsten 14 Tagen, gruen =
+# weit genug weg. In dieser Reihenfolge sortiert die Liste.
+DRINGLICHKEIT = ("rot", "lila", "gelb", "gruen")
+DRINGLICHKEIT_ROT_TAGE = 7
+DRINGLICHKEIT_GELB_TAGE = 14
+
+
+def dringlichkeit(termin, heute: Optional[date] = None) -> str:
+    """Stufe aus DRINGLICHKEIT fuer eine Frist aus deadline_info (Datum, Hinweis oder leer)."""
+    if not isinstance(termin, date):
+        return "lila"
+    tage = (termin - (heute or date.today())).days
+    if tage <= DRINGLICHKEIT_ROT_TAGE:
+        return "rot"
+    if tage <= DRINGLICHKEIT_GELB_TAGE:
+        return "gelb"
+    return "gruen"
+
+
 class Arbeitsstaende:
     """Hält den kompletten Datenbestand und kapselt Laden/Speichern."""
 

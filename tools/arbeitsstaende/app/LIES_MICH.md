@@ -52,18 +52,23 @@ Danach reicht ein Doppelklick auf diese Datei.
 - **Fenster**: beim Start so groß, wie der Bildschirm unter Menüleiste und
   Dock hergibt (ganz im Bild). Die Liste links nimmt rund 40 % der Breite ein,
   die Detailansicht rechts den Rest; die Trennlinie lässt sich ziehen.
-- Links: Liste aller Schüler:innen, **sortiert nach Deadline, die früheste
-  zuerst** – streng nach Datum (01.10. vor 02.10., auch wenn heute schon der
-  04.10. ist), danach „Frist vereinbaren!“, ganz unten alle ohne Frist. Ein
+- Links: Liste aller Schüler:innen, **nach Dringlichkeit gefärbt und sortiert**
+  (seit 2026-10-31; die Legende steht über der Liste):
+  **rot** = Deadline in den nächsten 7 Tagen (auch schon vorbei),
+  **lila** = nichts vereinbart, ein Gespräch suchen („Frist vereinbaren!“ oder gar
+  keine Frist), **gelb** = in den nächsten 14 Tagen, **grün** = später. Innerhalb
+  einer Farbe streng nach Datum, die früheste zuerst (01.10. vor 02.10., auch wenn
+  heute schon der 04.10. ist); bei Lila erst „Frist vereinbaren!“, dann ohne Frist.
+  Die Schwellen stehen als `DRINGLICHKEIT_ROT_TAGE` / `DRINGLICHKEIT_GELB_TAGE` in
+  `arbeitsstaende_data.py`, die Farben als `DRINGLICHKEIT_FARBEN` in der Klasse `App`. Ein
   Klick auf einen Spaltenkopf sortiert danach (zweiter Klick: umgekehrt, dritter
   Klick: zurück zur Deadline-Sortierung) – nach Jahrgangsstufe z.B. über **Jgst.**.
   Eine LZK zählt dort nur in Bausteinen „In Bearbeitung“; kommt eine LZK aus
   OSKlar in einen Baustein, der noch „Ausstehend“ ist, wechselt er deshalb von
   selbst auf „In Bearbeitung“ (und bekommt, falls er noch keins hat, das
   Halbjahr der LZK).
-  Überfällige oder offene Deadlines sind unabhängig von der Sortierung rot bzw.
-  gelb markiert (siehe Deadline-Spalte). Suchfeld filtert zusätzlich nach
-  Namen. **+ Hinzufügen** / **− Entfernen** für die ganze Person.
+  Die Zeilenfarbe gilt unabhängig von der Sortierung. Suchfeld filtert zusätzlich
+  nach Namen. **+ Hinzufügen** / **− Entfernen** für die ganze Person.
 - Die Spalte **FB zuletzt** hat einen eigenen Farbcode (unabhängig von der
   Zeilenfarbe für Deadlines): 🟢 vor bis zu 7 Tagen da gewesen, 🟡 8-14
   Tage her, 🔴 länger her oder noch nie. Die zwei Schwellenwerte stehen als

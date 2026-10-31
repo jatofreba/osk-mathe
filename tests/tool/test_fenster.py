@@ -79,15 +79,25 @@ class AZ:
         return self.fristen[st.nachname], "LZK"
 
 
-# Nutzerwunsch: streng nach Datum - 01.10. vor 02.10., auch wenn heute der 04.10. ist
+# Nutzerwunsch 2026-10-31: nach Dringlichkeit - rot (bis 7 Tage, auch Vergangenes), lila
+# (nichts vereinbart), gelb (bis 14 Tage), gruen; darin streng nach Datum (Nutzerwunsch
+# 2026-10-04: 01.10. vor 02.10., auch wenn heute der 04.10. ist). Bis dahin: streng nach
+# Datum ueber alles, dann Hinweis, ohne Frist zuletzt (C1 hiess damals g b d c a f e).
 fristen = {"a": heute + timedelta(days=10), "b": heute - timedelta(days=2), "c": heute + timedelta(days=1),
-           "d": heute, "e": "", "f": "Frist vereinbaren!", "g": heute - timedelta(days=3)}
+           "d": heute, "e": "", "f": "Frist vereinbaren!", "g": heute - timedelta(days=3),
+           "h": heute + timedelta(days=20), "i": heute + timedelta(days=7), "j": heute + timedelta(days=14),
+           "k": heute + timedelta(days=15), "l": heute + timedelta(days=8)}
 app = A.App.__new__(A.App)
 app.az = AZ(fristen)
 leute = [D.Student(vorname="X", nachname=n) for n in fristen]
 reihe = [s.nachname for s in sorted(leute, key=lambda s: app._spalten_key(s, "deadline"))]
-pruefe("C1 streng nach Datum (die frueheste zuerst, auch Vergangenes), dann Hinweis, ohne Frist zuletzt",
-       reihe == ["g", "b", "d", "c", "a", "f", "e"], reihe)
+pruefe("C1 rot (bis 7 Tage, auch Vergangenes), lila (Hinweis, ohne Frist), gelb (8-14 Tage), gruen - je nach Datum",
+       reihe == ["g", "b", "d", "c", "i", "f", "e", "l", "a", "j", "k", "h"], reihe)
+pruefe("C1c die Farbe je Zeile", [D.dringlichkeit(fristen[n], heute) for n in reihe]
+       == ["rot"] * 5 + ["lila"] * 2 + ["gelb"] * 3 + ["gruen"] * 2)
+pruefe("C1d die Liste faerbt nach dieser Stufe (eine Farbe je Stufe, Legende in Sortier-Reihenfolge)",
+       "tag = dringlichkeit(deadline, heute)" in quelle and set(A.App.DRINGLICHKEIT_FARBEN) == set(D.DRINGLICHKEIT)
+       and "for stufe in DRINGLICHKEIT:" in quelle and '"dringend"' not in quelle)
 gleich = [D.Student(vorname="X", nachname=n) for n in ("zz", "aa")]
 app.az = AZ({"zz": heute, "aa": heute})
 pruefe("C1b gleicher Tag: nach Namen",
