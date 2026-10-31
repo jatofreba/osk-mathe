@@ -657,6 +657,18 @@ const requireSuperAdmin = async (req, res, next) => {
   return res.status(403).json({ error: 'Nur Super-Admins dürfen das' });
 };
 
+// Wie weit Lernbegleitungen vorausplanen duerfen (Nutzerwunsch 2026-10-31): 8 Wochen ab heute,
+// fuer alle - auch Super-Admins. Gilt beim Anlegen (einzeln und als Reihe) und beim Verschieben;
+// schon weiter entfernte Termine bleiben bearbeitbar, solange ihr Datum bleibt.
+// Dieselbe Zahl steht als PLAN_WOCHEN in public/index.html (Datumsfelder, Hinweis).
+const PLAN_WOCHEN = 8;
+const isoTagLokal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function planStichtag(heute = new Date()) {
+  return isoTagLokal(new Date(heute.getFullYear(), heute.getMonth(), heute.getDate() + PLAN_WOCHEN * 7));
+}
+const planFristText = stichtag =>
+  `Termine können höchstens ${PLAN_WOCHEN} Wochen im Voraus geplant werden – bis zum ${stichtag.slice(8, 10)}.${stichtag.slice(5, 7)}.${stichtag.slice(0, 4)}.`;
+
 // Termine gehören der eingetragenen Lernbegleitung (talking_slots.admin_id). Normale Admins
 // dürfen nur ihre eigenen ändern/stornieren, Super-Admins alle des Tandems.
 async function mayManageSlot(req, slotId) {
@@ -2897,16 +2909,23 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
       const end = new Date(bis + 'T00:00:00');
       if (isNaN(d) || isNaN(end) || end < d) return res.status(400).json({ error: 'Ungültiger Zeitraum' });
       while (d <= end) {
-        if (d.getDay() === Number(weekday)) dates.push(d.toISOString().slice(0, 10));
+        // Lokaler Kalendertag (vorher toISOString: in einer Zeitzone oestlich von UTC wurde
+        // daraus der Vortag - der Wochentag stimmte dann nicht mehr).
+        if (d.getDay() === Number(weekday)) dates.push(isoTagLokal(d));
         d.setDate(d.getDate() + 1);
       }
       if (!dates.length) return res.status(400).json({ error: 'Kein passender Wochentag im Zeitraum' });
     } else {
       if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
-      dates.push(datum);
+      dates.push(String(datum).slice(0, 10));
     }
+    // Hoechstens 8 Wochen im Voraus: eine Reihe wird bis zum Stichtag angelegt (Rest gemeldet),
+    // ein einzelner Termin dahinter gar nicht.
+    const stichtag = planStichtag();
+    const imRahmen = dates.filter(d => d <= stichtag);
+    if (!imRahmen.length) return res.status(400).json({ error: planFristText(stichtag), stichtag });
     const neueIds = [];
-    for (const d of dates) {
+    for (const d of imRahmen) {
       const r = await pool.query(`
         INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id, thema)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id
@@ -2916,7 +2935,7 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     }
     // ids: damit der Aufrufer den erzeugten Termin weiterverwenden kann (z.B. einen
     // Wunsch daran haengen). Bei einer Serie ist der erste der frueheste.
-    res.json({ ok: true, count: dates.length, ids: neueIds });
+    res.json({ ok: true, count: imRahmen.length, ids: neueIds, gekuerzt: dates.length - imRahmen.length, stichtag });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -2928,6 +2947,14 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
     if (!datum) return res.status(400).json({ error: 'Fehlende Angaben' });
     const may = await mayManageSlot(req, req.params.id);
     if (!may.ok) return res.status(may.status).json({ error: may.error });
+    // 8-Wochen-Frist: nicht hinter den Stichtag verschieben. Ein schon weiter entfernter Termin
+    // (von vor der Frist) bleibt bearbeitbar, solange sein Datum bleibt.
+    const stichtag = planStichtag();
+    if (String(datum).slice(0, 10) > stichtag) {
+      const alt = await pool.query(`SELECT to_char(datum,'YYYY-MM-DD') AS d FROM talking_slots WHERE id=$1`, [req.params.id]);
+      if (!alt.rows.length || alt.rows[0].d !== String(datum).slice(0, 10))
+        return res.status(400).json({ error: planFristText(stichtag), stichtag });
+    }
     // Kollisionsprüfung nur gegen Termine DERSELBEN Lernbegleitung: mehrere Fachbüros
     // (Mathe/Englisch/Deutsch) laufen bewusst parallel zur selben Zeit. Verboten ist nur,
     // dass eine Person zwei eigene Termine gleichzeitig hat. Slots ohne zuständige Person
@@ -2993,6 +3020,84 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     `, [req.session.klasse, typ, subjectKey]);
     res.json(r.rows);
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Terminverwaltung (Nutzerwunsch 2026-10-31) ─────────────────────────────────
+// Alle anstehenden Termine ab heute - Super-Admins sehen die des ganzen Tandems, alle anderen
+// ihre eigenen (nur die duerfen sie auch aendern, siehe mayManageSlot). Je Termin, wer dabei
+// ist, und ob schon etwas eingetragen ist (Bewertung, Anwesenheit) - dann bleibt er stehen.
+const TERMIN_BEWERTET_SQL = `(ts.id IS NOT NULL AND (ts.presented_status <> 'ausstehend' OR EXISTS (
+    SELECT 1 FROM talking_invitations bi WHERE bi.session_id = ts.id AND bi.attended_status <> 'ausstehend')))`;
+app.get('/api/admin/termine', requireAdmin, async (req, res) => {
+  try {
+    const alle = await isSuperAdmin(req.session.userId);
+    const r = await pool.query(`
+      SELECT s.id, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.typ,
+             s.subject_id AS "subjectId", s.admin_id AS "adminId", au.username AS "adminName",
+             COALESCE(NULLIF(ts.thema, ''), s.thema, '') AS thema,
+             ts.id AS "sessionId", pu.username AS buchend,
+             COALESCE((SELECT json_agg(lu.username ORDER BY ti.id)
+                       FROM talking_invitations ti JOIN users lu ON lu.id = ti.listener_id
+                       WHERE ti.session_id = ts.id AND ti.status <> 'abgelehnt'), '[]') AS beteiligte,
+             ${TERMIN_BEWERTET_SQL} AS bewertet
+      FROM talking_slots s
+      LEFT JOIN users au ON au.id = s.admin_id
+      LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+      LEFT JOIN users pu ON pu.id = ts.presenter_id
+      WHERE s.klasse = $1 AND s.datum >= CURRENT_DATE AND ($2::boolean OR s.admin_id = $3)
+      ORDER BY s.datum, s.uhrzeit, s.id`, [req.session.klasse, alle, req.session.userId]);
+    res.json({ superAdmin: alle, stichtag: planStichtag(), termine: r.rows });
+  } catch (e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Mehrere Termine auf einmal. aktion:
+//   'stornieren' - Buchungen raus (samt Einladungen), die Termine bleiben frei stehen
+//   'loeschen'   - freie Termine loeschen; gebuchte nur mit gebuchteAuch (= absagen und loeschen)
+// Je Termin gelten die Rechte wie einzeln (eigene oder Super-Admin). Vergangene Termine und
+// solche, an denen schon etwas eingetragen ist, bleiben immer stehen - sonst gingen Ergebnisse
+// verloren. Was nicht ging, kommt mit Grund zurueck. Alles in einer Transaktion.
+app.post('/api/admin/termine/sammel', requireAdmin, async (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(Number))].filter(Number.isInteger);
+  const aktion = req.body.aktion;
+  if (!ids.length || !['stornieren', 'loeschen'].includes(aktion)) return res.status(400).json({ error: 'Fehlende Angaben' });
+  const gebuchteAuch = req.body.gebuchteAuch === true;
+  const alle = await isSuperAdmin(req.session.userId);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(`
+      SELECT s.id, s.admin_id AS "adminId", (s.datum < CURRENT_DATE) AS vorbei, ts.id AS "sessionId",
+             ${TERMIN_BEWERTET_SQL} AS bewertet
+      FROM talking_slots s LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+      WHERE s.klasse = $1 AND s.id = ANY($2::int[])
+      FOR UPDATE OF s`, [req.session.klasse, ids]);
+    const byId = new Map(r.rows.map(x => [x.id, x]));
+    const erledigt = [], uebersprungen = [];
+    for (const id of ids) {
+      const t = byId.get(id);
+      const weg = grund => uebersprungen.push({ id, grund });
+      if (!t) { weg('nicht gefunden'); continue; }
+      if (!alle && t.adminId !== req.session.userId) { weg('Termin einer anderen Lernbegleitung'); continue; }
+      if (t.vorbei) { weg('schon vorbei'); continue; }
+      if (t.bewertet) { weg('schon etwas eingetragen'); continue; }
+      if (aktion === 'stornieren') {
+        if (!t.sessionId) { weg('nicht gebucht'); continue; }
+        await client.query('DELETE FROM talking_sessions WHERE id=$1', [t.sessionId]);
+      } else {
+        if (t.sessionId && !gebuchteAuch) { weg('gebucht'); continue; }
+        if (t.sessionId) await client.query('DELETE FROM talking_sessions WHERE id=$1', [t.sessionId]);
+        await client.query('DELETE FROM talking_slots WHERE id=$1', [id]);
+      }
+      erledigt.push(id);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, erledigt, uebersprungen });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally {
+    client.release();
+  }
 });
 
 app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {

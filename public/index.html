@@ -649,6 +649,26 @@ html.lt-vollbild, html.lt-vollbild body{height:100%;min-height:0;overflow:hidden
 .lzk-ue-tag{font-size:12.5px;font-weight:700;color:var(--md-on-surface-variant);margin:12px 0 6px;}
 .lzk-ue-leer{font-size:13px;color:var(--md-on-surface-variant);padding:2px 0 6px;}
 .lzk-ue-doppelt{font-size:12px;color:#b45309;margin:0 0 3px 4px;}
+/* Terminplanung (2026-10-31): Frist-Hinweis in den Terminfenstern, Terminverwaltung */
+.plan-frist{font-size:12px;color:var(--md-on-surface-variant);margin:-6px 0 12px;}
+.tv-filterzeile{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+.tv-filterzeile .form-input{width:auto;max-width:100%;}
+.tv-check{display:inline-flex;align-items:center;gap:6px;font-size:13px;}
+.tv-liste{max-height:50vh;overflow-y:auto;border:1px solid var(--md-outline-variant);border-radius:var(--md-r-sm);}
+.tv-zeile{display:flex;align-items:center;gap:4px 12px;flex-wrap:wrap;padding:7px 10px;font-size:13px;
+  border-bottom:1px solid var(--md-outline-variant);cursor:pointer;}
+.tv-zeile:last-child{border-bottom:none;}
+.tv-zeile.an{background:var(--md-surface-container);}
+.tv-zeile.gesperrt{cursor:default;color:var(--md-on-surface-variant);}
+.tv-wann{font-weight:700;min-width:118px;}
+.tv-art{min-width:140px;display:inline-flex;align-items:center;gap:4px;}
+.tv-wer{min-width:70px;color:var(--md-on-surface-variant);}
+.tv-was{flex:1 1 150px;min-width:0;}
+.tv-leiste{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;font-size:13px;}
+.tv-frage{margin-top:10px;padding:10px 12px;border:1px solid var(--md-outline-variant);border-radius:var(--md-r-sm);
+  background:var(--md-surface-container);font-size:13px;}
+.tv-frage .tv-leiste{margin-top:8px;}
+.tv-meldung{font-size:13px;margin:8px 0 0;}
 /* Talks bewerten - je Person eine Zeile (2026-10-14): "Noch zu bewerten" und Terminkarten */
 .tzb-talk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;text-align:left;margin:0 0 6px;
   padding:8px 10px;border:1px solid var(--md-outline-variant);border-radius:var(--md-r-sm);
@@ -1295,6 +1315,7 @@ textarea.form-input{
       <div id="cal-admin-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="btn-act btn-green" onclick="openInputSlotModal()">+ FaBü-Termin</button>
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
+        <button class="btn-act btn-outline" onclick="openTermineVerwalten()">☰ Termine verwalten</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
       <div id="cal-wuensche"></div>
@@ -1523,6 +1544,7 @@ textarea.form-input{
         </div>
       </div>
     </div>
+    <div class="plan-frist" id="tslot-frist"></div>
     <div class="form-group">
       <label class="form-label" for="tslot-uhrzeit">Uhrzeit</label>
       <input class="form-input" id="tslot-uhrzeit" type="time">
@@ -1637,6 +1659,17 @@ textarea.form-input{
   </div>
 </div>
 
+<!-- ══ MODAL: Termine verwalten (Lernbegleitung, 2026-10-31) ══════════════════════ -->
+<div class="overlay" id="modal-termine">
+  <div class="modal" style="max-width:860px;">
+    <div class="modal-title" id="tv-titel">☰ Termine verwalten</div>
+    <div id="tv-inhalt"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-termine')">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: Mathe-Talk-Termin verschieben (Admin) ═══════════════════════════════ -->
 <div class="overlay" id="modal-talking-slot-edit">
   <div class="modal" style="max-width:400px;">
@@ -1649,6 +1682,7 @@ textarea.form-input{
       <label class="form-label" for="tsedit-datum">Datum</label>
       <input class="form-input" id="tsedit-datum" type="date">
     </div>
+    <div class="plan-frist" id="tsedit-frist"></div>
     <div class="form-group">
       <label class="form-label" for="tsedit-uhrzeit">Uhrzeit</label>
       <input class="form-input" id="tsedit-uhrzeit" type="time">
@@ -1731,6 +1765,7 @@ textarea.form-input{
         <div style="flex:1;"><label class="form-label" for="islot-bis">Bis</label><input class="form-input" id="islot-bis" type="date"></div>
       </div>
     </div>
+    <div class="plan-frist" id="islot-frist"></div>
     <div class="form-group"><label class="form-label" for="islot-uhrzeit">Uhrzeit</label><input class="form-input" id="islot-uhrzeit" type="time"></div>
     <div class="form-group"><label class="form-label" for="islot-dauer">Dauer (Minuten)</label><input class="form-input" id="islot-dauer" type="number" min="5" max="600" value="45"></div>
     <div class="form-group"><label class="form-label" for="islot-ort">Ort</label><input class="form-input" id="islot-ort" placeholder="z.B. Mathe-Fachbüro"></div>
@@ -6105,6 +6140,7 @@ async function openInputSlotModal(presetDate, vorbelegung) {
     String(new Date(startTag + 'T00:00:00').getDay());
   document.getElementById('islot-thema').value = '';
   document.getElementById('islot-error').style.display = 'none';
+  planFristSetzen(['islot-datum', 'islot-von', 'islot-bis'], 'islot-frist');
   applyInputSlotSubjectDefaults();
   // Aus einem Wunsch heraus: Fach und Thema stehen schon drin, bleiben aber
   // aenderbar - der Titel kommt von Schueler:innen und soll nachschaerfbar sein.
@@ -6145,6 +6181,7 @@ async function submitInputSlot() {
   });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler.'; errEl.style.display = 'block'; return; }
+  if (d.gekuerzt) alert(planGekuerztText(d));
   // Kam der Termin aus einem Wunsch, werden jetzt die Interessierten eingeladen.
   // Bei einer Serie haengt der Wunsch am ersten Termin.
   if (_wunschFuerTermin && d.ids && d.ids.length) {
@@ -6579,6 +6616,164 @@ function renderCalInvites() {
         </div></div>`;
     }).join('')}
   </div>`;
+}
+
+// ── Termine verwalten (Nutzerwunsch 2026-10-31) ──────────────────────────────────────
+// Alle anstehenden Termine als Liste mit Kaestchen: Super-Admins sehen die des ganzen Tandems
+// (mit Filter nach Lernbegleitung), alle anderen ihre eigenen. Mehrere auswaehlen, dann
+// "Buchungen stornieren" (Termine bleiben frei) oder "Loeschen" - bei gebuchten fragt die Leiste
+// erst nach (Zahl der Betroffenen) und sagt sie dann ab. Termine, an denen schon etwas
+// eingetragen ist, lassen sich nicht auswaehlen. Die Rechte prueft der Server je Termin.
+let _tv = { termine: [], superAdmin: false, auswahl: new Set(),
+  filter: { admin: '', fach: '', art: '', nurFrei: false }, frage: null, meldung: '' };
+async function openTermineVerwalten() {
+  _tv.auswahl = new Set(); _tv.frage = null; _tv.meldung = '';
+  await tvLaden();
+  openModal('modal-termine');
+}
+async function tvLaden() {
+  const el = document.getElementById('tv-inhalt');
+  try {
+    const r = await fetch('/api/admin/termine');
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Fehler');
+    _tv.termine = d.termine || []; _tv.superAdmin = !!d.superAdmin;
+  } catch (e) {
+    if (el) el.innerHTML = '<div style="color:var(--md-error);">Die Termine ließen sich nicht laden.</div>';
+    return;
+  }
+  // Was es nicht mehr gibt, ist auch nicht mehr ausgewaehlt.
+  const da = new Set(_tv.termine.map(t => t.id));
+  _tv.auswahl = new Set([..._tv.auswahl].filter(id => da.has(id)));
+  tvRender();
+}
+function tvSichtbar() {
+  const f = _tv.filter;
+  return _tv.termine.filter(t => (!f.admin || String(t.adminId) === f.admin)
+    && (!f.fach || String(t.subjectId) === f.fach) && (!f.art || t.typ === f.art)
+    && (!f.nurFrei || !t.sessionId));
+}
+function tvPersonen(t) { return (t.buchend ? [t.buchend] : []).concat(t.beteiligte || []); }
+function tvZeile(t) {
+  const subj = subjectById(t.subjectId);
+  const leute = tvPersonen(t);
+  const an = _tv.auswahl.has(t.id);
+  const tag = new Date(t.datum + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const art = t.typ === 'talk' ? 'Talk' : (subj.nurZugewiesen ? subj.name : 'FaBü');
+  const belegung = !t.sessionId ? '<span class="pill pill-green">frei</span>'
+    : `<span class="pill pill-blue" title="${escHtml(leute.join(', '))}">${t.typ === 'talk' && t.buchend
+      ? 'gebucht: ' + escHtml(t.buchend) : leute.length + ' dabei'}</span>`;
+  const sperre = t.bewertet ? ' <span class="pill" title="Hier ist schon eine Bewertung oder Anwesenheit eingetragen – der Termin bleibt stehen.">schon eingetragen</span>' : '';
+  return `<label class="tv-zeile${an ? ' an' : ''}${t.bewertet ? ' gesperrt' : ''}">
+    <input type="checkbox" ${an ? 'checked' : ''} ${t.bewertet ? 'disabled' : ''} onchange="tvWaehlen(${t.id}, this.checked)"
+      aria-label="${escHtml(tag + ' ' + (t.uhrzeit || '') + ' ' + art + ' ' + subj.name)} auswählen">
+    <span class="tv-wann">${escHtml(tag)}${t.uhrzeit ? ' · ' + escHtml(t.uhrzeit) : ''}</span>
+    <span class="tv-art" style="color:${subj.color};">${lwIcon(t.typ)} ${escHtml(art)} · ${escHtml(subj.name)}</span>
+    ${_tv.superAdmin ? `<span class="tv-wer">${escHtml(t.adminName || '–')}</span>` : ''}
+    <span class="tv-was">${t.thema ? '„' + escHtml(t.thema) + '“' : ''}</span>
+    ${belegung}${sperre}
+  </label>`;
+}
+function tvRender() {
+  const el = document.getElementById('tv-inhalt');
+  if (!el) return;
+  document.getElementById('tv-titel').textContent = _tv.superAdmin
+    ? '☰ Termine verwalten – alle anstehenden des Tandems' : '☰ Termine verwalten – deine anstehenden';
+  const f = _tv.filter;
+  const auswahlListe = (wert, optionen, feld) => `<select class="form-input" onchange="tvFilter('${feld}', this.value)">`
+    + optionen.map(([v, t]) => `<option value="${escHtml(v)}"${v === wert ? ' selected' : ''}>${escHtml(t)}</option>`).join('')
+    + '</select>';
+  const admins = [...new Map(_tv.termine.map(t => [String(t.adminId), t.adminName || '–'])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], 'de'));
+  const faecher = [...new Set(_tv.termine.map(t => t.subjectId))].map(subjectById)
+    .map(x => [String(x.id), x.name]).sort((a, b) => a[1].localeCompare(b[1], 'de'));
+  const sichtbar = tvSichtbar();
+  const waehlbar = sichtbar.filter(t => !t.bewertet);
+  const alleAn = waehlbar.length > 0 && waehlbar.every(t => _tv.auswahl.has(t.id));
+  const gewaehlt = _tv.termine.filter(t => _tv.auswahl.has(t.id));
+  const gebucht = gewaehlt.filter(t => t.sessionId);
+  const personen = gebucht.reduce((n, t) => n + tvPersonen(t).length, 0);
+  const pl = (n, ein, mehr) => `${n} ${n === 1 ? ein : mehr}`;
+
+  let leiste = '';
+  if (_tv.frage === 'loeschen' && gewaehlt.length) {
+    const frei = gewaehlt.length - gebucht.length;
+    leiste = `<div class="tv-frage" role="alert">${gebucht.length
+      ? `Von ${pl(gewaehlt.length, 'ausgewähltem Termin', 'ausgewählten Terminen')} ${gebucht.length === 1 ? 'ist' : 'sind'} ${gebucht.length} gebucht – ${pl(personen, 'Person ist', 'Personen sind')} dabei.`
+      : `${pl(gewaehlt.length, 'Termin', 'Termine')} löschen?`}
+      <div class="tv-leiste">
+        <button class="btn-act btn-red" onclick="tvAusfuehren('loeschen', true)">${gebucht.length
+          ? `Alle ${gewaehlt.length} löschen – Gebuchte werden abgesagt` : 'Löschen'}</button>
+        ${gebucht.length && frei ? `<button class="btn-act btn-outline" onclick="tvAusfuehren('loeschen', false)">Nur die ${pl(frei, 'freien', 'freien')} löschen</button>` : ''}
+        <button class="btn-cancel" onclick="tvFrage(null)">Abbrechen</button>
+      </div></div>`;
+  } else if (_tv.frage === 'stornieren' && gebucht.length) {
+    leiste = `<div class="tv-frage" role="alert">${pl(gebucht.length, 'Buchung', 'Buchungen')} stornieren – ${pl(personen, 'Person verliert ihren', 'Personen verlieren ihren')} Platz. Die Termine bleiben frei stehen.
+      <div class="tv-leiste">
+        <button class="btn-act btn-red" onclick="tvAusfuehren('stornieren', false)">Stornieren</button>
+        <button class="btn-cancel" onclick="tvFrage(null)">Abbrechen</button>
+      </div></div>`;
+  } else if (gewaehlt.length) {
+    leiste = `<div class="tv-leiste"><strong>${gewaehlt.length} ausgewählt:</strong>
+      <button class="btn-act btn-outline" onclick="tvFrage('stornieren')" ${gebucht.length ? '' : 'disabled title="Keiner der ausgewählten Termine ist gebucht."'}>Buchungen stornieren</button>
+      <button class="btn-act btn-outline" onclick="tvFrage('loeschen')">Löschen</button>
+      <button class="btn-cancel" onclick="tvAlleWaehlen(false)">Auswahl aufheben</button></div>`;
+  }
+
+  el.innerHTML = `
+    <div class="tv-filterzeile">
+      ${_tv.superAdmin ? auswahlListe(f.admin, [['', 'Alle Lernbegleitungen'], ...admins], 'admin') : ''}
+      ${auswahlListe(f.fach, [['', 'Alle Fächer'], ...faecher], 'fach')}
+      ${auswahlListe(f.art, [['', 'Alle Arten'], ['talk', 'Talks'], ['input', 'Fachbüro & Lernberatung']], 'art')}
+      <label class="tv-check"><input type="checkbox" ${f.nurFrei ? 'checked' : ''} onchange="tvFilter('nurFrei', this.checked)"> nur freie</label>
+    </div>
+    ${waehlbar.length ? `<label class="tv-check" style="margin:0 0 6px 10px;"><input type="checkbox" ${alleAn ? 'checked' : ''}
+      onchange="tvAlleWaehlen(this.checked)"> alle ${waehlbar.length} sichtbaren auswählen</label>` : ''}
+    <div class="tv-liste">${sichtbar.length ? sichtbar.map(tvZeile).join('')
+      : `<div class="lzk-ue-leer" style="padding:12px;">${_tv.termine.length ? 'Kein Termin passt zu den Filtern.' : 'Keine anstehenden Termine.'}</div>`}</div>
+    ${leiste}
+    ${_tv.meldung ? `<div class="tv-meldung" role="status">${escHtml(_tv.meldung)}</div>` : ''}`;
+}
+function tvFilter(feld, wert) {
+  _tv.filter[feld] = wert;
+  // Ausgeblendetes bleibt nicht unbemerkt ausgewaehlt.
+  const sicht = new Set(tvSichtbar().map(t => t.id));
+  _tv.auswahl = new Set([..._tv.auswahl].filter(id => sicht.has(id)));
+  _tv.frage = null;
+  tvRender();
+}
+function tvWaehlen(id, an) {
+  if (an) _tv.auswahl.add(id); else _tv.auswahl.delete(id);
+  _tv.frage = null; _tv.meldung = '';
+  tvRender();
+}
+function tvAlleWaehlen(an) {
+  _tv.auswahl = an ? new Set(tvSichtbar().filter(t => !t.bewertet).map(t => t.id)) : new Set();
+  _tv.frage = null; _tv.meldung = '';
+  tvRender();
+}
+function tvFrage(was) { _tv.frage = was; tvRender(); }
+async function tvAusfuehren(aktion, gebuchteAuch) {
+  const gewaehlt = _tv.termine.filter(t => _tv.auswahl.has(t.id));
+  // "Nur die freien loeschen": die gebuchten bleiben ausgewaehlt stehen.
+  const ids = (aktion === 'loeschen' && !gebuchteAuch) ? gewaehlt.filter(t => !t.sessionId).map(t => t.id)
+    : aktion === 'stornieren' ? gewaehlt.filter(t => t.sessionId).map(t => t.id) : gewaehlt.map(t => t.id);
+  if (!ids.length) { _tv.frage = null; tvRender(); return; }
+  const r = await fetch('/api/admin/termine/sammel', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, aktion, gebuchteAuch })
+  });
+  const d = await r.json().catch(() => ({}));
+  _tv.frage = null;
+  if (!r.ok) { _tv.meldung = d.error || 'Das hat nicht geklappt.'; tvRender(); return; }
+  const n = (d.erledigt || []).length;
+  const rest = d.uebersprungen || [];
+  _tv.meldung = `✓ ${n} ${n === 1 ? 'Termin' : 'Termine'} ${aktion === 'stornieren' ? 'storniert (bleiben frei stehen)' : 'gelöscht'}.`
+    + (rest.length ? ` ${rest.length} ${rest.length === 1 ? 'blieb' : 'blieben'} stehen: `
+      + [...new Set(rest.map(x => x.grund))].join(', ') + '.' : '');
+  (d.erledigt || []).forEach(id => _tv.auswahl.delete(id));
+  await tvLaden();
+  if (typeof loadCalendar === 'function') loadCalendar();
 }
 
 // Admin: Buchung stornieren (Slot wird wieder frei) bzw. unbebuchten Slot löschen - refresht den Kalender.
@@ -7734,6 +7929,35 @@ function currentHalbjahrGuess() {
   return halbjahrForDateClient(new Date());
 }
 
+// ── Terminplanung: hoechstens 8 Wochen im Voraus (Nutzerwunsch 2026-10-31) ──────────
+// Dieselbe Zahl wie PLAN_WOCHEN in server.js - dort wird geprueft, hier nur angezeigt: die
+// Datumsfelder bieten keine spaeteren Tage an, darunter steht der Stichtag.
+const PLAN_WOCHEN = 8;
+function planStichtagClient(heute) {
+  const h = heute || new Date();
+  return calDateStr(new Date(h.getFullYear(), h.getMonth(), h.getDate() + PLAN_WOCHEN * 7));
+}
+function planTagText(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+// `aktuell`: Datum eines bestehenden Termins - liegt es schon hinter dem Stichtag (von vor der
+// Frist), bleibt es waehlbar, damit sich der Termin weiter bearbeiten laesst.
+function planFristSetzen(feldIds, hinweisId, aktuell) {
+  const st = planStichtagClient();
+  feldIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.max = (aktuell && aktuell > st) ? aktuell : st;
+  });
+  const h = document.getElementById(hinweisId);
+  if (h) h.textContent = `Planbar bis ${planTagText(st)} – höchstens ${PLAN_WOCHEN} Wochen im Voraus.`;
+}
+// Eine Reihe ueber den Stichtag hinaus legt der Server nur bis dorthin an.
+function planGekuerztText(d) {
+  return `${d.count} ${d.count === 1 ? 'Termin' : 'Termine'} bis zum ${planTagText(d.stichtag)} angelegt. `
+    + `${d.gekuerzt} weitere ${d.gekuerzt === 1 ? 'läge' : 'lägen'} hinter der ${PLAN_WOCHEN}-Wochen-Frist – `
+    + 'die kannst du anlegen, sobald die Frist nachrückt.';
+}
+
 function toTimeInputValue(u) { const m = String(u || '').match(/(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2,'0') + ':' + m[2] : ''; }
 function openTalkingSlotModal() {
   const subj = subjectByKey(activeSubject);
@@ -7748,6 +7972,7 @@ function openTalkingSlotModal() {
   document.getElementById('tslot-von').value = '';
   document.getElementById('tslot-bis').value = '';
   document.getElementById('tslot-weekday').value = '1';
+  planFristSetzen(['tslot-datum', 'tslot-von', 'tslot-bis'], 'tslot-frist');
   openModal('modal-talking-slot');
 }
 
@@ -7782,6 +8007,7 @@ async function submitTalkingSlot() {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Anlegen.'); return; }
+  if (d.gekuerzt) alert(planGekuerztText(d));
   closeModal('modal-talking-slot');
   loadTalkingAdmin();
 }
@@ -7802,6 +8028,7 @@ function openTalkingSlotEditModal(id, source) {
   // angelegte Fachbüro-Termine) wird daraus vorbelegt, statt ein leeres Pflichtfeld zu zeigen.
   document.getElementById('tsedit-halbjahr').value = s.halbjahr || halbjahrForDateClient(s.datum) || '';
   document.getElementById('tsedit-datum').value = new Date(s.datum).toISOString().slice(0, 10);
+  planFristSetzen(['tsedit-datum'], 'tsedit-frist', document.getElementById('tsedit-datum').value);
   document.getElementById('tsedit-uhrzeit').value = toTimeInputValue(s.uhrzeit);
   document.getElementById('tsedit-dauer').value = s.dauer || 45;
   document.getElementById('tsedit-ort').value = s.ort || '';
