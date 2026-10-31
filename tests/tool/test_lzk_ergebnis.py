@@ -6,7 +6,7 @@ import os
 import sys
 
 HIER = os.path.dirname(os.path.abspath(__file__))
-from pfade import WERKZEUG  # noqa: E402
+from pfade import WERKZEUG, formular_felder  # noqa: E402
 NEU = WERKZEUG
 for name in ("arbeitsstaende_data", "osk_sync", "arbeitsstaende_app"):
     sys.modules.pop(name, None)
@@ -92,19 +92,20 @@ pruefe("V4 gleicher Stand - keine Unterschiede", D.lt_lzk_ergebnis_unterschiede(
 # ===========================================================================
 quelle = open(os.path.join(NEU, "arbeitsstaende_app.py"), encoding="utf-8").read()
 dialog = quelle.split("class BausteinDialog")[1].split("\nclass ")[0]
-felder_im_dialog = {z.split('"')[3] for z in dialog.split("felder = [")[1].split("\n        ]")[0].splitlines()
-                    if z.strip().startswith('("')}
+# Seit 2026-10-31 bis zu vier LZK: ihre Zeilen entstehen in einer Schleife je Nummer.
+felder_im_dialog = set(formular_felder(quelle))
 alle = {f.name for f in dataclasses.fields(D.Baustein)}
 # Nicht im Formular, aber ausdruecklich durchgereicht: die Verknuepfung mit der LZK online.
-durchgereicht = ({"lzk_online_1", "lzk_online_2"}
-                 if 'werte["lzk_online_1"], werte["lzk_online_2"] = self._verknuepfung' in dialog else set())
+durchgereicht = ({f"lzk_online_{nr}" for nr in D.LZK_NUMMERN}
+                 if ('for nr, link in zip(LZK_NUMMERN, self._verknuepfung):\n'
+                     '                werte[f"lzk_online_{nr}"] = link') in dialog else set())
 # Seit 2026-10-04 nicht mehr im Formular: "Bausteinarbeit" - ihr Text geht in der Bemerkung
 # auf (eigene Bausteine) bzw. wird unveraendert durchgereicht (App-Zeilen).
 if 'werte["bausteinarbeit"] = self.__dict__.get("_bausteinarbeit", "")' in dialog:
     durchgereicht |= {"bausteinarbeit"}
 # Seit 2026-10-31 kein Eingabefeld mehr: die LZK-Note wird beim Uebernehmen aus den Punkten gesetzt.
 if 'werte[f"lzk_note_{nr}"] = a["note"] if a else ""' in dialog:
-    durchgereicht |= {"lzk_note_1", "lzk_note_2"}
+    durchgereicht |= {f"lzk_note_{nr}" for nr in D.LZK_NUMMERN}
 pruefe("B1 JEDES Baustein-Feld steht im Dialog oder wird durchgereicht (sonst loescht Bearbeiten es)",
        alle <= felder_im_dialog | durchgereicht, sorted(alle - felder_im_dialog - durchgereicht))
 

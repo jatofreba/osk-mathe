@@ -33,6 +33,7 @@ from arbeitsstaende_data import (
     notenspiegel_werte, notenspiegel_tabelle, lzk_auswertung, lzk_auswertung_text,
     baustein_auswertung, noten_neu_berechnen, zahl_lesen, zahl_text, prozent_text,
     lzk_note_in_bemerkung,
+    LZK_NUMMERN, LZK_ANZAHL_OPTIONEN, LZK_ANZAHL_STANDARD, lzk_anzahl, lzk_vorgabe, lzk_hoechster_platz,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -179,11 +180,14 @@ class BerichtFenster(tk.Toplevel):
 class BausteinDialog(tk.Toplevel):
     """Formular zum Anlegen/Bearbeiten eines einzelnen Bausteins."""
 
-    def __init__(self, parent, baustein: Baustein = None, vorlage_namen=None, notenspiegel=None):
+    def __init__(self, parent, baustein: Baustein = None, vorlage_namen=None, notenspiegel=None,
+                 vorlage_lzk=None):
         super().__init__(parent)
         self.title("Baustein bearbeiten" if baustein else "Baustein hinzufügen")
         # Notenspiegel der Arbeitsdatei: aus den Punkten werden Prozent und Note.
         self._notenspiegel = notenspiegel or Notenspiegel()
+        # Anzahl LZK je Baustein-Name laut Vorlage (Vorgabe, solange hier nichts gewaehlt ist).
+        self._vorlage_lzk = vorlage_lzk or {}
         self.result = None
         self.transient(parent)
         self.grab_set()
@@ -198,7 +202,7 @@ class BausteinDialog(tk.Toplevel):
         # Nicht im Formular, aber Teil des Bausteins: die Verknuepfung mit der
         # LZK online. Ginge sie beim Bearbeiten verloren, erkennte das Senden
         # nicht mehr, auf welcher Seite ein Termin geaendert wurde.
-        self._verknuepfung = (b.lzk_online_1, b.lzk_online_2)
+        self._verknuepfung = tuple(getattr(b, f"lzk_online_{nr}") for nr in LZK_NUMMERN)
         # "Bausteinarbeit" steht nicht mehr im Formular (Nutzerwunsch 2026-10-04): ihr
         # Text haengt an der Bemerkung (wie beim Laden, bausteinarbeit_in_bemerkung).
         # App-Zeilen behalten das Feld - ihre Bemerkung schreibt jeder Abruf neu.
@@ -215,25 +219,26 @@ class BausteinDialog(tk.Toplevel):
             ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
             # Die Bemerkung steht dort, wo frueher "Bausteinarbeit" stand.
             ("Bemerkung", "bemerkung", "text", 10),
-            ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
-            ("LZK-Ergebnis 1", "lzk_ergebnis_1", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
-            # Unter der Bewertung: erreichte und maximale Punkte in EINER Zeile, daneben
-            # Prozent und Note nach dem Notenspiegel. Die Note ist kein Eingabefeld: sie
-            # wird beim Uebernehmen aus den Punkten gesetzt (intern, wie Punkte und Prozent
-            # nie hochgeladen - nur die Flammen). Freie Notizen gehoeren in die Bemerkung
-            # zur LZK. Die vierte Spalte ist hier die Nummer der LZK.
-            ("Punkte 1 (erreicht von max.)", "lzk_punkte_1", "punkte", 1),
-            ("", "lzk_max_1", "punkte_max", 1),
-            # Mehrzeilig: in eine LZK-Bemerkung gehoeren oft mehrere Punkte
-            # ("Bruchrechnen sicher / Textaufgaben ueben"), und die passten nicht
-            # in eine Zeile. Die vierte Spalte ist bei "text" die Zeilenzahl.
-            ("Bemerkung zur LZK 1", "lzk_bem_1", "text", 3),
-            ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
-            ("LZK-Ergebnis 2", "lzk_ergebnis_2", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
-            ("Punkte 2 (erreicht von max.)", "lzk_punkte_2", "punkte", 2),
-            ("", "lzk_max_2", "punkte_max", 2),
-            ("Bemerkung zur LZK 2", "lzk_bem_2", "text", 3),
+            # Wie viele LZK der Baustein hat (Nutzerwunsch 2026-10-31) - darunter stehen
+            # so viele LZK-Bloecke. Vorgabe aus der Vorlage, sonst zwei.
+            ("Anzahl LZK", "lzk_anzahl", "anzahl", [str(n) for n in LZK_ANZAHL_OPTIONEN]),
         ]
+        for nr in LZK_NUMMERN:
+            felder += [
+                (f"LZK-Datum {nr} (TT.MM.JJJJ)", f"lzk_datum_{nr}", "entry", None),
+                (f"LZK-Ergebnis {nr}", f"lzk_ergebnis_{nr}", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
+                # Unter der Bewertung: erreichte und maximale Punkte in EINER Zeile, daneben
+                # Prozent und Note nach dem Notenspiegel. Die Note ist kein Eingabefeld: sie
+                # wird beim Uebernehmen aus den Punkten gesetzt (intern, wie Punkte und Prozent
+                # nie hochgeladen - nur die Flammen). Freie Notizen gehoeren in die Bemerkung
+                # zur LZK. Die vierte Spalte ist hier die Nummer der LZK.
+                (f"Punkte {nr} (erreicht von max.)", f"lzk_punkte_{nr}", "punkte", nr),
+                ("", f"lzk_max_{nr}", "punkte_max", nr),
+                # Mehrzeilig: in eine LZK-Bemerkung gehoeren oft mehrere Punkte
+                # ("Bruchrechnen sicher / Textaufgaben ueben"), und die passten nicht
+                # in eine Zeile. Die vierte Spalte ist bei "text" die Zeilenzahl.
+                (f"Bemerkung zur LZK {nr}", f"lzk_bem_{nr}", "text", 3),
+            ]
 
         # Die Knoepfe stehen fest unten und sind immer zu sehen; das Formular darueber
         # scrollt, wenn der Bildschirm nicht reicht (vorher ragte es auf dem Mac unten
@@ -258,20 +263,32 @@ class BausteinDialog(tk.Toplevel):
         self._punkte_info = {}
         punkte_rahmen = None
         row = 0
+        # Zu welcher LZK eine Formularzeile gehoert - sie wird mit ihr ein- und ausgeblendet.
+        lzk_je_zeile = {}
         for label, feld, art, optionen in felder:
             # "punkte_max" steht in derselben Zeile wie "punkte" - ohne eigene Beschriftung.
             if art != "punkte_max":
                 ttk.Label(form, text=label).grid(row=row, column=0, sticky="ne", padx=8, pady=4)
-            wert = bemerkung if feld == "bemerkung" else getattr(b, feld)
-            if feld in ("lzk_datum_1", "lzk_datum_2"):
+            endung = feld.rsplit("_", 1)[-1]
+            if feld.startswith("lzk_") and endung.isdigit():
+                lzk_je_zeile[row] = int(endung)
+            if art == "anzahl":
+                wert = str(lzk_anzahl(b, self._vorlage_lzk))
+            else:
+                wert = bemerkung if feld == "bemerkung" else getattr(b, feld)
+            if feld.startswith("lzk_datum_"):
                 wert = fmt_datum(wert)
             if art == "ergebnis":
                 wert = LZK_ERGEBNIS_TEXT.get(wert or "", LZK_ERGEBNIS_TEXT[""])
 
-            if art in ("combo", "ergebnis"):
+            if art in ("combo", "ergebnis", "anzahl"):
                 var = tk.StringVar(value=wert)
-                w = ttk.Combobox(form, textvariable=var, values=optionen, width=28, state="readonly")
+                w = ttk.Combobox(form, textvariable=var, values=optionen,
+                                 width=5 if art == "anzahl" else 28, state="readonly")
                 w.grid(row=row, column=1, sticky="w", padx=8, pady=4)
+                if art == "anzahl" and app_zeile:
+                    # Zeilen aus der App haben immer Basis und Aufbau.
+                    w.config(state="disabled")
             elif art == "entry_or_combo":
                 var = tk.StringVar(value=wert)
                 w = ttk.Combobox(form, textvariable=var, values=optionen or [], width=28)
@@ -310,8 +327,14 @@ class BausteinDialog(tk.Toplevel):
             if art != "punkte":
                 row += 1
 
+        self._lzk_zeilen = {nr: [] for nr in LZK_NUMMERN}
+        for w in form.grid_slaves():
+            nr = lzk_je_zeile.get(int(w.grid_info()["row"]))
+            if nr:
+                self._lzk_zeilen[nr].append(w)
+
         # Punkte -> Prozent und Note, sofort neben den Punkten.
-        for nr in (1, 2):
+        for nr in LZK_NUMMERN:
             for feld in (f"lzk_punkte_{nr}", f"lzk_max_{nr}"):
                 self.vars[feld].trace_add("write", lambda *_, nr=nr: self._punkte_geaendert(nr))
             self._punkte_geaendert(nr)
@@ -324,6 +347,18 @@ class BausteinDialog(tk.Toplevel):
         self._hj_auto = None
         self.vars["status"].trace_add("write", self._status_geaendert)
 
+        # Anzahl LZK: blendet die LZK-Bloecke ein und aus. Solange sie fuer diesen Baustein
+        # nicht eigens gewaehlt ist, folgt sie dem Namen (Vorgabe der Vorlage).
+        self._app_zeile = app_zeile
+        self._anzahl_vorher = b.lzk_anzahl
+        self._anzahl_folgt_name = b.lzk_anzahl is None and not app_zeile
+        self._anzahl_setzen_laeuft = False
+        self._anzahl_alt = self.vars["lzk_anzahl"].get()
+        self._hoehe_bereit = False
+        self._lzk_bloecke_zeigen(int(self._anzahl_alt))
+        self.vars["lzk_anzahl"].trace_add("write", self._anzahl_geaendert)
+        self.vars["name"].trace_add("write", self._name_geaendert)
+
         self.bind("<Return>", lambda e: self._uebernehmen())
         self.bind("<Escape>", lambda e: self.destroy())
         self._groesse_anpassen(parent)
@@ -331,6 +366,14 @@ class BausteinDialog(tk.Toplevel):
     def _groesse_anpassen(self, parent):
         """So hoch wie das Formular - hoechstens so hoch, wie der Bildschirm unter
         Menueleiste und Dock hergibt; was nicht passt, scrollt."""
+        self._hoehe_anpassen()
+        self._leinwand.pack(side="left", fill="both", expand=True)
+        self._hoehe_bereit = True
+        fenster_ins_bild(self, parent)
+
+    def _hoehe_anpassen(self):
+        """Hoehe und Rollbalken nach dem Formular - auch, wenn sich die Anzahl der
+        LZK aendert und Bloecke dazukommen oder wegfallen."""
         self.update_idletasks()
         breite, hoehe = self._form.winfo_reqwidth(), self._form.winfo_reqheight()
         frei = (self.winfo_screenheight() - FENSTER_RAND_OBEN - FENSTER_RAND_UNTEN
@@ -338,11 +381,75 @@ class BausteinDialog(tk.Toplevel):
         sicht = max(160, min(hoehe, frei))
         self._leinwand.configure(width=breite, height=sicht, scrollregion=(0, 0, breite, hoehe))
         if hoehe > sicht:
-            self._rollbalken.pack(side="right", fill="y")
+            if self._rollbalken.winfo_manager() != "pack":
+                vor = {"before": self._leinwand} if self._leinwand.winfo_manager() == "pack" else {}
+                self._rollbalken.pack(side="right", fill="y", **vor)
             for ereignis in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
                 self.bind(ereignis, self._rad)
-        self._leinwand.pack(side="left", fill="both", expand=True)
-        fenster_ins_bild(self, parent)
+        else:
+            self._rollbalken.pack_forget()
+            self._leinwand.yview_moveto(0)
+
+    def _platz_im_formular(self, nr) -> bool:
+        """Steht im Formular bei LZK nr etwas - oder haengt sie an einer LZK online?"""
+        if any(self.vars[f].get().strip() for f in (f"lzk_datum_{nr}", f"lzk_punkte_{nr}", f"lzk_max_{nr}")):
+            return True
+        if self.vars[f"lzk_ergebnis_{nr}"].get() not in ("", LZK_ERGEBNIS_TEXT[""]):
+            return True
+        if self.vars[f"lzk_bem_{nr}"].get("1.0", "end").strip():
+            return True
+        return bool(dict(zip(LZK_NUMMERN, self._verknuepfung)).get(nr))
+
+    def _belegt_bis(self) -> int:
+        """Die letzte LZK, bei der im Formular etwas steht (0 = keine)."""
+        return max((nr for nr in LZK_NUMMERN if self._platz_im_formular(nr)), default=0)
+
+    def _lzk_bloecke_zeigen(self, anzahl: int):
+        for nr, widgets in self._lzk_zeilen.items():
+            for w in widgets:
+                if nr <= anzahl:
+                    w.grid()
+                else:
+                    w.grid_remove()
+        if self._hoehe_bereit:
+            self._hoehe_anpassen()
+
+    def _anzahl_setzen(self, wert: str):
+        """Die Anzahl von hier aus setzen (nicht als Wahl der Person zaehlen)."""
+        self._anzahl_setzen_laeuft = True
+        try:
+            self.vars["lzk_anzahl"].set(wert)
+        finally:
+            self._anzahl_setzen_laeuft = False
+        self._anzahl_alt = wert
+        self._lzk_bloecke_zeigen(int(wert))
+
+    def _anzahl_geaendert(self, *_):
+        """Anzahl gewaehlt: Bloecke zeigen. Weniger als ausgefuellt geht nicht - was dort
+        steht, verschwaende sonst aus dem Formular."""
+        if self._anzahl_setzen_laeuft:
+            return
+        anzahl = int(self.vars["lzk_anzahl"].get() or 0)
+        belegt = self._belegt_bis()
+        if anzahl < belegt:
+            messagebox.showwarning(
+                "LZK noch ausgefüllt",
+                f"Bei LZK {belegt} steht noch etwas. Erst die Einträge dort leeren, dann "
+                f"die Anzahl verkleinern – so geht nichts verloren.", parent=self)
+            self._anzahl_setzen(self._anzahl_alt)
+            return
+        self._anzahl_folgt_name = False
+        self._anzahl_alt = str(anzahl)
+        self._lzk_bloecke_zeigen(anzahl)
+
+    def _name_geaendert(self, *_):
+        """Anderer Name: die Anzahl der Vorlage fuer diesen Baustein - solange hier nichts
+        eigens gewaehlt ist, und nie weniger als ausgefuellt."""
+        if not self._anzahl_folgt_name:
+            return
+        anzahl = max(lzk_vorgabe(self.vars["name"].get(), self._vorlage_lzk), self._belegt_bis())
+        if str(anzahl) != self.vars["lzk_anzahl"].get():
+            self._anzahl_setzen(str(anzahl))
 
     def _rad(self, event):
         """Mausrad scrollt das Formular - ausser ueber einem Textfeld (das scrollt selbst)."""
@@ -398,11 +505,13 @@ class BausteinDialog(tk.Toplevel):
                 messagebox.showwarning("Fehlt", "Bitte einen Baustein-Namen angeben.", parent=self)
                 return
 
-            werte["lzk_datum_1"] = parse_datum(werte["lzk_datum_1"])
-            werte["lzk_datum_2"] = parse_datum(werte["lzk_datum_2"])
+            # Die LZK-Plaetze des Formulars (Test-Attrappen kennen nicht immer alle).
+            plaetze = [nr for nr in LZK_NUMMERN if f"lzk_datum_{nr}" in werte]
+            for nr in plaetze:
+                werte[f"lzk_datum_{nr}"] = parse_datum(werte[f"lzk_datum_{nr}"])
             # Punkte: Zahlen (auch 18,5), einheitlich geschrieben. Mehr als das Maximum
             # ist meist ein Tippfehler (185 statt 18,5) - Zusatzpunkte gibt es aber.
-            for nr in (1, 2):
+            for nr in plaetze:
                 zahlen = {}
                 for feld, wort in ((f"lzk_punkte_{nr}", "erreichte Punkte"), (f"lzk_max_{nr}", "maximale Punkte")):
                     try:
@@ -424,16 +533,30 @@ class BausteinDialog(tk.Toplevel):
                 werte[f"lzk_note_{nr}"] = a["note"] if a else ""
             # Angezeigt wird der Text, gespeichert der Wert.
             wert_je_text = {t: w for w, t in LZK_ERGEBNIS_TEXT.items()}
-            for feld in ("lzk_ergebnis_1", "lzk_ergebnis_2"):
+            for feld in (f"lzk_ergebnis_{nr}" for nr in plaetze):
                 werte[feld] = wert_je_text.get(werte.get(feld, ""), "")
             if not werte["status"]:
                 werte["status"] = "Ausstehend"
-            werte["lzk_online_1"], werte["lzk_online_2"] = self._verknuepfung
+            for nr, link in zip(LZK_NUMMERN, self._verknuepfung):
+                werte[f"lzk_online_{nr}"] = link
             # Steht nicht im Formular: bei eigenen Bausteinen in der Bemerkung aufgegangen,
             # bei App-Zeilen unveraendert (siehe __init__).
             werte["bausteinarbeit"] = self.__dict__.get("_bausteinarbeit", "")
 
-            self.result = Baustein(**werte)
+            anzahl = str(werte.pop("lzk_anzahl", "") or "").strip()
+            neu = Baustein(**werte)
+            vorher = self.__dict__.get("_anzahl_vorher")
+            if self.__dict__.get("_app_zeile") or not anzahl:
+                neu.lzk_anzahl = vorher
+            else:
+                # Gespeichert wird die Anzahl nur, wenn sie von der Vorlage abweicht - sonst
+                # folgt der Baustein ihr (auch einer spaeteren Aenderung dort).
+                n, belegt = int(anzahl), lzk_hoechster_platz(neu)
+                if belegt > n:
+                    raise ValueError(f"Bei LZK {belegt} steht noch etwas – bitte die Anzahl LZK auf "
+                                     f"mindestens {belegt} stellen oder die Einträge dort leeren.")
+                neu.lzk_anzahl = None if n == lzk_vorgabe(neu.name, self.__dict__.get("_vorlage_lzk")) else n
+            self.result = neu
             self.destroy()
         except ValueError as e:
             messagebox.showerror("Ungültige Eingabe", str(e), parent=self)
@@ -668,7 +791,7 @@ class LzkSendenDialog(tk.Toplevel):
 
         erklaerung = ("Lerntheken-LZK: nur das Datum – Status und Flammen bleiben.\n"
                       "Eigene Bausteine werden zu freien Mathe-LZK (Titel = Baustein, LZK 1 = Basis,\n"
-                      "LZK 2 = Aufbau). Was online geändert wurde, wird nicht überschrieben.")
+                      "LZK 2 = Aufbau, LZK 3/4 ohne Typ). Was online geändert wurde, wird nicht überschrieben.")
         if vergangen_text:
             erklaerung += "\n" + vergangen_text
         ttk.Label(self, text=erklaerung, foreground="#555", justify="left",
@@ -1169,34 +1292,48 @@ class LzkZieleDialog(tk.Toplevel):
 
 
 class VorlageDialog(tk.Toplevel):
-    """Bearbeiten der Standard-Bausteinliste, die neue Schüler:innen erhalten."""
+    """Bearbeiten der Standard-Bausteinliste, die neue Schüler:innen erhalten - mit der
+    Anzahl LZK je Baustein. `result` ist danach die Liste der Namen (None = abgebrochen),
+    `anzahl` {Name: Anzahl} fuer die Bausteine, die nicht LZK_ANZAHL_STANDARD haben."""
 
-    def __init__(self, parent, bausteine: list):
+    def __init__(self, parent, bausteine: list, anzahl=None):
         super().__init__(parent)
         self.title("Standard-Bausteine bearbeiten")
-        self.geometry("360x420")
         self.result = None
+        self.anzahl = None
         self.transient(parent)
         self.grab_set()
+        optionen = [str(n) for n in LZK_ANZAHL_OPTIONEN]
 
-        ttk.Label(self, text="Diese Liste erhält jede neu angelegte Person automatisch.\n"
-                              "Bestehende Personen sind davon nicht betroffen.",
-                  justify="left", wraplength=330).pack(padx=10, pady=(10, 6), anchor="w")
+        ttk.Label(self, text="Diese Liste erhält jede neu angelegte Person automatisch. Die Anzahl "
+                              "der LZK gilt auch für vorhandene Bausteine gleichen Namens, solange "
+                              "dort nichts anderes gewählt ist – ausgefüllte LZK bleiben immer sichtbar.",
+                  justify="left", wraplength=410).pack(padx=10, pady=(10, 6), anchor="w")
 
         rahmen = ttk.Frame(self)
         rahmen.pack(fill="both", expand=True, padx=10)
-        self.box = tk.Listbox(rahmen, height=14, activestyle="dotbox")
-        self.box.pack(side="left", fill="both", expand=True)
-        sb = ttk.Scrollbar(rahmen, command=self.box.yview)
+        self.baum = ttk.Treeview(rahmen, columns=("lzk",), show="tree headings", height=12,
+                                 selectmode="browse")
+        self.baum.heading("#0", text="Baustein")
+        self.baum.heading("lzk", text="LZK")
+        self.baum.column("#0", width=320)
+        self.baum.column("lzk", width=60, anchor="center", stretch=False)
+        self.baum.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(rahmen, command=self.baum.yview)
         sb.pack(side="right", fill="y")
-        self.box.config(yscrollcommand=sb.set)
-        for b in bausteine:
-            self.box.insert("end", b)
+        self.baum.config(yscrollcommand=sb.set)
+        for name in bausteine:
+            self.baum.insert("", "end", text=name, values=(str(lzk_vorgabe(name, anzahl)),))
+        self.baum.bind("<<TreeviewSelect>>", self._auswahl_geaendert)
 
         eingabe_zeile = ttk.Frame(self)
         eingabe_zeile.pack(fill="x", padx=10, pady=6)
         self.neu_var = tk.StringVar()
         ttk.Entry(eingabe_zeile, textvariable=self.neu_var).pack(side="left", fill="x", expand=True)
+        ttk.Label(eingabe_zeile, text="LZK:").pack(side="left", padx=(6, 2))
+        self.neu_anzahl = tk.StringVar(value=str(LZK_ANZAHL_STANDARD))
+        ttk.Combobox(eingabe_zeile, textvariable=self.neu_anzahl, values=optionen, width=3,
+                     state="readonly").pack(side="left")
         ttk.Button(eingabe_zeile, text="+ Hinzufügen", command=self._hinzufuegen).pack(side="left", padx=(6, 0))
 
         btn_zeile = ttk.Frame(self)
@@ -1204,6 +1341,13 @@ class VorlageDialog(tk.Toplevel):
         ttk.Button(btn_zeile, text="↑", width=3, command=lambda: self._verschieben(-1)).pack(side="left")
         ttk.Button(btn_zeile, text="↓", width=3, command=lambda: self._verschieben(1)).pack(side="left", padx=4)
         ttk.Button(btn_zeile, text="− Entfernen", command=self._entfernen).pack(side="left")
+        # Anzahl LZK des markierten Bausteins.
+        self.anzahl_var = tk.StringVar()
+        self.anzahl_box = ttk.Combobox(btn_zeile, textvariable=self.anzahl_var, values=optionen, width=3,
+                                       state="disabled")
+        self.anzahl_box.pack(side="right")
+        ttk.Label(btn_zeile, text="Anzahl LZK:").pack(side="right", padx=(0, 4))
+        self.anzahl_box.bind("<<ComboboxSelected>>", self._anzahl_gewaehlt)
 
         abschluss = ttk.Frame(self)
         abschluss.pack(fill="x", padx=10, pady=10)
@@ -1211,34 +1355,58 @@ class VorlageDialog(tk.Toplevel):
         ttk.Button(abschluss, text="Abbrechen", command=self.destroy).pack(side="left", padx=6)
 
         self.bind("<Return>", lambda e: self._hinzufuegen())
+        # So gross wie der Inhalt (eine feste Groesse schnitt unten die Knoepfe ab).
+        fenster_ins_bild(self, parent)
+
+    def _markiert(self):
+        auswahl = self.baum.selection()
+        return auswahl[0] if auswahl else None
+
+    def _auswahl_geaendert(self, _=None):
+        iid = self._markiert()
+        if iid is None:
+            self.anzahl_var.set("")
+            self.anzahl_box.config(state="disabled")
+            return
+        self.anzahl_box.config(state="readonly")
+        self.anzahl_var.set(str(self.baum.item(iid, "values")[0]))
+
+    def _anzahl_gewaehlt(self, _=None):
+        iid = self._markiert()
+        if iid is not None and self.anzahl_var.get():
+            self.baum.item(iid, values=(self.anzahl_var.get(),))
 
     def _hinzufuegen(self):
         text = self.neu_var.get().strip()
         if not text:
             return
-        self.box.insert("end", text)
+        self.baum.insert("", "end", text=text, values=(self.neu_anzahl.get() or str(LZK_ANZAHL_STANDARD),))
         self.neu_var.set("")
 
     def _entfernen(self):
-        auswahl = self.box.curselection()
-        if auswahl:
-            self.box.delete(auswahl[0])
+        iid = self._markiert()
+        if iid is not None:
+            self.baum.delete(iid)
+            self._auswahl_geaendert()
 
     def _verschieben(self, richtung):
-        auswahl = self.box.curselection()
-        if not auswahl:
+        iid = self._markiert()
+        if iid is None:
             return
-        i = auswahl[0]
-        j = i + richtung
-        if j < 0 or j >= self.box.size():
+        j = self.baum.index(iid) + richtung
+        if j < 0 or j >= len(self.baum.get_children()):
             return
-        text = self.box.get(i)
-        self.box.delete(i)
-        self.box.insert(j, text)
-        self.box.selection_set(j)
+        self.baum.move(iid, "", j)
+        self.baum.selection_set(iid)
 
     def _speichern(self):
-        self.result = list(self.box.get(0, "end"))
+        self.result, self.anzahl = [], {}
+        for iid in self.baum.get_children():
+            name = self.baum.item(iid, "text")
+            self.result.append(name)
+            n = int(str(self.baum.item(iid, "values")[0]))
+            if n != LZK_ANZAHL_STANDARD:
+                self.anzahl[name] = n
         self.destroy()
 
 
@@ -1941,7 +2109,8 @@ class App(tk.Tk):
         baustein_rahmen = ttk.LabelFrame(rechts, text="Bausteine", padding=8)
         baustein_rahmen.pack(fill="both", expand=True, pady=(8, 0))
 
-        spalten = ("status", "lzk1", "note1", "lzk2", "note2", "halbjahr", "bemerkung")
+        spalten = ("status", "lzk1", "note1", "lzk2", "note2", "lzk3", "note3", "lzk4", "note4",
+                   "halbjahr", "bemerkung")
         self.tabelle = ttk.Treeview(baustein_rahmen, columns=spalten, show="tree headings", height=9)
         self.tabelle.heading("#0", text="Baustein",
                              command=lambda: self._bausteine_sortieren("#0"))
@@ -1951,12 +2120,16 @@ class App(tk.Tk):
             ("status", "Status", 110),
             ("lzk1", "LZK 1", 90), ("note1", "Note", 105),
             ("lzk2", "LZK 2", 90), ("note2", "Note", 80),
+            # LZK 3 und 4 nur, wenn ein Baustein der Person so viele hat (_detail_anzeigen).
+            ("lzk3", "LZK 3", 90), ("note3", "Note", 105),
+            ("lzk4", "LZK 4", 90), ("note4", "Note", 105),
             ("halbjahr", "HJ", 65), ("bemerkung", "Bemerkung", 320),
         ]:
             self.tabelle.heading(key, text=text,
                                  command=lambda sp=key: self._bausteine_sortieren(sp))
             self.tabelle.column(key, width=width)
         self.tabelle.column("#0", width=170)
+        self.tabelle.configure(displaycolumns=self._baustein_spalten(LZK_ANZAHL_STANDARD))
         self.tabelle.pack(fill="both", expand=True)
         self.tabelle.bind("<Double-1>", lambda e: self.baustein_bearbeiten())
 
@@ -2702,26 +2875,38 @@ class App(tk.Tk):
             eintraege.sort(key=lambda p: self._baustein_key(p[1], self._bausteine_sortierung),
                            reverse=self._bausteine_umgekehrt)
 
+        # LZK-Spalten bis zur groessten Anzahl LZK der Person (mindestens zwei).
+        vorgaben = self.az.vorlage_lzk
+        self.tabelle.configure(displaycolumns=self._baustein_spalten(
+            max([LZK_ANZAHL_STANDARD] + [lzk_anzahl(b, vorgaben) for b in s.bausteine])))
+
         for i, b in eintraege:
             tags = []
             if aktueller and b.name == aktueller:
                 tags.append("aktuell")
             if b.status in STATUS_FARBEN:
                 tags.append(b.status)
+            anzahl, zellen = lzk_anzahl(b, vorgaben), []
+            for nr in LZK_NUMMERN:
+                if nr > anzahl:
+                    zellen += ["–", ""]       # diese LZK hat der Baustein nicht
+                    continue
+                zellen += [_mit_bemerkung(fmt_datum(getattr(b, f"lzk_datum_{nr}")), getattr(b, f"lzk_bem_{nr}")),
+                           _note_mit_ergebnis(getattr(b, f"lzk_note_{nr}"), getattr(b, f"lzk_ergebnis_{nr}"),
+                                              self._prozent_zelle(b, nr))]
             self.tabelle.insert("", "end", iid=str(i), text=b.name,
-                                 values=(b.status,
-                                         _mit_bemerkung(fmt_datum(b.lzk_datum_1), b.lzk_bem_1),
-                                         _note_mit_ergebnis(b.lzk_note_1, b.lzk_ergebnis_1,
-                                                            self._prozent_zelle(b, 1)),
-                                         _mit_bemerkung(fmt_datum(b.lzk_datum_2), b.lzk_bem_2),
-                                         _note_mit_ergebnis(b.lzk_note_2, b.lzk_ergebnis_2,
-                                                            self._prozent_zelle(b, 2)),
-                                         b.halbjahr, _einzeilig(b.bemerkung)),
+                                 values=(b.status, *zellen, b.halbjahr, _einzeilig(b.bemerkung)),
                                  tags=tuple(tags))
         self._talks_anzeigen()
         # Die Tabelle wurde gerade neu gefuellt, also ist keine Zeile mehr markiert:
         # Bearbeiten/Entfernen muessen wieder ausgrauen.
         self._knoepfe_aktualisieren()
+
+    @staticmethod
+    def _baustein_spalten(anzahl: int) -> list:
+        """Sichtbare Spalten der Bausteintabelle: LZK und Note bis zur LZK `anzahl`."""
+        lzk = [sp for nr in range(1, min(anzahl, len(LZK_NUMMERN)) + 1) for sp in (f"lzk{nr}", f"note{nr}")]
+        return ["status", *lzk, "halbjahr", "bemerkung"]
 
     def _prozent_zelle(self, b: Baustein, nr: int) -> str:
         """Prozent aus den Punkten fuer die Tabelle ("" ohne Punkte)."""
@@ -2741,10 +2926,10 @@ class App(tk.Tk):
             return txt(b.halbjahr)
         if spalte == "bemerkung":
             return txt(b.bemerkung)
-        if spalte in ("note1", "note2"):
-            return txt(b.lzk_note_1 if spalte == "note1" else b.lzk_note_2)
-        if spalte in ("lzk1", "lzk2"):
-            d = b.lzk_datum_1 if spalte == "lzk1" else b.lzk_datum_2
+        if spalte.startswith("note"):
+            return txt(getattr(b, f"lzk_note_{spalte[4:]}"))
+        if spalte.startswith("lzk"):
+            d = getattr(b, f"lzk_datum_{spalte[3:]}")
             return (0, d) if d else (1, date.min)
         return txt(b.name)
 
@@ -4135,7 +4320,7 @@ class App(tk.Tk):
             messagebox.showinfo("Keine Auswahl", "Bitte zuerst eine Person auswählen.")
             return
         dlg = BausteinDialog(self, vorlage_namen=self.az.vorlage_bausteine,
-                             notenspiegel=self.az.notenspiegel)
+                             notenspiegel=self.az.notenspiegel, vorlage_lzk=self.az.vorlage_lzk)
         self.wait_window(dlg)
         if dlg.result is None:
             return
@@ -4154,7 +4339,7 @@ class App(tk.Tk):
         idx = int(auswahl[0])
         alt = self.aktueller_schueler.bausteine[idx]
         dlg = BausteinDialog(self, baustein=alt, vorlage_namen=self.az.vorlage_bausteine,
-                             notenspiegel=self.az.notenspiegel)
+                             notenspiegel=self.az.notenspiegel, vorlage_lzk=self.az.vorlage_lzk)
         self.wait_window(dlg)
         if dlg.result is None:
             return
@@ -4179,12 +4364,17 @@ class App(tk.Tk):
         self._detail_anzeigen()
 
     def vorlage_bearbeiten(self):
-        dlg = VorlageDialog(self, self.az.vorlage_bausteine)
+        dlg = VorlageDialog(self, self.az.vorlage_bausteine, self.az.vorlage_lzk)
         self.wait_window(dlg)
         if dlg.result is None:
             return
         self.az.vorlage_bausteine = dlg.result
+        self.az.vorlage_lzk = dlg.anzahl
         self._markiere_ungespeichert()
+        # Die Anzahl LZK gilt auch fuer vorhandene Bausteine: Tabelle und Fristen neu.
+        if self.aktueller_schueler:
+            self._detail_anzeigen()
+        self._liste_aktualisieren()
 
 
 def main():

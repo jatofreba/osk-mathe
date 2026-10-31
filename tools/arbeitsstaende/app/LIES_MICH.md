@@ -88,17 +88,29 @@ Danach reicht ein Doppelklick auf diese Datei.
   Datum; kommt die Frist aus einer LZK, steht dort "LZK". Angezeigt wird
   immer der nächstliegende der beiden Termine, und die Spalte **Anlass**
   lässt sich wie jede andere über ihren Kopf sortieren.
-- **Baustein-Formular**: Baustein, Status, Halbjahr, Bemerkung, dann LZK 1 und
-  LZK 2. Die Knöpfe **Übernehmen**/**Abbrechen** stehen fest unten und sind immer
+- **Baustein-Formular**: Baustein, Status, Halbjahr, Bemerkung, **Anzahl LZK**,
+  dann so viele LZK-Blöcke (Datum, Ergebnis, Punkte, Bemerkung). Die Knöpfe **Übernehmen**/**Abbrechen** stehen fest unten und sind immer
   zu sehen; reicht der Bildschirm nicht, scrollt das Formular darüber. Das frühere
   Feld **Bausteinarbeit** gibt es nicht mehr (seit 2026-10-04): was dort stand,
   steht verlustfrei als eigene Zeile „Bausteinarbeit: …“ am Ende der Bemerkung.
+- **Anzahl LZK** (seit 2026-10-31): 0 bis 4 je Baustein, Auswahl im Formular.
+  Vorgabe ist, was in der Vorlage (*Standard-Bausteine bearbeiten…*) beim
+  gleichnamigen Baustein steht, sonst 2; wer im Formular nichts anderes wählt,
+  folgt der Vorlage (auch einer späteren Änderung dort). **Es verschwindet nie
+  etwas:** eine ausgefüllte LZK bleibt immer sichtbar -- verkleinern lässt sich
+  die Anzahl erst, wenn die LZK dahinter leer sind. Die Tabelle zeigt die Spalten
+  LZK 3/4 nur, wenn ein Baustein der Person so viele hat; „–“ heißt: diese LZK hat
+  der Baustein nicht. Die Fristen-Spalte zählt nur die LZK, die ein Baustein hat
+  (ein Baustein mit einer LZK mahnt keine zweite an). Als geschrieben gilt eine
+  LZK mit Ergebnis, Punkten oder einer Zeile „Note: …“ in ihrer Bemerkung.
+  Excel kennt weiterhin nur LZK 1 und 2.
 - **Bemerkung zur LZK 1 / 2** (im Baustein-Formular): kurze Notiz zur
   jeweiligen Leistungszielkontrolle ("nur Teil 1", "Nachschreibtermin").
   Sie erscheint in der Baustein-Tabelle hinter dem jeweiligen Datum.
 - **Bearbeiten → Standard-Bausteine bearbeiten…**: die Liste, die neu
   angelegte Schüler:innen automatisch bekommen (entspricht der alten
-  "Vorlage_31" in Excel).
+  "Vorlage_31" in Excel) -- mit der **Anzahl LZK** je Baustein (Spalte „LZK“,
+  ändern über die Auswahl unten rechts für den markierten Baustein).
 - **Datei → Speichern**: schreibt direkt in dieselbe Datei zurück -- kein
   Download, kein Umbenennen nötig. **Speichern unter…** für eine Kopie oder
   den allerersten Speichervorgang.
@@ -230,7 +242,8 @@ Kalender, wer wann eine LZK schreibt.
   Lerntheken-LZK. Status und Flammen bleiben, wie sie sind.
 - **Eigene Bausteine** (z.B. "Kreise", "Terme 1"): der Termin wird in OSKlar
   als **freie Mathe-LZK** angelegt -- Titel = Name des Bausteins, LZK 1 =
-  Basis, LZK 2 = Aufbau. Angelegt wird, was ansteht (ab heute) oder hier schon
+  Basis, LZK 2 = Aufbau, LZK 3/4 ohne Typ (sie bleiben über die Verknüpfung,
+  die das Anlegen setzt, bei ihrem Platz). Angelegt wird, was ansteht (ab heute) oder hier schon
   ein Ergebnis hat; vergangene Termine ohne Ergebnis nicht, sonst stünden
   lauter alte LZK "zu bewerten" im Kalender. Ebenso wenig, wenn online zu
   diesem Baustein eine Anfrage offen ist oder am selben Tag schon eine

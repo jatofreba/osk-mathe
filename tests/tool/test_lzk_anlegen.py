@@ -496,7 +496,7 @@ pruefe("F1 nach dem Bearbeiten ist die Verknuepfung noch da (und das Datum neu)"
        dlg.result)
 quelle = io.open(os.path.join(NEU, "arbeitsstaende_app.py"), encoding="utf-8").read()
 pruefe("F2 das Formular liest die Verknuepfung aus dem Baustein",
-       "self._verknuepfung = (b.lzk_online_1, b.lzk_online_2)" in quelle)
+       'self._verknuepfung = tuple(getattr(b, f"lzk_online_{nr}") for nr in LZK_NUMMERN)' in quelle)
 a, _, _ = plan(person(dlg.result), [eintrag(70, "Kreise")])
 pruefe("F3 und das Senden erkennt die Aenderung als hier gemacht",
        arten(a) == [("aendern", "Kreise", 1)] and a[0]["felder"] == {"datum": date(2026, 10, 2)}, a)

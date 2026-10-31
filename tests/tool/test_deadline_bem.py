@@ -8,7 +8,7 @@ import os
 import sys
 from datetime import date
 
-from pfade import WERKZEUG  # noqa: E402
+from pfade import WERKZEUG, formular_zeilen  # noqa: E402
 QUELLE = os.path.join(WERKZEUG, "arbeitsstaende_app.py")
 spec = importlib.util.spec_from_file_location("naapp", QUELLE)
 mod = importlib.util.module_from_spec(spec)
@@ -33,7 +33,9 @@ def pruefe(name, bedingung, extra=""):
 # ===========================================================================
 # Bis zur schliessenden Klammer am Zeilenanfang -- halbjahr_optionen([...]) enthaelt
 # selbst eine eckige Klammer.
-felder = quelle.split('felder = [')[1].split(chr(10) + '        ]')[0]
+# Seit es bis zu vier LZK gibt, entstehen die LZK-Zeilen in einer Schleife je Nummer -
+# formular_zeilen schreibt sie fuer jede Nummer aus.
+felder = chr(10).join(formular_zeilen(quelle))
 pruefe("B1 Bemerkung zur LZK 1 ist mehrzeilig",
        '("Bemerkung zur LZK 1", "lzk_bem_1", "text", 3)' in felder, felder)
 pruefe("B2 Bemerkung zur LZK 2 ebenso",

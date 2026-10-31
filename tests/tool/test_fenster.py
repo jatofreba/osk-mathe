@@ -6,7 +6,7 @@ import os
 import sys
 from datetime import date, timedelta
 
-from pfade import WERKZEUG  # noqa: E402
+from pfade import WERKZEUG, formular_felder  # noqa: E402
 import arbeitsstaende_data as D  # noqa: E402
 
 QUELLE = os.path.join(WERKZEUG, "arbeitsstaende_app.py")
@@ -57,8 +57,7 @@ pruefe("A6 und beim naechsten Laden nicht doppelt", az2.students[0].bausteine[0]
 # B) Formular-Aufbau (Quelltext)
 # ===========================================================================
 dialog = quelle.split("class BausteinDialog")[1].split("\nclass ")[0]
-felder = dialog.split("felder = [")[1].split("\n        ]")[0]
-namen = [z.split('"')[3] for z in felder.splitlines() if z.strip().startswith('("')]
+namen = formular_felder(quelle)
 pruefe("B1 keine Zeile 'Bausteinarbeit' mehr", "bausteinarbeit" not in namen, namen)
 pruefe("B2 die Bemerkung steht oben (wo frueher 'Bausteinarbeit' stand), Halbjahr unter dem Status",
        namen[:4] == ["name", "status", "halbjahr", "bemerkung"], namen)

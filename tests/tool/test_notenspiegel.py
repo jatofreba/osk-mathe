@@ -243,8 +243,8 @@ quelle = io.open(os.path.join(WERKZEUG, "arbeitsstaende_app.py"), encoding="utf-
 pruefe("U4 Menue Einstellungen -> Notenspiegel für LZK…",
        'label="Notenspiegel für LZK…", command=self.notenspiegel_bearbeiten' in quelle
        and 'menu.add_cascade(label="Einstellungen", menu=einstellungen_menu)' in quelle)
-pruefe("U5 beide Wege ins Formular geben den Notenspiegel der Arbeitsdatei mit",
-       quelle.count("notenspiegel=self.az.notenspiegel)") == 2)
+pruefe("U5 beide Wege ins Formular geben den Notenspiegel (und die LZK-Vorgaben) der Arbeitsdatei mit",
+       quelle.count("notenspiegel=self.az.notenspiegel, vorlage_lzk=self.az.vorlage_lzk)") == 2)
 
 
 # App-Teil ohne Fenster: Notenspiegel aendern

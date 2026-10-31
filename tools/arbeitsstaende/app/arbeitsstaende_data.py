@@ -33,6 +33,18 @@ BAUSTEIN_SPALTEN = [
     "halbjahr", "bemerkung", "lzk_bem_1", "lzk_bem_2",
 ]
 
+# Wie viele LZK ein Baustein hat, ist seit 2026-10-31 waehlbar (Nutzerwunsch): 0 bis
+# LZK_MAX, Vorgabe je Baustein-Name in der Vorlage, sonst zwei. Die Daten haben immer
+# LZK_MAX Plaetze; die Anzahl bestimmt nur, wie viele Formular und Tabelle zeigen -
+# ein ausgefuellter Platz zaehlt immer mit (siehe lzk_anzahl), damit nie etwas
+# unsichtbar wird. Excel kennt weiterhin nur LZK 1 und 2.
+LZK_MAX = 4
+LZK_NUMMERN = tuple(range(1, LZK_MAX + 1))
+LZK_ANZAHL_STANDARD = 2
+LZK_ANZAHL_OPTIONEN = tuple(range(0, LZK_MAX + 1))
+# Was zu einem LZK-Platz gehoert (Felder lzk_<feld>_<nr> im Baustein).
+LZK_PLATZ_FELDER = ("datum", "note", "bem", "ergebnis", "online", "punkte", "max")
+
 STATUS_FARBEN = {
     "Abgeschlossen": "C6EFCE",
     "In Bearbeitung": "FFEB9C",
@@ -317,7 +329,7 @@ def verknuepfte_lzk_ids(students) -> set:
         for b in st.bausteine:
             if _ist_app_zeile(b):
                 continue
-            for link in (b.lzk_online_1, b.lzk_online_2):
+            for link in lzk_links(b):
                 if link and link.get("id"):
                     ids.add(link["id"])
     return ids
@@ -424,7 +436,7 @@ def lt_freie_lzk_abgleich(student, konto: dict, titel_je_key=None):
     for b in student.bausteine:
         if _ist_app_zeile(b):
             continue
-        for nummer in (1, 2):
+        for nummer in LZK_NUMMERN:
             link = getattr(b, f"lzk_online_{nummer}", None)
             if link and link.get("id") in online_ids:
                 verknuepft.setdefault(link["id"], []).append((b, nummer))
@@ -623,7 +635,7 @@ def lzk_zuordnungen(student, konto: dict, titel_je_key=None, ziele=None) -> list
     """
     ziele = ziele or {}
     hand = [b for b in student.bausteine if not _ist_app_zeile(b)]
-    verknuepft = {l["id"] for b in hand for l in (b.lzk_online_1, b.lzk_online_2) if l and l.get("id")}
+    verknuepft = {l["id"] for b in hand for l in lzk_links(b) if l and l.get("id")}
     liste = []
     for e in sorted(lzk_online_alle(konto),
                     key=lambda x: (_to_date(x.get("datum")) or date.min, x.get("id") or 0)):
@@ -780,7 +792,7 @@ def lzk_falsches_halbjahr(student) -> list:
     for b in student.bausteine:
         if _ist_app_zeile(b) or not b.halbjahr:
             continue
-        for nummer in (1, 2):
+        for nummer in LZK_NUMMERN:
             link = getattr(b, f"lzk_online_{nummer}", None)
             d = _to_date((link or {}).get("datum"))
             spuren = ((getattr(b, f"lzk_note_{nummer}") or "").strip()
@@ -852,7 +864,8 @@ def hj_nach_statuswechsel(status_vorher: str, status_neu: str, hj_vorher: str, h
 def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, titel_je_key=None):
     """LZK-Termine aus VON HAND gepflegten Bausteinen, die online fehlen oder hier
     geaendert wurden -- als freie Mathe-LZK: Thema = Baustein-Name, LZK 1 = Basis,
-    LZK 2 = Aufbau.
+    LZK 2 = Aufbau, LZK 3 und 4 ohne Typ ("LZK"; zugeordnet bleiben sie ueber die
+    Verknuepfung, die das Anlegen setzt).
 
     Nur die Richtung Liste -> Server, und nur, was HIER geaendert wurde: jeder Platz
     merkt sich den zuletzt abgeglichenen Stand (lzk_online_N). Hat sich seither nur
@@ -887,7 +900,7 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
     eigene = {p["id"] for p in paare}
     for b in student.bausteine:
         if not _ist_app_zeile(b):
-            eigene |= {l["id"] for l in (b.lzk_online_1, b.lzk_online_2) if l}
+            eigene |= {l["id"] for l in lzk_links(b) if l}
     txt = lambda w: LZK_ERGEBNIS_TEXT.get(w, w) if w else "nicht bewertet"
     zuordnen = "über „Einzelne Schritte → Freie Mathe-LZK zuordnen…“"
     abruf = "„⟳ Synchronisieren“ („Ergebnisse abrufen…“) übernimmt das"
@@ -896,7 +909,8 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
     for b in student.bausteine:
         if _ist_app_zeile(b) or not (b.name or "").strip():
             continue
-        for nummer, typ in LZK_TYP_JE_NUMMER.items():
+        for nummer in LZK_NUMMERN:
+            typ = LZK_TYP_JE_NUMMER.get(nummer, "LZK")
             lok_d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
             lok_e = getattr(b, f"lzk_ergebnis_{nummer}") or ""
             link = getattr(b, f"lzk_online_{nummer}", None)
@@ -1255,7 +1269,9 @@ def _clean(value):
 # von Hand lesbar und nachbearbeitbar, und neue Felder brechen alte Dateien
 # nicht -- unbekannte Schluessel werden beim Laden schlicht ignoriert.
 JSON_FORMAT = "osk-arbeitsstaende"
-JSON_VERSION = 1
+# 2 (2026-10-31): LZK 3 und 4, LZK-Anzahl je Baustein und in der Vorlage. Eine aeltere
+# Anwendung warnt beim Oeffnen, dass sie diese Angaben beim Speichern verlieren wuerde.
+JSON_VERSION = 2
 JSON_ENDUNGEN = (".json",)
 
 
@@ -1644,7 +1660,7 @@ def hj_zusammenfassung(student, hj: str) -> dict:
     for b in student.bausteine:
         if (b.name or "").startswith(LT_TALK_NAME):
             continue
-        for nr in (1, 2):
+        for nr in LZK_NUMMERN:
             datum = getattr(b, f"lzk_datum_{nr}")
             note = getattr(b, f"lzk_note_{nr}") or ""
             erg = getattr(b, f"lzk_ergebnis_{nr}") or ""
@@ -1893,7 +1909,7 @@ def noten_neu_berechnen(students, alt: Notenspiegel, neu: Notenspiegel) -> int:
     geaendert = 0
     for st in students:
         for b in st.bausteine:
-            for nr in (1, 2):
+            for nr in LZK_NUMMERN:
                 nachher = baustein_auswertung(b, nr, neu)
                 if nachher and (getattr(b, f"lzk_note_{nr}") or "").strip() != nachher["note"]:
                     setattr(b, f"lzk_note_{nr}", nachher["note"])
@@ -1914,7 +1930,7 @@ def lzk_note_in_bemerkung(b, sp: Optional[Notenspiegel] = None) -> int:
     sonst leer). Eine andere Angabe im Feld haengt vorher als Zeile "Note: ..." an die
     Bemerkung zur jeweiligen LZK. Idempotent. -> Anzahl umgezogener Angaben."""
     umgezogen = 0
-    for nr in (1, 2):
+    for nr in LZK_NUMMERN:
         a = baustein_auswertung(b, nr, sp)
         soll = a["note"] if a else ""
         note = (getattr(b, f"lzk_note_{nr}") or "").strip()
@@ -1981,6 +1997,25 @@ class Baustein:
     lzk_max_1: str = ""
     lzk_punkte_2: str = ""
     lzk_max_2: str = ""
+    # Wie viele LZK der Baustein hat: None = wie in der Vorlage fuer diesen Namen
+    # (sonst zwei). Ein ausgefuellter Platz zaehlt immer mit, siehe lzk_anzahl().
+    lzk_anzahl: Optional[int] = None
+    # LZK 3 und 4: aufgebaut wie 1 und 2 (Datum, Note, Bemerkung, Ergebnis,
+    # Verknuepfung, Punkte) - nur fuer Bausteine mit mehr als zwei LZK.
+    lzk_datum_3: Optional[date] = None
+    lzk_note_3: str = ""
+    lzk_bem_3: str = ""
+    lzk_ergebnis_3: str = ""
+    lzk_online_3: Optional[dict] = None
+    lzk_punkte_3: str = ""
+    lzk_max_3: str = ""
+    lzk_datum_4: Optional[date] = None
+    lzk_note_4: str = ""
+    lzk_bem_4: str = ""
+    lzk_ergebnis_4: str = ""
+    lzk_online_4: Optional[dict] = None
+    lzk_punkte_4: str = ""
+    lzk_max_4: str = ""
 
 
 @dataclass
@@ -2038,16 +2073,73 @@ def baustein_als_dict(b: Baustein) -> dict:
         "halbjahr": b.halbjahr,
         "bemerkung": b.bemerkung,
     }
-    for nr, (datum, note, bem, erg, online) in enumerate(
-            ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1, b.lzk_ergebnis_1, b.lzk_online_1),
-             (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2, b.lzk_ergebnis_2, b.lzk_online_2)), start=1):
-        lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem, "ergebnis": erg,
-                           "online": _lzk_online_sauber(online),
+    for nr in LZK_NUMMERN:
+        lzk = _ohne_leere({"datum": _iso(getattr(b, f"lzk_datum_{nr}")),
+                           "note": getattr(b, f"lzk_note_{nr}"),
+                           "bemerkung": getattr(b, f"lzk_bem_{nr}"),
+                           "ergebnis": getattr(b, f"lzk_ergebnis_{nr}"),
+                           "online": _lzk_online_sauber(getattr(b, f"lzk_online_{nr}")),
                            "punkte": getattr(b, f"lzk_punkte_{nr}", ""),
                            "max_punkte": getattr(b, f"lzk_max_{nr}", "")})
         if lzk:
             daten[f"lzk_{nr}"] = lzk
+    # Nur, wenn fuer diesen Baustein eigens gewaehlt (sonst gilt die Vorlage).
+    daten["lzk_anzahl"] = b.lzk_anzahl
     return _ohne_leere(daten)
+
+
+def lzk_links(b) -> list:
+    """Die gemerkten Verknuepfungen aller LZK-Plaetze (None, wo keine ist)."""
+    return [getattr(b, f"lzk_online_{nr}", None) for nr in LZK_NUMMERN]
+
+
+def lzk_belegt(b, nr: int) -> bool:
+    """Steht an diesem LZK-Platz irgendetwas (Termin, Note, Bemerkung, Ergebnis,
+    Verknuepfung, Punkte)?"""
+    for f in LZK_PLATZ_FELDER:
+        wert = getattr(b, f"lzk_{f}_{nr}", None)
+        if wert is not None and (not isinstance(wert, str) or wert.strip()):
+            return True
+    return False
+
+
+def lzk_hoechster_platz(b) -> int:
+    """Nummer des letzten ausgefuellten LZK-Platzes (0, wenn keiner)."""
+    return max((nr for nr in LZK_NUMMERN if lzk_belegt(b, nr)), default=0)
+
+
+def lzk_vorgabe(name, vorgaben=None) -> int:
+    """Wie viele LZK ein Baustein dieses Namens laut Vorlage hat - sonst zwei.
+    Gross/klein und Leerzeichen zaehlen nicht."""
+    n = _titel_norm(name)
+    for k, v in (vorgaben or {}).items():
+        if _titel_norm(k) == n:
+            return v
+    return LZK_ANZAHL_STANDARD
+
+
+def lzk_anzahl(b, vorgaben=None) -> int:
+    """Wie viele LZK der Baustein hat: eigens gewaehlt, sonst laut Vorlage, sonst
+    zwei - aber nie weniger als der letzte ausgefuellte Platz (was dort steht, bleibt
+    sichtbar, auch wenn spaeter jemand die Anzahl verkleinert). Zeilen aus der App
+    haben immer Basis und Aufbau."""
+    if _ist_app_zeile(b):
+        gewaehlt = LZK_ANZAHL_STANDARD
+    elif b.lzk_anzahl is not None:
+        gewaehlt = b.lzk_anzahl
+    else:
+        gewaehlt = lzk_vorgabe(b.name, vorgaben)
+    return max(gewaehlt, lzk_hoechster_platz(b))
+
+
+def lzk_erledigt(b, nr: int) -> bool:
+    """Ist diese LZK geschrieben? Erkennbar an Note bzw. Punkten, am Ergebnis oder an
+    einer umgezogenen Note ("Note: ...") in ihrer Bemerkung. Bis 2026-10-31 zaehlte
+    nur das freie Notenfeld - das gibt es nicht mehr (siehe lzk_note_in_bemerkung)."""
+    return bool((getattr(b, f"lzk_note_{nr}") or "").strip()
+                or (getattr(b, f"lzk_punkte_{nr}") or "").strip()
+                or getattr(b, f"lzk_ergebnis_{nr}")
+                or _alte_note_in(getattr(b, f"lzk_bem_{nr}")))
 
 
 def bausteinarbeit_in_bemerkung(b) -> bool:
@@ -2072,22 +2164,33 @@ def baustein_aus_dict(d: dict) -> Baustein:
         halbjahr=d.get("halbjahr") or "",
         bemerkung=d.get("bemerkung") or "",
     )
-    for nr, felder in ((1, ("lzk_datum_1", "lzk_note_1", "lzk_bem_1", "lzk_ergebnis_1")),
-                       (2, ("lzk_datum_2", "lzk_note_2", "lzk_bem_2", "lzk_ergebnis_2"))):
+    for nr in LZK_NUMMERN:
         lzk = d.get(f"lzk_{nr}") or {}
-        setattr(b, felder[0], _to_date(lzk.get("datum")))
-        setattr(b, felder[1], lzk.get("note") or "")
-        setattr(b, felder[2], lzk.get("bemerkung") or "")
+        setattr(b, f"lzk_datum_{nr}", _to_date(lzk.get("datum")))
+        setattr(b, f"lzk_note_{nr}", lzk.get("note") or "")
+        setattr(b, f"lzk_bem_{nr}", lzk.get("bemerkung") or "")
         # Aeltere Dateien kennen kein Ergebnis; ein unbekannter Wert wird nicht
         # geraten, sondern bleibt leer ("nicht bewertet").
         erg = str(lzk.get("ergebnis") or "")
-        setattr(b, felder[3], erg if erg in LZK_ERGEBNIS_WERTE else "")
+        setattr(b, f"lzk_ergebnis_{nr}", erg if erg in LZK_ERGEBNIS_WERTE else "")
         setattr(b, f"lzk_online_{nr}", _lzk_online_sauber(lzk.get("online")))
         # Unveraendert uebernehmen (auch wenn es keine Zahl ist) - nichts geht verloren.
         setattr(b, f"lzk_punkte_{nr}", str(lzk.get("punkte") if lzk.get("punkte") is not None else ""))
         setattr(b, f"lzk_max_{nr}", str(lzk.get("max_punkte") if lzk.get("max_punkte") is not None else ""))
+    b.lzk_anzahl = _lzk_anzahl_lesen(d.get("lzk_anzahl"))
     bausteinarbeit_in_bemerkung(b)
     return b
+
+
+def _lzk_anzahl_lesen(wert) -> Optional[int]:
+    """Eine LZK-Anzahl aus der Datei: 0 bis LZK_MAX, sonst keine (dann gilt die Vorgabe)."""
+    if isinstance(wert, bool):
+        return None
+    try:
+        n = int(wert)
+    except (TypeError, ValueError):
+        return None
+    return n if n in LZK_ANZAHL_OPTIONEN else None
 
 
 def student_als_dict(s: "Student") -> dict:
@@ -2140,6 +2243,9 @@ class Arbeitsstaende:
     def __init__(self):
         self.students: List[Student] = []
         self.vorlage_bausteine: List[str] = []
+        # Anzahl LZK je Baustein der Vorlage - nur, wo sie von LZK_ANZAHL_STANDARD abweicht.
+        # Gilt fuer jeden Baustein dieses Namens, an dem nichts eigens gewaehlt ist.
+        self.vorlage_lzk: Dict[str, int] = {}
         # Gemerkte Zuordnung online-LZK -> Baustein-Name, je Lerntheke ("lt:<key>")
         # bzw. Thema ("thema:<name>"): {"name": Baustein oder LZK_ZIEL_NIE, "titel": wie online}
         self.lzk_ziele: Dict[str, dict] = {}
@@ -2158,6 +2264,7 @@ class Arbeitsstaende:
             "version": JSON_VERSION,
             "gespeichert_am": date.today().isoformat(),
             "vorlage_bausteine": list(self.vorlage_bausteine),
+            **({"vorlage_lzk_anzahl": dict(self.vorlage_lzk)} if self.vorlage_lzk else {}),
             **({"lzk_ziele": dict(self.lzk_ziele)} if self.lzk_ziele else {}),
             **({"notenspiegel": notenspiegel_als_dict(self.notenspiegel)}
                if notenspiegel_als_dict(self.notenspiegel) else {}),
@@ -2176,6 +2283,9 @@ class Arbeitsstaende:
             warnungen.append(f"Die Datei stammt aus einer neueren Version (v{version}); "
                              f"unbekannte Angaben gehen beim Speichern verloren.")
         self.vorlage_bausteine = [str(n) for n in daten.get("vorlage_bausteine") or []]
+        vorgaben = daten.get("vorlage_lzk_anzahl") if isinstance(daten.get("vorlage_lzk_anzahl"), dict) else {}
+        self.vorlage_lzk = {str(k): n for k, n in ((k, _lzk_anzahl_lesen(v)) for k, v in vorgaben.items())
+                            if n is not None and n != LZK_ANZAHL_STANDARD}
         ziele = daten.get("lzk_ziele") if isinstance(daten.get("lzk_ziele"), dict) else {}
         self.lzk_ziele = {str(k): {"name": str(v.get("name") or ""), "titel": str(v.get("titel") or "")}
                           for k, v in ziele.items() if isinstance(v, dict) and v.get("name")}
@@ -2390,14 +2500,18 @@ class Arbeitsstaende:
         self.students = []
         self.lzk_ziele = {}
         self.vorlage_bausteine = list(standard_bausteine)
+        self.vorlage_lzk = {}
 
     # ------------------------------------------------------------------
     # Fristen-Logik (portiert aus dem ursprünglichen VBA-Makro
     # "NaechstesDatumZuNamenblatt")
     # ------------------------------------------------------------------
-    @staticmethod
-    def berechne_status(student: Student, heute: Optional[date] = None):
-        """Liefert (aktueller_baustein, naechste_deadline_oder_hinweis)."""
+    def berechne_status(self, student: Student, heute: Optional[date] = None):
+        """Liefert (aktueller_baustein, naechste_deadline_oder_hinweis).
+
+        Zaehlt nur die LZK, die der Baustein hat (lzk_anzahl): ohne Termin oder mit
+        geschriebener LZK und ohne Termin fuer die naechste -> "Frist vereinbaren!";
+        ein Baustein mit einer einzigen LZK mahnt also keine zweite an."""
         heute = heute or date.today()
         beste_diff = None
         ziel_datum = None
@@ -2408,16 +2522,19 @@ class Arbeitsstaende:
         for b in student.bausteine:
             if b.status != "In Bearbeitung":
                 continue
-            frist_fehlt = (
-                (not b.lzk_datum_1 and not b.lzk_datum_2)
-                or (b.lzk_datum_1 and b.lzk_note_1 and not b.lzk_datum_2)
+            plaetze = range(1, lzk_anzahl(b, self.vorlage_lzk) + 1)
+            termine = {nr: getattr(b, f"lzk_datum_{nr}") for nr in plaetze}
+            frist_fehlt = bool(termine) and (
+                not any(termine.values())
+                or any(termine[nr] and lzk_erledigt(b, nr) and not termine[nr + 1]
+                       for nr in plaetze if nr + 1 in termine)
             )
             if frist_fehlt and frist_baustein is None:
                 frist_noetig = True
                 frist_baustein = b.name
 
-            for datum, note in ((b.lzk_datum_1, b.lzk_note_1), (b.lzk_datum_2, b.lzk_note_2)):
-                if datum and not note:
+            for nr, datum in termine.items():
+                if datum and not lzk_erledigt(b, nr):
                     diff = abs((datum - heute).days)
                     if beste_diff is None or diff < beste_diff:
                         beste_diff = diff
