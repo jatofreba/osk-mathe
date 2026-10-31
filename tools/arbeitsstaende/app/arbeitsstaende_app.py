@@ -28,6 +28,9 @@ from arbeitsstaende_data import (
     verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_optionen, lzk_ziel_nach_name, lzk_ziel_text,
     lzk_zuordnen, lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
     lzk_import_status,
+    Notenspiegel, NOTEN, NOTENSPIEGEL_STANDARD, NOTEN_RUNDEN, NOTEN_RUNDEN_STANDARD,
+    notenspiegel_werte, notenspiegel_tabelle, lzk_auswertung, lzk_auswertung_text,
+    baustein_auswertung, noten_neu_berechnen, zahl_lesen, zahl_text, prozent_text,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -64,10 +67,12 @@ def _einzeilig(text):
     return " / ".join(zeilen)
 
 
-def _note_mit_ergebnis(note, ergebnis):
-    """Freie LZK-Note und Ergebnis (✗ / ✓ / 🔥…) in einer Zelle."""
+def _note_mit_ergebnis(note, ergebnis, prozent=""):
+    """Freie LZK-Note, Prozent aus den Punkten und Ergebnis (✗ / ✓ / 🔥…) in einer Zelle."""
     symbol = LZK_ERGEBNIS_SYMBOL.get(ergebnis or "", "")
     note = (note or "").strip()
+    if prozent:
+        note = f"{note} ({prozent})" if note else prozent
     if not symbol:
         return note
     return f"{note} {symbol}" if note else symbol
@@ -172,9 +177,11 @@ class BerichtFenster(tk.Toplevel):
 class BausteinDialog(tk.Toplevel):
     """Formular zum Anlegen/Bearbeiten eines einzelnen Bausteins."""
 
-    def __init__(self, parent, baustein: Baustein = None, vorlage_namen=None):
+    def __init__(self, parent, baustein: Baustein = None, vorlage_namen=None, notenspiegel=None):
         super().__init__(parent)
         self.title("Baustein bearbeiten" if baustein else "Baustein hinzufügen")
+        # Notenspiegel der Arbeitsdatei: aus den Punkten werden Prozent und Note.
+        self._notenspiegel = notenspiegel or Notenspiegel()
         self.result = None
         self.transient(parent)
         self.grab_set()
@@ -201,15 +208,23 @@ class BausteinDialog(tk.Toplevel):
             # Die Bemerkung steht dort, wo frueher "Bausteinarbeit" stand.
             ("Bemerkung", "bemerkung", "text", 10),
             ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
-            ("LZK-Note 1", "lzk_note_1", "entry", None),
+            ("LZK-Note 1 (intern)", "lzk_note_1", "entry", None),
             ("LZK-Ergebnis 1", "lzk_ergebnis_1", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
+            # Unter der Bewertung: erreichte und maximale Punkte in EINER Zeile, daneben
+            # Prozent und Note nach dem Notenspiegel. Die Note fuellt das Feld
+            # "LZK-Note" (intern). Hochgeladen wird davon nichts - nur die Flammen.
+            # Die vierte Spalte ist hier die Nummer der LZK.
+            ("Punkte 1 (erreicht von max.)", "lzk_punkte_1", "punkte", 1),
+            ("", "lzk_max_1", "punkte_max", 1),
             # Mehrzeilig: in eine LZK-Bemerkung gehoeren oft mehrere Punkte
             # ("Bruchrechnen sicher / Textaufgaben ueben"), und die passten nicht
             # in eine Zeile. Die vierte Spalte ist bei "text" die Zeilenzahl.
             ("Bemerkung zur LZK 1", "lzk_bem_1", "text", 3),
             ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
-            ("LZK-Note 2", "lzk_note_2", "entry", None),
+            ("LZK-Note 2 (intern)", "lzk_note_2", "entry", None),
             ("LZK-Ergebnis 2", "lzk_ergebnis_2", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
+            ("Punkte 2 (erreicht von max.)", "lzk_punkte_2", "punkte", 2),
+            ("", "lzk_max_2", "punkte_max", 2),
             ("Bemerkung zur LZK 2", "lzk_bem_2", "text", 3),
         ]
 
@@ -233,9 +248,13 @@ class BausteinDialog(tk.Toplevel):
         self._leinwand.create_window((0, 0), window=form, anchor="nw")
 
         self.vars = {}
+        self._punkte_info = {}
+        punkte_rahmen = None
         row = 0
         for label, feld, art, optionen in felder:
-            ttk.Label(form, text=label).grid(row=row, column=0, sticky="ne", padx=8, pady=4)
+            # "punkte_max" steht in derselben Zeile wie "punkte" - ohne eigene Beschriftung.
+            if art != "punkte_max":
+                ttk.Label(form, text=label).grid(row=row, column=0, sticky="ne", padx=8, pady=4)
             wert = bemerkung if feld == "bemerkung" else getattr(b, feld)
             if feld in ("lzk_datum_1", "lzk_datum_2"):
                 wert = fmt_datum(wert)
@@ -264,12 +283,36 @@ class BausteinDialog(tk.Toplevel):
                 # Fenster und loeste "Uebernehmen" aus -- mehrzeilig tippen war unmoeglich.
                 w.bind("<Return>", self._zeilenumbruch)
                 var = w  # Text-Widget selbst als "var" merken
+            elif art == "punkte":
+                punkte_rahmen = ttk.Frame(form)
+                punkte_rahmen.grid(row=row, column=1, sticky="w", padx=8, pady=4)
+                var = tk.StringVar(value=wert or "")
+                ttk.Entry(punkte_rahmen, textvariable=var, width=7).pack(side="left")
+            elif art == "punkte_max":
+                ttk.Label(punkte_rahmen, text="von").pack(side="left", padx=4)
+                var = tk.StringVar(value=wert or "")
+                ttk.Entry(punkte_rahmen, textvariable=var, width=7).pack(side="left")
+                info = ttk.Label(punkte_rahmen, text="", foreground="#555")
+                info.pack(side="left", padx=(8, 0))
+                self._punkte_info[optionen] = info
             else:
                 var = tk.StringVar(value=wert)
                 w = ttk.Entry(form, textvariable=var, width=30)
                 w.grid(row=row, column=1, sticky="w", padx=8, pady=4)
             self.vars[feld] = var
-            row += 1
+            if art != "punkte":
+                row += 1
+
+        # Punkte -> Prozent und Note. Die Note wandert ins Feld "LZK-Note" - aber nur,
+        # solange dort nichts anderes steht als die zuletzt berechnete (oder nichts):
+        # eine von Hand eingetragene Note bleibt stehen.
+        self._note_auto = {}
+        for nr in (1, 2):
+            a = baustein_auswertung(b, nr, self._notenspiegel)
+            self._note_auto[nr] = a["note"] if a else ""
+            for feld in (f"lzk_punkte_{nr}", f"lzk_max_{nr}"):
+                self.vars[feld].trace_add("write", lambda *_, nr=nr: self._punkte_geaendert(nr))
+            self._punkte_geaendert(nr, note_setzen=False)
 
         # Wechselt der Status auf "In Bearbeitung" oder "Abgeschlossen", gehoert der
         # Baustein ins laufende Halbjahr - sofort sichtbar im Feld, damit man es vor
@@ -317,6 +360,31 @@ class BausteinDialog(tk.Toplevel):
         event.widget.insert("insert", "\n")
         return "break"
 
+    def _punkte_geaendert(self, nr, note_setzen=True):
+        """Prozent und Note neben den Punkten zeigen und die Note uebernehmen."""
+        punkte = self.vars[f"lzk_punkte_{nr}"].get()
+        max_punkte = self.vars[f"lzk_max_{nr}"].get()
+        a = lzk_auswertung(punkte, max_punkte, self._notenspiegel)
+        if a:
+            text = lzk_auswertung_text(a)
+        else:
+            try:
+                m = zahl_lesen(max_punkte)
+                zahl_lesen(punkte)
+                text = "maximal muss mehr als 0 sein" if m == 0 else ""
+            except ValueError:
+                text = "bitte Zahlen eintragen, z. B. 18,5"
+        self._punkte_info[nr].config(text=text)
+        if not note_setzen:
+            return
+        note_var = self.vars[f"lzk_note_{nr}"]
+        aktuell = note_var.get().strip()
+        if aktuell in ("", self._note_auto.get(nr, "")):
+            neu = a["note"] if a else ""
+            if neu != aktuell:
+                note_var.set(neu)
+            self._note_auto[nr] = neu
+
     def _status_geaendert(self, *_):
         feld, self._hj_auto = hj_nach_statuswechsel(
             self._status_vorher, self.vars["status"].get(), self._hj_vorher,
@@ -339,6 +407,25 @@ class BausteinDialog(tk.Toplevel):
 
             werte["lzk_datum_1"] = parse_datum(werte["lzk_datum_1"])
             werte["lzk_datum_2"] = parse_datum(werte["lzk_datum_2"])
+            # Punkte: Zahlen (auch 18,5), einheitlich geschrieben. Mehr als das Maximum
+            # ist meist ein Tippfehler (185 statt 18,5) - Zusatzpunkte gibt es aber.
+            for nr in (1, 2):
+                zahlen = {}
+                for feld, wort in ((f"lzk_punkte_{nr}", "erreichte Punkte"), (f"lzk_max_{nr}", "maximale Punkte")):
+                    try:
+                        zahlen[feld] = zahl_lesen(werte.get(feld, ""))
+                    except ValueError:
+                        raise ValueError(f"LZK {nr}, {wort}: bitte eine Zahl eintragen (z. B. 18,5).")
+                    if feld in werte:
+                        werte[feld] = zahl_text(zahlen[feld])
+                p, m = zahlen[f"lzk_punkte_{nr}"], zahlen[f"lzk_max_{nr}"]
+                if m is not None and m <= 0:
+                    raise ValueError(f"LZK {nr}: die maximale Punktzahl muss größer als 0 sein.")
+                if p is not None and m is not None and p > m and not messagebox.askyesno(
+                        "Mehr Punkte als möglich?",
+                        f"LZK {nr}: {zahl_text(p)} von {zahl_text(m)} Punkten – trotzdem übernehmen?",
+                        parent=self):
+                    return
             # Angezeigt wird der Text, gespeichert der Wert.
             wert_je_text = {t: w for w, t in LZK_ERGEBNIS_TEXT.items()}
             for feld in ("lzk_ergebnis_1", "lzk_ergebnis_2"):
@@ -354,6 +441,114 @@ class BausteinDialog(tk.Toplevel):
             self.destroy()
         except ValueError as e:
             messagebox.showerror("Ungültige Eingabe", str(e), parent=self)
+
+
+class NotenspiegelDialog(tk.Toplevel):
+    """Einstellungen -> Notenspiegel für LZK: Prozent-Untergrenze je Note, daneben die
+    Punktgrenzen fuer eine Beispiel-Gesamtpunktzahl (wie die Excel-Tabelle).
+    `result` ist danach ein Notenspiegel oder None (abgebrochen)."""
+
+    def __init__(self, parent, notenspiegel=None, max_punkte="22"):
+        super().__init__(parent)
+        self.title("Notenspiegel für LZK")
+        self.resizable(False, False)
+        self.result = None
+        self.transient(parent)
+        self.grab_set()
+        sp = notenspiegel or Notenspiegel()
+
+        ttk.Label(self, text=(
+            "Aus erreichten und maximalen Punkten einer LZK rechnet die Anwendung Prozent und\n"
+            "Note aus. Die Note ist nur eine interne Notiz: Punkte, Prozent und Note werden nie\n"
+            "hochgeladen – zum Server gehen weiterhin nur die Flammen. Gilt für diese Arbeitsdatei."),
+            justify="left", foreground="#555").grid(row=0, column=0, columnspan=3, sticky="w", padx=10, pady=(10, 8))
+
+        oben = ttk.Frame(self)
+        oben.grid(row=1, column=0, columnspan=3, sticky="w", padx=10)
+        ttk.Label(oben, text="Gesamtpunktzahl (Beispiel):").grid(row=0, column=0, sticky="e")
+        self.max_var = tk.StringVar(value=max_punkte)
+        ttk.Entry(oben, textvariable=self.max_var, width=7).grid(row=0, column=1, sticky="w", padx=6)
+        ttk.Label(oben, text="Punktgrenzen runden:").grid(row=1, column=0, sticky="e", pady=(4, 0))
+        self._runden_je_text = {t: k for k, t in NOTEN_RUNDEN.items()}
+        self.runden_var = tk.StringVar(value=NOTEN_RUNDEN.get(sp.runden, NOTEN_RUNDEN[NOTEN_RUNDEN_STANDARD]))
+        ttk.Combobox(oben, textvariable=self.runden_var, values=list(NOTEN_RUNDEN.values()),
+                     state="readonly", width=40).grid(row=1, column=1, sticky="w", padx=6, pady=(4, 0))
+
+        tabelle = ttk.Frame(self)
+        tabelle.grid(row=2, column=0, columnspan=3, sticky="w", padx=10, pady=(10, 0))
+        for spalte, text in enumerate(("Note", "Prozent-Untergrenze", "Punkte-Untergrenze")):
+            ttk.Label(tabelle, text=text, font=("", 10, "bold")).grid(row=0, column=spalte, sticky="w", padx=6)
+        self.grenzen_vars = {}
+        self._punkte_labels = {}
+        for i, note in enumerate(NOTEN, start=1):
+            ttk.Label(tabelle, text=note).grid(row=i, column=0, sticky="w", padx=6, pady=1)
+            var = tk.StringVar(value=str(sp.grenzen.get(note, NOTENSPIEGEL_STANDARD[note])))
+            # Die 6 beginnt immer bei 0 - sonst bekaeme ein Ergebnis gar keine Note.
+            e = ttk.Entry(tabelle, textvariable=var, width=10, state="disabled" if note == NOTEN[-1] else "normal")
+            e.grid(row=i, column=1, sticky="w", padx=6, pady=1)
+            self.grenzen_vars[note] = var
+            lbl = ttk.Label(tabelle, text="", width=10)
+            lbl.grid(row=i, column=2, sticky="w", padx=6, pady=1)
+            self._punkte_labels[note] = lbl
+            var.trace_add("write", lambda *_: self._vorschau())
+        self.max_var.trace_add("write", lambda *_: self._vorschau())
+        self.runden_var.trace_add("write", lambda *_: self._vorschau())
+
+        self.fehler = ttk.Label(self, text="", foreground="#b3261e")
+        self.fehler.grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=(6, 0))
+
+        btns = ttk.Frame(self)
+        btns.grid(row=4, column=0, columnspan=3, pady=10)
+        ttk.Button(btns, text="Standard wiederherstellen", command=self._standard).pack(side="left", padx=4)
+        ttk.Button(btns, text="Übernehmen", command=self._uebernehmen).pack(side="left", padx=4)
+        ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="left", padx=4)
+        self.bind("<Return>", lambda e: self._uebernehmen())
+        self.bind("<Escape>", lambda e: self.destroy())
+        self._vorschau()
+        fenster_ins_bild(self, parent)
+
+    def _spiegel(self) -> Notenspiegel:
+        return Notenspiegel(grenzen={n: v.get().strip() for n, v in self.grenzen_vars.items()},
+                            runden=self._runden_je_text.get(self.runden_var.get(), NOTEN_RUNDEN_STANDARD))
+
+    def _vorschau(self):
+        """Punkte-Untergrenzen fuer die Beispiel-Punktzahl - oder der Fehler."""
+        sp = self._spiegel()
+        try:
+            tabelle = notenspiegel_tabelle(sp, 1)   # prueft die Grenzen
+            fehler = ""
+        except ValueError as e:
+            tabelle, fehler = None, str(e)
+        # Die Beispiel-Punktzahl ist nur fuer die Vorschau - sie wird nicht gespeichert.
+        try:
+            m = zahl_lesen(self.max_var.get())
+        except ValueError:
+            m = None
+        if tabelle and not (m and m > 0):
+            fehler = "Gesamtpunktzahl (Beispiel): bitte eine Zahl größer als 0 – nur für die Vorschau."
+        if tabelle and m and m > 0:
+            for note, _grenze, punkte in notenspiegel_tabelle(sp, m):
+                text = zahl_text(punkte) if sp.runden == "genau" else f"{float(punkte):.1f}".replace(".", ",")
+                self._punkte_labels[note].config(text=text)
+        else:
+            for lbl in self._punkte_labels.values():
+                lbl.config(text="")
+        self.fehler.config(text=fehler)
+
+    def _standard(self):
+        for note, var in self.grenzen_vars.items():
+            var.set(NOTENSPIEGEL_STANDARD[note])
+        self.runden_var.set(NOTEN_RUNDEN[NOTEN_RUNDEN_STANDARD])
+
+    def _uebernehmen(self):
+        sp = self._spiegel()
+        try:
+            notenspiegel_werte(sp)
+        except ValueError as e:
+            messagebox.showerror("Notenspiegel unvollständig", str(e), parent=self)
+            return
+        self.result = sp
+        self.destroy()
 
 
 class SchuelerDialog(tk.Toplevel):
@@ -1562,6 +1757,10 @@ class App(tk.Tk):
                                     command=self.aliasse_ergaenzen)
         menu.add_cascade(label="Bearbeiten", menu=bearbeiten_menu)
 
+        einstellungen_menu = tk.Menu(menu, tearoff=0)
+        einstellungen_menu.add_command(label="Notenspiegel für LZK…", command=self.notenspiegel_bearbeiten)
+        menu.add_cascade(label="Einstellungen", menu=einstellungen_menu)
+
         lerntheke_menu = tk.Menu(menu, tearoff=0)
         # Der Normalweg: EIN Schritt holt alles und zeigt vor dem Schreiben, was
         # hinein- und hinausgeht. Die Einzelschritte bleiben fuer Sonderfaelle.
@@ -1754,7 +1953,7 @@ class App(tk.Tk):
         self._bausteine_umgekehrt = False
         for key, text, width in [
             ("status", "Status", 110),
-            ("lzk1", "LZK 1", 90), ("note1", "Note", 80),
+            ("lzk1", "LZK 1", 90), ("note1", "Note", 105),
             ("lzk2", "LZK 2", 90), ("note2", "Note", 80),
             ("halbjahr", "HJ", 65), ("bemerkung", "Bemerkung", 320),
         ]:
@@ -2516,15 +2715,22 @@ class App(tk.Tk):
             self.tabelle.insert("", "end", iid=str(i), text=b.name,
                                  values=(b.status,
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_1), b.lzk_bem_1),
-                                         _note_mit_ergebnis(b.lzk_note_1, b.lzk_ergebnis_1),
+                                         _note_mit_ergebnis(b.lzk_note_1, b.lzk_ergebnis_1,
+                                                            self._prozent_zelle(b, 1)),
                                          _mit_bemerkung(fmt_datum(b.lzk_datum_2), b.lzk_bem_2),
-                                         _note_mit_ergebnis(b.lzk_note_2, b.lzk_ergebnis_2),
+                                         _note_mit_ergebnis(b.lzk_note_2, b.lzk_ergebnis_2,
+                                                            self._prozent_zelle(b, 2)),
                                          b.halbjahr, _einzeilig(b.bemerkung)),
                                  tags=tuple(tags))
         self._talks_anzeigen()
         # Die Tabelle wurde gerade neu gefuellt, also ist keine Zeile mehr markiert:
         # Bearbeiten/Entfernen muessen wieder ausgrauen.
         self._knoepfe_aktualisieren()
+
+    def _prozent_zelle(self, b: Baustein, nr: int) -> str:
+        """Prozent aus den Punkten fuer die Tabelle ("" ohne Punkte)."""
+        a = baustein_auswertung(b, nr, self.az.notenspiegel)
+        return prozent_text(a["prozent"]) if a else ""
 
     def _baustein_key(self, b: Baustein, spalte):
         """Sortierschluessel je Spalte. Leere Werte ans Ende."""
@@ -3912,11 +4118,28 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
     # Baustein-Aktionen
     # ------------------------------------------------------------------
+    def notenspiegel_bearbeiten(self):
+        """Einstellungen -> Notenspiegel für LZK. Berechnete Noten folgen dem neuen
+        Spiegel, von Hand eingetragene bleiben (noten_neu_berechnen)."""
+        alt = self.az.notenspiegel
+        dlg = NotenspiegelDialog(self, alt)
+        self.wait_window(dlg)
+        if dlg.result is None or dlg.result == alt:
+            return
+        self.az.notenspiegel = dlg.result
+        geaendert = noten_neu_berechnen(self.az.students, alt, dlg.result)
+        self._markiere_ungespeichert()
+        if self.aktueller_schueler:
+            self._detail_anzeigen()
+        self._melde("Notenspiegel gespeichert" + (f" – {geaendert} berechnete LZK-Note(n) angepasst."
+                                                   if geaendert else "."))
+
     def baustein_hinzufuegen(self):
         if not self.aktueller_schueler:
             messagebox.showinfo("Keine Auswahl", "Bitte zuerst eine Person auswählen.")
             return
-        dlg = BausteinDialog(self, vorlage_namen=self.az.vorlage_bausteine)
+        dlg = BausteinDialog(self, vorlage_namen=self.az.vorlage_bausteine,
+                             notenspiegel=self.az.notenspiegel)
         self.wait_window(dlg)
         if dlg.result is None:
             return
@@ -3934,7 +4157,8 @@ class App(tk.Tk):
             return
         idx = int(auswahl[0])
         alt = self.aktueller_schueler.bausteine[idx]
-        dlg = BausteinDialog(self, baustein=alt, vorlage_namen=self.az.vorlage_bausteine)
+        dlg = BausteinDialog(self, baustein=alt, vorlage_namen=self.az.vorlage_bausteine,
+                             notenspiegel=self.az.notenspiegel)
         self.wait_window(dlg)
         if dlg.result is None:
             return

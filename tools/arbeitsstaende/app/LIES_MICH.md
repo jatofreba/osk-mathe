@@ -266,6 +266,28 @@ zuordnen…* -- jeweils in der Richtung, die du wählst -- und *Aliasse auf dem
 Server umbenennen…*). Alles andere -- Abrufen der Ergebnisse, Aliasse,
 Halbjahresübersicht -- liest nur.
 
+## Notenspiegel für LZK (Punkte → Prozent → Note)
+
+Im Baustein-Formular steht unter jedem **LZK-Ergebnis** die Zeile
+**„Punkte (erreicht von max.)“**. Trägst du z. B. `18,5` von `22` ein, steht daneben
+sofort `= 84,1 % → Note 1-`, und die Note landet im Feld **„LZK-Note (intern)“**. Ändern
+sich die Punkte, zieht die berechnete Note nach. Hast du dort selbst etwas anderes
+eingetragen (z. B. „best“ oder „2 (Nachschreiben)“), bleibt das stehen. Die Tabelle
+zeigt die Note mit Prozent, z. B. `1- (84,1 %) 🔥🔥`.
+
+**Nur intern:** Punkte, Prozent und Note werden **nie hochgeladen**. Zum Server gehen
+weiterhin nur Termin und Ergebnis (Flammen). Die Flammen trägst du wie bisher selbst
+ein, die Punkte setzen sie nicht.
+
+**Einstellungen → Notenspiegel für LZK…** legt die Prozent-Untergrenze je Note fest.
+Voreingestellt ist die Tabelle „Notenverteilung bei 40 %“ (1+ ab 95 %, 4- ab 40 %,
+5+ ab 33 1/3 %, 6 ab 0 %). Die Punktgrenzen werden wie in der Excel-Tabelle auf halbe
+Punkte gerundet (85 % von 22 = 18,7 → 18,5), und die Note richtet sich nach dieser
+Punktgrenze. Wahlweise rundest du auf ganze Punkte oder gar nicht (dann genau nach
+Prozent). Die Vorschau zeigt die Punktgrenzen für eine Beispiel-Gesamtpunktzahl. Der
+Notenspiegel gilt für die Arbeitsdatei und wird mit ihr gespeichert. Änderst du ihn,
+werden berechnete Noten neu berechnet; selbst eingetragene bleiben.
+
 ## Halbjahres-Zusammenfassung
 
 Der Knopf **„Zusammenfassung…“** oben rechts bei einer Person zeigt alles aus einem

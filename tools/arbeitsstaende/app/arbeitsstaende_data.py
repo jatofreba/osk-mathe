@@ -9,9 +9,12 @@ testen (siehe test_arbeitsstaende_data.py).
 from __future__ import annotations
 
 import json
+import math
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from fractions import Fraction
 from typing import Dict, List, Optional
 
 from openpyxl import Workbook, load_workbook
@@ -724,7 +727,7 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None):
     else:
         b = ziel[1]
     alt_d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
-    alt = {f: (getattr(b, f"lzk_{f}_{nummer}") or "") for f in ("note", "bem", "ergebnis")}
+    alt = {f: (getattr(b, f"lzk_{f}_{nummer}") or "") for f in ("note", "bem", "ergebnis", "punkte", "max")}
     # Eine ANDERE LZK stand hier, wenn ihr Termin in ein anderes Halbjahr faellt oder
     # sie ein Ergebnis ohne Termin hat. Derselbe Termin oder ein verschobener im selben
     # Halbjahr ist dieselbe LZK: Note, Bemerkung und Ergebnis bleiben dann stehen.
@@ -734,6 +737,8 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None):
         teile = [f"LZK {nummer} vorher: {_fmt_kurz(alt_d) or 'ohne Datum'}"]
         if alt["note"].strip():
             teile.append(f"Note {alt['note'].strip()}")
+        if alt["punkte"].strip() or alt["max"].strip():
+            teile.append(f"{alt['punkte'].strip() or '?'}/{alt['max'].strip() or '?'} Punkte")
         if alt["ergebnis"]:
             teile.append(LZK_ERGEBNIS_TEXT.get(alt["ergebnis"], alt["ergebnis"]))
         if alt["bem"].strip():
@@ -750,7 +755,7 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None):
         for app in student.bausteine:
             if not _ist_app_zeile(app) or _titel_norm(app.name) != _titel_norm(z["titel"]):
                 continue
-            for f in ("note", "bem", "ergebnis"):
+            for f in ("note", "bem", "ergebnis", "punkte", "max"):
                 wert = getattr(app, f"lzk_{f}_{nummer}") or ""
                 if wert and not getattr(b, f"lzk_{f}_{nummer}"):
                     setattr(b, f"lzk_{f}_{nummer}", wert)
@@ -779,6 +784,7 @@ def lzk_falsches_halbjahr(student) -> list:
             link = getattr(b, f"lzk_online_{nummer}", None)
             d = _to_date((link or {}).get("datum"))
             spuren = ((getattr(b, f"lzk_note_{nummer}") or "").strip()
+                      or (getattr(b, f"lzk_punkte_{nummer}", "") or "").strip()
                       or (getattr(b, f"lzk_ergebnis_{nummer}") or "") not in ("", (link or {}).get("ergebnis") or ""))
             if d and halbjahr_fuer_datum(d) != b.halbjahr and spuren:
                 treffer.append({"baustein": b, "nummer": nummer, "datum": d,
@@ -809,7 +815,8 @@ def lzk_umziehen(student, t: dict) -> str:
     lzk_import_status(ziel, d)
     setattr(alt, f"lzk_datum_{nummer}", None)
     setattr(alt, f"lzk_online_{nummer}", None)
-    rest = any((getattr(alt, f"lzk_{f}_{nummer}") or "").strip() for f in ("note", "bem", "ergebnis"))
+    rest = any((getattr(alt, f"lzk_{f}_{nummer}") or "").strip()
+               for f in ("note", "bem", "ergebnis", "punkte", "max"))
     if rest:
         alt.bemerkung = ((alt.bemerkung or "").rstrip() + "\n" if (alt.bemerkung or "").strip() else "") \
             + (f"LZK {nummer}: die LZK vom {_fmt_kurz(d)} gehörte ins Halbjahr {hj} und steht jetzt "
@@ -1727,6 +1734,194 @@ def hj_auswahl(student) -> List[str]:
     return halbjahr_optionen(sorted(x for x in eigene if x))
 
 
+# ---------------------------------------------------------------------------
+# Notenspiegel fuer LZK (Nutzerwunsch 2026-10-31)
+#
+# Je Note die Prozent-Untergrenze; aus erreichten und maximalen Punkten einer LZK
+# ergeben sich Prozent und Note. Die Note ist eine INTERNE Notiz (sie landet im
+# Feld "LZK-Note"): Punkte, Prozent und Note werden nie hochgeladen - zum Server
+# gehen weiterhin nur Termin und Ergebnis (Flammen). Der Notenspiegel steht in der
+# Arbeitsdatei (JSON "notenspiegel"), nur wenn er vom Standard abweicht.
+# ---------------------------------------------------------------------------
+NOTEN = ["1+", "1", "1-", "2+", "2", "2-", "3+", "3", "3-", "4+", "4", "4-", "5+", "5", "5-", "6"]
+# Standard: die Tabelle "Notenverteilung bei 40%" (4- ab 40 Prozent).
+NOTENSPIEGEL_STANDARD = {
+    "1+": "95", "1": "90", "1-": "85", "2+": "80", "2": "75", "2-": "70",
+    "3+": "65", "3": "60", "3-": "55", "4+": "50", "4": "45", "4-": "40",
+    "5+": "33 1/3", "5": "26 2/3", "5-": "20", "6": "0",
+}
+# Wie die Punkte-Untergrenze aus der Prozent-Untergrenze entsteht. "halb" rundet
+# wie die Excel-Tabelle auf halbe Punkte (85 % von 22 = 18,7 -> 18,5), und die
+# Note richtet sich nach dieser Punktgrenze - so kommt dieselbe Note heraus wie
+# beim Nachschlagen in der Tabelle.
+NOTEN_RUNDEN = {
+    "halb": "auf halbe Punkte (wie in der Excel-Tabelle)",
+    "ganz": "auf ganze Punkte",
+    "genau": "nicht runden – genau nach Prozent",
+}
+NOTEN_RUNDEN_STANDARD = "halb"
+
+
+@dataclass
+class Notenspiegel:
+    grenzen: Dict[str, str] = field(default_factory=lambda: dict(NOTENSPIEGEL_STANDARD))
+    runden: str = NOTEN_RUNDEN_STANDARD
+
+
+def zahl_lesen(text) -> Optional[Fraction]:
+    """Punkte oder Prozent als exakter Bruch: "18,5", "18.5", "22", "33 1/3", "2/3".
+    Leer -> None; alles andere (auch negative Zahlen) -> ValueError."""
+    t = str(text if text is not None else "").replace("%", "").strip().replace(",", ".")
+    if not t:
+        return None
+    m = re.fullmatch(r"(\d+)\s+(\d+)\s*/\s*(\d+)", t)
+    if m:
+        if int(m.group(3)) == 0:
+            raise ValueError(f"„{text}“ ist keine Zahl.")
+        return Fraction(int(m.group(1))) + Fraction(int(m.group(2)), int(m.group(3)))
+    m = re.fullmatch(r"(\d+)\s*/\s*(\d+)", t)
+    if m:
+        if int(m.group(2)) == 0:
+            raise ValueError(f"„{text}“ ist keine Zahl.")
+        return Fraction(int(m.group(1)), int(m.group(2)))
+    if re.fullmatch(r"\d+(\.\d+)?|\.\d+", t):
+        return Fraction(t)
+    raise ValueError(f"„{text}“ ist keine Zahl.")
+
+
+def _runde(wert: Fraction, schritt: Fraction) -> Fraction:
+    """Kaufmaennisch auf ein Vielfaches von `schritt` (x,5 aufwaerts wie in Excel)."""
+    return Fraction(math.floor(wert / schritt + Fraction(1, 2))) * schritt
+
+
+def zahl_text(wert, stellen: int = 2) -> str:
+    """Bruch -> deutsche Schreibweise mit hoechstens `stellen` Nachkommastellen
+    (18,5 / 22 / 7,33). None -> ""."""
+    if wert is None:
+        return ""
+    wert = _runde(Fraction(wert), Fraction(1, 10 ** stellen))
+    if wert.denominator == 1:
+        return str(wert.numerator)
+    text = f"{float(wert):.{stellen}f}".rstrip("0").rstrip(".")
+    return text.replace(".", ",")
+
+
+def prozent_text(wert) -> str:
+    """84,1 % (eine Nachkommastelle, ohne ",0")."""
+    return "" if wert is None else f"{zahl_text(wert, 1)} %"
+
+
+def notenspiegel_werte(sp: Notenspiegel) -> list:
+    """[(Note, Prozent-Untergrenze als Bruch)], beste Note zuerst. Prueft dabei:
+    jede Note hat eine Grenze zwischen 0 und 100, die Grenzen fallen streng, und
+    die 6 beginnt bei 0 (sonst bekaeme ein Ergebnis keine Note). -> ValueError."""
+    werte = []
+    for note in NOTEN:
+        roh = (sp.grenzen or {}).get(note, "")
+        try:
+            grenze = zahl_lesen(roh)
+        except ValueError:
+            raise ValueError(f"Note {note}: „{roh}“ ist keine Zahl.")
+        if grenze is None:
+            raise ValueError(f"Note {note}: bitte eine Prozent-Untergrenze eintragen.")
+        if grenze > 100:
+            raise ValueError(f"Note {note}: höchstens 100 %.")
+        if werte and grenze >= werte[-1][1]:
+            raise ValueError(f"Note {note}: die Grenze muss unter der von {werte[-1][0]} liegen.")
+        werte.append((note, grenze))
+    if werte[-1][1] != 0:
+        raise ValueError("Die 6 muss bei 0 % beginnen.")
+    return werte
+
+
+def notenspiegel_gueltig(sp) -> bool:
+    try:
+        notenspiegel_werte(sp)
+        return sp.runden in NOTEN_RUNDEN
+    except (ValueError, AttributeError):
+        return False
+
+
+def punktgrenze(prozent: Fraction, max_punkte: Fraction, runden: str = NOTEN_RUNDEN_STANDARD) -> Fraction:
+    """Punkte-Untergrenze einer Note bei `max_punkte` Punkten."""
+    genau = Fraction(prozent) * Fraction(max_punkte) / 100
+    if runden == "halb":
+        return _runde(genau, Fraction(1, 2))
+    if runden == "ganz":
+        return _runde(genau, Fraction(1))
+    return genau
+
+
+def notenspiegel_tabelle(sp: Notenspiegel, max_punkte) -> list:
+    """Die Tabelle wie in der Excel-Mappe: [(Note, Prozent-Untergrenze, Punkte-Untergrenze)]."""
+    return [(note, grenze, punktgrenze(grenze, max_punkte, sp.runden))
+            for note, grenze in notenspiegel_werte(sp)]
+
+
+def lzk_auswertung(punkte, max_punkte, sp: Optional[Notenspiegel] = None) -> Optional[dict]:
+    """Erreichte und maximale Punkte -> {"punkte", "max", "prozent", "note"} - oder None,
+    solange etwas fehlt oder keine Zahl ist. Die Note ist die beste, deren
+    Punkte-Untergrenze erreicht ist."""
+    sp = sp if sp is not None and notenspiegel_gueltig(sp) else Notenspiegel()
+    try:
+        p, m = zahl_lesen(punkte), zahl_lesen(max_punkte)
+    except ValueError:
+        return None
+    if p is None or m is None or m <= 0:
+        return None
+    note = NOTEN[-1]
+    for n, grenze in notenspiegel_werte(sp):
+        if p >= punktgrenze(grenze, m, sp.runden):
+            note = n
+            break
+    return {"punkte": p, "max": m, "prozent": p / m * 100, "note": note}
+
+
+def lzk_auswertung_text(a: Optional[dict]) -> str:
+    """'= 84,1 % → Note 1-' (leer ohne Auswertung)."""
+    return f"= {prozent_text(a['prozent'])} → Note {a['note']}" if a else ""
+
+
+def baustein_auswertung(b, nummer: int, sp: Optional[Notenspiegel] = None) -> Optional[dict]:
+    return lzk_auswertung(getattr(b, f"lzk_punkte_{nummer}", ""), getattr(b, f"lzk_max_{nummer}", ""), sp)
+
+
+def noten_neu_berechnen(students, alt: Notenspiegel, neu: Notenspiegel) -> int:
+    """Nach einer Aenderung des Notenspiegels: jede LZK-Note, die genau der mit dem
+    ALTEN Spiegel berechneten entspricht, folgt dem neuen. Von Hand eingetragene
+    Noten (etwas anderes als die berechnete) bleiben stehen. -> Anzahl geaendert."""
+    geaendert = 0
+    for st in students:
+        for b in st.bausteine:
+            for nr in (1, 2):
+                vorher, nachher = baustein_auswertung(b, nr, alt), baustein_auswertung(b, nr, neu)
+                note = (getattr(b, f"lzk_note_{nr}") or "").strip()
+                if vorher and nachher and note == vorher["note"] and note != nachher["note"]:
+                    setattr(b, f"lzk_note_{nr}", nachher["note"])
+                    geaendert += 1
+    return geaendert
+
+
+def notenspiegel_als_dict(sp: Notenspiegel) -> Optional[dict]:
+    """Fuer die Arbeitsdatei - None, solange es der Standard ist."""
+    if sp is None or (dict(sp.grenzen) == NOTENSPIEGEL_STANDARD and sp.runden == NOTEN_RUNDEN_STANDARD):
+        return None
+    return {"grenzen": {n: str(sp.grenzen.get(n, "")) for n in NOTEN}, "runden": sp.runden}
+
+
+def notenspiegel_aus_dict(d) -> Notenspiegel:
+    """Aus der Arbeitsdatei. Fehlt etwas oder passt es nicht, gilt der Standard
+    (ValueError, damit das Laden es melden kann)."""
+    if not d:
+        return Notenspiegel()
+    grenzen = d.get("grenzen") if isinstance(d, dict) else None
+    sp = Notenspiegel(grenzen={n: str((grenzen or {}).get(n, "")) for n in NOTEN},
+                      runden=str((d or {}).get("runden") or NOTEN_RUNDEN_STANDARD))
+    if not notenspiegel_gueltig(sp):
+        raise ValueError("Der Notenspiegel in der Datei ist unvollständig – es gilt der Standard.")
+    return sp
+
+
 @dataclass
 class Baustein:
     name: str = ""
@@ -1751,6 +1946,12 @@ class Baustein:
     # Seite seither geaendert wurde (siehe lt_freie_lzk_senden).
     lzk_online_1: Optional[dict] = None
     lzk_online_2: Optional[dict] = None
+    # Erreichte und maximale Punkte der jeweiligen LZK ("18,5" / "22") - daraus
+    # rechnet der Notenspiegel Prozent und Note. Nur lokal, nie zum Server.
+    lzk_punkte_1: str = ""
+    lzk_max_1: str = ""
+    lzk_punkte_2: str = ""
+    lzk_max_2: str = ""
 
 
 @dataclass
@@ -1812,7 +2013,9 @@ def baustein_als_dict(b: Baustein) -> dict:
             ((b.lzk_datum_1, b.lzk_note_1, b.lzk_bem_1, b.lzk_ergebnis_1, b.lzk_online_1),
              (b.lzk_datum_2, b.lzk_note_2, b.lzk_bem_2, b.lzk_ergebnis_2, b.lzk_online_2)), start=1):
         lzk = _ohne_leere({"datum": _iso(datum), "note": note, "bemerkung": bem, "ergebnis": erg,
-                           "online": _lzk_online_sauber(online)})
+                           "online": _lzk_online_sauber(online),
+                           "punkte": getattr(b, f"lzk_punkte_{nr}", ""),
+                           "max_punkte": getattr(b, f"lzk_max_{nr}", "")})
         if lzk:
             daten[f"lzk_{nr}"] = lzk
     return _ohne_leere(daten)
@@ -1851,6 +2054,9 @@ def baustein_aus_dict(d: dict) -> Baustein:
         erg = str(lzk.get("ergebnis") or "")
         setattr(b, felder[3], erg if erg in LZK_ERGEBNIS_WERTE else "")
         setattr(b, f"lzk_online_{nr}", _lzk_online_sauber(lzk.get("online")))
+        # Unveraendert uebernehmen (auch wenn es keine Zahl ist) - nichts geht verloren.
+        setattr(b, f"lzk_punkte_{nr}", str(lzk.get("punkte") if lzk.get("punkte") is not None else ""))
+        setattr(b, f"lzk_max_{nr}", str(lzk.get("max_punkte") if lzk.get("max_punkte") is not None else ""))
     bausteinarbeit_in_bemerkung(b)
     return b
 
@@ -1908,6 +2114,9 @@ class Arbeitsstaende:
         # Gemerkte Zuordnung online-LZK -> Baustein-Name, je Lerntheke ("lt:<key>")
         # bzw. Thema ("thema:<name>"): {"name": Baustein oder LZK_ZIEL_NIE, "titel": wie online}
         self.lzk_ziele: Dict[str, dict] = {}
+        # Notenspiegel fuer die LZK dieser Arbeitsdatei (Standard, solange nichts
+        # anderes eingestellt ist).
+        self.notenspiegel: Notenspiegel = Notenspiegel()
         self.dateipfad: Optional[str] = None
         self._wb: Optional[Workbook] = None  # zuletzt geladene/erzeugte Mappe
 
@@ -1921,6 +2130,8 @@ class Arbeitsstaende:
             "gespeichert_am": date.today().isoformat(),
             "vorlage_bausteine": list(self.vorlage_bausteine),
             **({"lzk_ziele": dict(self.lzk_ziele)} if self.lzk_ziele else {}),
+            **({"notenspiegel": notenspiegel_als_dict(self.notenspiegel)}
+               if notenspiegel_als_dict(self.notenspiegel) else {}),
             "personen": [student_als_dict(s) for s in self.students],
         }
 
@@ -1939,6 +2150,11 @@ class Arbeitsstaende:
         ziele = daten.get("lzk_ziele") if isinstance(daten.get("lzk_ziele"), dict) else {}
         self.lzk_ziele = {str(k): {"name": str(v.get("name") or ""), "titel": str(v.get("titel") or "")}
                           for k, v in ziele.items() if isinstance(v, dict) and v.get("name")}
+        try:
+            self.notenspiegel = notenspiegel_aus_dict(daten.get("notenspiegel"))
+        except ValueError as e:
+            self.notenspiegel = Notenspiegel()
+            warnungen.append(str(e))
         self.students = []
         for eintrag in daten.get("personen") or []:
             person = student_aus_dict(eintrag)
