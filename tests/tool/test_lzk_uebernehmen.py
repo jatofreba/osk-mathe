@@ -141,7 +141,7 @@ kreise = D.Baustein(name="Kreise", status="In Bearbeitung", lzk_datum_1=D30,
 st = D.Student(vorname="Gabriel", nachname="E", alias="ga.em", bausteine=[kreise])
 konten = [{"id": 7, "username": "ga.em", "aktiv": True, "lzk": [eintrag(70, "Kreise", datum="2026-10-05")]}]
 app_ = A.App.__new__(A.App)
-app_.az = type("AZ", (), {"students": [st], "_wb": None})()
+app_.az = type("AZ", (), {"students": [st], "_wb": None, "vorlage_lzk": {}})()   # Anzahl LZK laut Vorlage (seit 2026-10-31)
 merk = {"liste": 0, "ungespeichert": 0, "bericht": ""}
 app_._dubletten_melden = lambda t: False
 app_._lt_paare = lambda: [("Gabriel", "E", "ga.em")]

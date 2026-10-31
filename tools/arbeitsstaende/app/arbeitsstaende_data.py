@@ -719,15 +719,49 @@ def lzk_import_status(b, datum=None) -> bool:
     return True
 
 
-def lzk_zuordnen(student, z: dict, ziel, ziele=None):
+# Sind alle LZK eines Bausteins bestanden (so viele, wie er hat - lzk_anzahl), wechselt er
+# auf "Abgeschlossen" (Nutzerwunsch 2026-10-31) - wenn gerade ein Ergebnis dazukam (im
+# Formular, beim Abruf, beim Zuordnen) oder die Vorlage die Anzahl verkleinert hat, nie
+# rueckwirkend beim Laden. Ist eine LZK "nicht bestanden", bleibt der Status; einen
+# anderen Status als diese hier setzt nur der Mensch.
+STATUS_VOR_ABSCHLUSS = ("", "Ausstehend", "In Bearbeitung")
+LZK_BESTANDEN = ("0", "1", "2", "3")
+
+
+def lzk_alle_bestanden(b, vorgaben=None) -> bool:
+    """Hat der Baustein LZK, und sind alle bestanden (✓ oder Flammen)?"""
+    anzahl = lzk_anzahl(b, vorgaben)
+    return anzahl > 0 and all(getattr(b, f"lzk_ergebnis_{nr}") in LZK_BESTANDEN for nr in range(1, anzahl + 1))
+
+
+def lzk_abschluss_faellig(b, vorgaben=None) -> bool:
+    """Waere der Baustein jetzt abzuschliessen? Eigener Baustein, laeuft noch, alle LZK bestanden."""
+    return (not _ist_app_zeile(b) and (b.status or "").strip() in STATUS_VOR_ABSCHLUSS
+            and lzk_alle_bestanden(b, vorgaben))
+
+
+def lzk_abschluss_status(b, vorgaben=None) -> bool:
+    """Setzt einen faelligen Baustein auf "Abgeschlossen"; ohne Halbjahr bekommt er das
+    seiner letzten LZK. True, wenn sich der Status geaendert hat."""
+    if not lzk_abschluss_faellig(b, vorgaben):
+        return False
+    b.status = "Abgeschlossen"
+    if not (b.halbjahr or "").strip():
+        termine = [d for d in (_to_date(getattr(b, f"lzk_datum_{nr}")) for nr in LZK_NUMMERN) if d]
+        b.halbjahr = halbjahr_fuer_datum(max(termine) if termine else None)
+    return True
+
+
+def lzk_zuordnen(student, z: dict, ziel, ziele=None, vorgaben=None):
     """Traegt die LZK in den gewaehlten Baustein ein und verknuepft den Platz.
 
     Stand dort eine ANDERE LZK (anderer Termin, Note, Ergebnis, Bemerkung), wandert
     sie in die Bemerkung des Bausteins - verloren geht nichts. Bei einer
     Lerntheken-LZK zieht, was in der App-Zeile an diesem Platz stand (Note,
     Bemerkung, Ergebnis), mit um; die App-Zeile gibt den Platz frei. Die Wahl merkt
-    sich `ziele` (je Lerntheke bzw. Thema). Rueckgabe: (Zeile fuer den Bericht,
-    Ziel-Baustein oder None bei "nie")."""
+    sich `ziele` (je Lerntheke bzw. Thema). Kommt dabei ein Ergebnis dazu und sind damit
+    alle LZK bestanden, wird der Baustein "Abgeschlossen" (`vorgaben`: Anzahl LZK laut
+    Vorlage). Rueckgabe: (Zeile fuer den Bericht, Ziel-Baustein oder None bei "nie")."""
     e, nummer, datum = z["eintrag"], z["nummer"], z["datum"]
     if ziel[0] == "nie":
         if ziele is not None:
@@ -738,6 +772,7 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None):
         student.bausteine.append(b)
     else:
         b = ziel[1]
+    ergebnisse_vorher = [getattr(b, f"lzk_ergebnis_{nr}") for nr in LZK_NUMMERN]
     alt_d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
     alt = {f: (getattr(b, f"lzk_{f}_{nummer}") or "") for f in ("note", "bem", "ergebnis", "punkte", "max")}
     # Eine ANDERE LZK stand hier, wenn ihr Termin in ein anderes Halbjahr faellt oder
@@ -774,12 +809,15 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None):
                 setattr(app, f"lzk_{f}_{nummer}", "")
             setattr(app, f"lzk_datum_{nummer}", None)
     setattr(b, f"lzk_online_{nummer}", lzk_verknuepfung(e))
-    status_neu = lzk_import_status(b, datum)
+    status_neu = "In Bearbeitung" if lzk_import_status(b, datum) else ""
+    if ([getattr(b, f"lzk_ergebnis_{nr}") for nr in LZK_NUMMERN] != ergebnisse_vorher
+            and lzk_abschluss_status(b, vorgaben)):
+        status_neu = "Abgeschlossen"
     if ziele is not None:
         ziele[z["schluessel"]] = {"name": b.name, "titel": z["titel"]}
     return (f"„{z['titel']}“ {z['typ']}-LZK {_fmt_kurz(datum)} → {b.name} ({b.halbjahr or 'ohne HJ'}), "
             f"LZK {nummer}" + (" – neuer Baustein" if ziel[0] == "neu" else "")
-            + (" – jetzt „In Bearbeitung“" if status_neu else "")), b
+            + (f" – jetzt „{status_neu}“" if status_neu else "")), b
 
 
 def lzk_falsches_halbjahr(student) -> list:
@@ -1010,7 +1048,7 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
     return auftraege, uebersprungen, vergangen
 
 
-def lt_freie_lzk_uebernehmen(student, konto: dict):
+def lt_freie_lzk_uebernehmen(student, konto: dict, vorgaben=None):
     """Beim Abruf: was an VERKNUEPFTEN freien Mathe-LZK nur online geaendert wurde
     (verschoben, bewertet), kommt in den Baustein -- ohne Rueckfrage.
 
@@ -1019,7 +1057,9 @@ def lt_freie_lzk_uebernehmen(student, konto: dict):
     stehen ("Freie Mathe-LZK zuordnen…" entscheidet); nur hier Geaendertes schickt
     das Senden hinaus. Leeres ueberschreibt nichts: nimmt jemand online die
     Bewertung zurueck, bleibt sie hier stehen und wird gemeldet. Nicht verknuepfte
-    LZK ordnet der Abruf weiterhin NICHT selbst zu.
+    LZK ordnet der Abruf weiterhin NICHT selbst zu. Kommt ein Ergebnis herein und sind
+    damit alle LZK des Bausteins bestanden, wird er "Abgeschlossen" (`vorgaben`: Anzahl
+    LZK laut Vorlage).
 
     Rueckgabe (uebernommen, gemeldet): Zeilen fuer den Bericht.
     """
@@ -1056,7 +1096,10 @@ def lt_freie_lzk_uebernehmen(student, konto: dict):
         if danach != link:
             setattr(b, f"lzk_online_{nummer}", danach)
         if teile:
-            if lzk_import_status(b, on_d or lok_d):
+            in_bearbeitung = lzk_import_status(b, on_d or lok_d)
+            if getattr(b, f"lzk_ergebnis_{nummer}") != lok_e and lzk_abschluss_status(b, vorgaben):
+                teile.append("Status jetzt „Abgeschlossen“")
+            elif in_bearbeitung:
                 teile.append("Status jetzt „In Bearbeitung“")
             uebernommen.append(f"{wo}: " + ", ".join(teile))
     return uebernommen, gemeldet

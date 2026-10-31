@@ -34,6 +34,7 @@ from arbeitsstaende_data import (
     baustein_auswertung, noten_neu_berechnen, zahl_lesen, zahl_text, prozent_text,
     lzk_note_in_bemerkung,
     DRINGLICHKEIT, dringlichkeit,
+    STATUS_VOR_ABSCHLUSS, LZK_BESTANDEN, lzk_abschluss_faellig, lzk_abschluss_status,
     LZK_NUMMERN, LZK_ANZAHL_OPTIONEN, LZK_ANZAHL_STANDARD, lzk_anzahl, lzk_vorgabe, lzk_hoechster_platz,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
@@ -354,11 +355,17 @@ class BausteinDialog(tk.Toplevel):
         self._anzahl_vorher = b.lzk_anzahl
         self._anzahl_folgt_name = b.lzk_anzahl is None and not app_zeile
         self._anzahl_setzen_laeuft = False
+        self._status_vor_abschluss = None
         self._anzahl_alt = self.vars["lzk_anzahl"].get()
         self._hoehe_bereit = False
         self._lzk_bloecke_zeigen(int(self._anzahl_alt))
         self.vars["lzk_anzahl"].trace_add("write", self._anzahl_geaendert)
         self.vars["name"].trace_add("write", self._name_geaendert)
+        # Alle LZK bestanden -> Status "Abgeschlossen" (Nutzerwunsch 2026-10-31): sichtbar im
+        # Feld und vor dem Uebernehmen noch aenderbar. Nur bei einer Aenderung hier (Ergebnis
+        # oder Anzahl) - beim Oeffnen bleibt der Status, wie er ist.
+        for nr in LZK_NUMMERN:
+            self.vars[f"lzk_ergebnis_{nr}"].trace_add("write", self._abschluss_pruefen)
 
         self.bind("<Return>", lambda e: self._uebernehmen())
         self.bind("<Escape>", lambda e: self.destroy())
@@ -424,6 +431,7 @@ class BausteinDialog(tk.Toplevel):
             self._anzahl_setzen_laeuft = False
         self._anzahl_alt = wert
         self._lzk_bloecke_zeigen(int(wert))
+        self._abschluss_pruefen()
 
     def _anzahl_geaendert(self, *_):
         """Anzahl gewaehlt: Bloecke zeigen. Weniger als ausgefuellt geht nicht - was dort
@@ -442,6 +450,25 @@ class BausteinDialog(tk.Toplevel):
         self._anzahl_folgt_name = False
         self._anzahl_alt = str(anzahl)
         self._lzk_bloecke_zeigen(anzahl)
+        self._abschluss_pruefen()
+
+    def _abschluss_pruefen(self, *_):
+        """Sind alle LZK bestanden, wechselt der Status auf "Abgeschlossen" (das Halbjahr
+        folgt wie bei einer eigenen Wahl); fehlt danach wieder eine, kehrt der vorige zurueck.
+        Einen anderen Status ("Nicht bestanden", "Sonstiges") fasst das nicht an."""
+        if self._app_zeile:
+            return
+        anzahl = int(self.vars["lzk_anzahl"].get() or 0)
+        bestanden = {LZK_ERGEBNIS_TEXT[w] for w in LZK_BESTANDEN}
+        fertig = anzahl > 0 and all(self.vars[f"lzk_ergebnis_{nr}"].get() in bestanden
+                                    for nr in range(1, anzahl + 1))
+        status = self.vars["status"].get()
+        if fertig and status in STATUS_VOR_ABSCHLUSS:
+            self._status_vor_abschluss = status
+            self.vars["status"].set("Abgeschlossen")
+        elif not fertig and self._status_vor_abschluss is not None and status == "Abgeschlossen":
+            self.vars["status"].set(self._status_vor_abschluss)
+            self._status_vor_abschluss = None
 
     def _name_geaendert(self, *_):
         """Anderer Name: die Anzahl der Vorlage fuer diesen Baustein - solange hier nichts
@@ -3167,7 +3194,11 @@ class App(tk.Tk):
                     setattr(b, f"lzk_ergebnis_{nr}", x["online_erg"])
                     teile.append(f"Ergebnis {text_erg(x['hier_erg'])} → {text_erg(x['online_erg'])}")
                 if teile:
-                    if lzk_import_status(b, x["online_datum"] or x["hier_datum"]):
+                    in_bearbeitung = lzk_import_status(b, x["online_datum"] or x["hier_datum"])
+                    if (x["online_erg"] and x["online_erg"] != x["hier_erg"]
+                            and lzk_abschluss_status(b, self.az.vorlage_lzk)):
+                        teile.append("Status jetzt „Abgeschlossen“")
+                    elif in_bearbeitung:
                         teile.append("Status jetzt „In Bearbeitung“")
                     geaendert.append(f"{zeile(x)}: " + ", ".join(teile))
                 else:
@@ -3716,7 +3747,7 @@ class App(tk.Tk):
             # herein (nur hier Unveraendertes, nie Leeres). Nicht verknuepfte ordnet
             # der Abruf bewusst NICHT selbst zu (Ziel sind von Hand gepflegte
             # Bausteine) - er zaehlt nur, was darauf wartet.
-            u_frei, g_frei = lt_freie_lzk_uebernehmen(student, konto)
+            u_frei, g_frei = lt_freie_lzk_uebernehmen(student, konto, self.az.vorlage_lzk)
             frei_uebernommen += u_frei
             frei_gemeldet += g_frei
             p_frei, o_frei = lt_freie_lzk_abgleich(student, konto)
@@ -3880,7 +3911,7 @@ class App(tk.Tk):
         beruehrt = set()        # (id(Baustein), Platz) - gerade zugeordnet oder umgezogen
         for p in gewaehlt:
             if p["art"] == "zuordnen" and p.get("ziel") and p["ziel"][0] in ("baustein", "neu", "nie"):
-                zeile, b = lzk_zuordnen(p["st"], p["z"], p["ziel"], ziele)
+                zeile, b = lzk_zuordnen(p["st"], p["z"], p["ziel"], ziele, self.az.vorlage_lzk)
                 if b is not None:
                     beruehrt.add((id(b), p["z"]["nummer"]))
                 erledigt.append(f"⬇ {p['person']} · {zeile}")
@@ -4375,9 +4406,24 @@ class App(tk.Tk):
         self.wait_window(dlg)
         if dlg.result is None:
             return
+        vorher = dict(self.az.vorlage_lzk)
         self.az.vorlage_bausteine = dlg.result
         self.az.vorlage_lzk = dlg.anzahl
         self._markiere_ungespeichert()
+        # Weniger LZK in der Vorlage: wo damit alle LZK bestanden sind, waere der Baustein
+        # abgeschlossen - womoeglich bei vielen auf einmal, deshalb erst fragen.
+        faellig = [(s, b) for s in self.az.students for b in s.bausteine
+                   if lzk_abschluss_faellig(b, self.az.vorlage_lzk) and not lzk_abschluss_faellig(b, vorher)]
+        if faellig:
+            namen = [f"{s.voller_name}: {b.name}" for s, b in faellig]
+            liste = "\n".join(namen[:12]) + (f"\n… und {len(namen) - 12} weitere" if len(namen) > 12 else "")
+            if messagebox.askyesno(
+                    "Bausteine abschließen?",
+                    f"Mit der neuen Anzahl sind bei {len(faellig)} Baustein(en) alle LZK bestanden:\n\n"
+                    f"{liste}\n\nAuf „Abgeschlossen“ setzen?", parent=self):
+                for _, b in faellig:
+                    lzk_abschluss_status(b, self.az.vorlage_lzk)
+                self._melde(f"{len(faellig)} Baustein(e) auf „Abgeschlossen“ gesetzt.")
         # Die Anzahl LZK gilt auch fuer vorhandene Bausteine: Tabelle und Fristen neu.
         if self.aktueller_schueler:
             self._detail_anzeigen()

@@ -109,6 +109,15 @@ Danach reicht ein Doppelklick auf diese Datei.
   (ein Baustein mit einer LZK mahnt keine zweite an). Als geschrieben gilt eine
   LZK mit Ergebnis, Punkten oder einer Zeile „Note: …“ in ihrer Bemerkung.
   Excel kennt weiterhin nur LZK 1 und 2.
+- **Automatisch „Abgeschlossen“** (seit 2026-10-31): sind alle LZK eines Bausteins
+  (so viele, wie er hat) **bestanden** (✓ oder Flammen), wechselt sein Status von
+  „Ausstehend“/„In Bearbeitung“ auf „Abgeschlossen“ -- im Formular sofort sichtbar
+  (vor dem Übernehmen noch änderbar; nimmt man das Ergebnis zurück, kehrt der alte
+  Status zurück), ebenso, wenn ein Ergebnis aus OSKlar hereinkommt (steht im Bericht).
+  Ist eine LZK „nicht bestanden“, bleibt der Status; „Nicht bestanden“/„Sonstiges“
+  setzt nur du. Verkleinerst du in der Vorlage die Anzahl, fragt die App, ob die
+  Bausteine, die damit fertig sind, abgeschlossen werden sollen. Rückwirkend beim
+  Laden ändert sich nichts.
 - **Bemerkung zur LZK 1 / 2** (im Baustein-Formular): kurze Notiz zur
   jeweiligen Leistungszielkontrolle ("nur Teil 1", "Nachschreibtermin").
   Sie erscheint in der Baustein-Tabelle hinter dem jeweiligen Datum.

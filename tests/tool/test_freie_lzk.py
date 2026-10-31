@@ -161,7 +161,7 @@ def lauf(richtung, bausteine, lzk):
     konten = [{"id": 5, "username": "me.te", "aktiv": True, "lzk": lzk}]
     client = Client()
     app_ = A.App.__new__(A.App)
-    app_.az = type("AZ", (), {"students": [st]})()
+    app_.az = type("AZ", (), {"students": [st], "vorlage_lzk": {}})()   # Anzahl LZK laut Vorlage (seit 2026-10-31)
     app_._lt_konten = konten
     app_._dubletten_melden = lambda t: False
     app_._lt_anmelden = lambda still=False: (client, "M3M4")
