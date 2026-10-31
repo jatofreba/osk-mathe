@@ -195,12 +195,46 @@ pruefe("U1 kommt eine andere LZK in den Platz, wandern die alten Punkte mit in d
        "16/20 Punkte" in z_alt.bemerkung and z_alt.lzk_punkte_1 == "" and z_alt.lzk_max_1 == "", z_alt.bemerkung)
 
 s1 = D.Baustein(name="A", lzk_note_1="1-", lzk_punkte_1="18,5", lzk_max_1="22",
-                lzk_note_2="super", lzk_punkte_2="10", lzk_max_2="22")
+                lzk_note_2="4", lzk_punkte_2="10", lzk_max_2="22")
 stn = D.Student(vorname="N", nachname="N", bausteine=[s1])
 neu = D.Notenspiegel(runden="genau")
 n = D.noten_neu_berechnen([stn], D.Notenspiegel(), neu)
-pruefe("U2 neuer Notenspiegel: berechnete Note folgt (1- -> 2+), von Hand eingetragene bleibt",
-       n == 1 and s1.lzk_note_1 == "2+" and s1.lzk_note_2 == "super", (n, s1))
+pruefe("U2 neuer Notenspiegel: jede aus Punkten berechnete Note folgt (1- -> 2+, 4 bleibt 4)",
+       n == 1 and s1.lzk_note_1 == "2+" and s1.lzk_note_2 == "4", (n, s1))
+
+# ===========================================================================
+# M) Die Note ist kein Eingabefeld mehr (2026-10-31): Freitext zieht in die LZK-Bemerkung
+# ===========================================================================
+roh = {"format": "osk-arbeitsstaende", "version": 1, "vorlage_bausteine": [], "personen": [{
+    "vorname": "Merle", "nachname": "T", "bausteine": [
+        {"name": "Kreise", "lzk_1": {"datum": "2026-05-04", "note": "best"},
+         "lzk_2": {"datum": "2026-06-01", "note": "29/34 = 1-", "bemerkung": "Teil 2 sicher"}},
+        {"name": "Terme", "lzk_1": {"note": "1-", "punkte": "18,5", "max_punkte": "22"},
+         "lzk_2": {"note": "2", "punkte": "18,5", "max_punkte": "22"}},
+        {"name": "Leer"}]}]}
+azm = D.Arbeitsstaende()
+w = azm.aus_dict(json.loads(json.dumps(roh)))
+kr, te, leer = azm.students[0].bausteine
+pruefe("M1 Freitext ohne Punkte: steht danach als 'Note: ...' in der Bemerkung zur LZK, das Notenfeld ist leer",
+       (kr.lzk_note_1, kr.lzk_bem_1) == ("", "Note: best")
+       and (kr.lzk_note_2, kr.lzk_bem_2) == ("", "Teil 2 sicher\nNote: 29/34 = 1-") and not w, (kr, w))
+pruefe("M2 passt die Note zu den Punkten, bleibt sie; passt sie nicht, zieht sie um und die berechnete steht da",
+       (te.lzk_note_1, te.lzk_bem_1) == ("1-", "") and (te.lzk_note_2, te.lzk_bem_2) == ("1-", "Note: 2"), te)
+pruefe("M2b ein Baustein ohne LZK bleibt leer", (leer.lzk_note_1, leer.lzk_bem_1, leer.lzk_note_2) == ("", "", ""))
+azm2 = D.Arbeitsstaende()
+azm2.aus_dict(json.loads(json.dumps(azm.als_dict(), ensure_ascii=False)))
+pruefe("M3 beim naechsten Laden nichts doppelt", [D.baustein_als_dict(b) for b in azm2.students[0].bausteine]
+       == [D.baustein_als_dict(b) for b in azm.students[0].bausteine])
+roh["notenspiegel"] = {"grenzen": dict(D.NOTENSPIEGEL_STANDARD), "runden": "genau"}
+roh["personen"][0]["bausteine"] = [{"name": "Terme", "lzk_1": {"note": "2+", "punkte": "18,5", "max_punkte": "22"}}]
+azm3 = D.Arbeitsstaende()
+azm3.aus_dict(json.loads(json.dumps(roh)))
+pruefe("M4 gerechnet wird mit dem Notenspiegel der Datei (genau nach Prozent: 18,5/22 = 2+ bleibt)",
+       (azm3.students[0].bausteine[0].lzk_note_1, azm3.students[0].bausteine[0].lzk_bem_1) == ("2+", ""))
+alt_hj = D.Baustein(name="Satz des Pythagoras", halbjahr="2526_2", lzk_bem_1="Note: best",
+                    lzk_online_1={"id": 9, "datum": "2026-11-10", "ergebnis": ""}, lzk_datum_1=date(2026, 11, 10))
+pruefe("M5 eine umgezogene Note gilt weiter als Spur einer frueheren LZK (Umziehen ins richtige Halbjahr)",
+       len(D.lzk_falsches_halbjahr(D.Student(vorname="P", nachname="Q", bausteine=[alt_hj]))) == 1)
 
 pruefe("U3 Tabellenzelle: Note, Prozent und Flammen", A._note_mit_ergebnis("1-", "2", "84,1 %") == "1- (84,1 %) 🔥🔥"
        and A._note_mit_ergebnis("", "", "84,1 %") == "84,1 %" and A._note_mit_ergebnis("2-", "2") == "2- 🔥🔥")
@@ -265,28 +299,20 @@ if bildschirm:
         dlg = A.BausteinDialog(wurzel, D.Baustein(name="Kreise"), notenspiegel=D.Notenspiegel())
         wurzel.update()
         texte = [w.cget("text") for w in dlg._form.winfo_children() if isinstance(w, tk.ttk.Label)]
-        pruefe("F1 unter dem Ergebnis: 'Punkte 1 (erreicht von max.)', die Note heisst '(intern)'",
-               texte.index("Punkte 1 (erreicht von max.)") == texte.index("LZK-Ergebnis 1") + 1
-               and "LZK-Note 1 (intern)" in texte, texte)
+        pruefe("F1 unter dem Ergebnis: 'Punkte 1 (erreicht von max.)'",
+               texte.index("Punkte 1 (erreicht von max.)") == texte.index("LZK-Ergebnis 1") + 1, texte)
+        pruefe("F1b die Note ist kein Eingabefeld mehr (keine Zeile 'LZK-Note', kein Feld)",
+               not any("LZK-Note" in x for x in texte) and "lzk_note_1" not in dlg.vars
+               and "lzk_note_2" not in dlg.vars, texte)
         dlg.vars["lzk_punkte_1"].set("18,5")
         dlg.vars["lzk_max_1"].set("22")
-        pruefe("F2 Punkte eingetippt: daneben Prozent und Note, die Note steht im Notizfeld",
-               dlg._punkte_info[1].cget("text") == "= 84,1 % → Note 1-" and dlg.vars["lzk_note_1"].get() == "1-",
-               (dlg._punkte_info[1].cget("text"), dlg.vars["lzk_note_1"].get()))
+        pruefe("F2 Punkte eingetippt: daneben Prozent und Note (nur Anzeige)",
+               dlg._punkte_info[1].cget("text") == "= 84,1 % → Note 1-", dlg._punkte_info[1].cget("text"))
         dlg.vars["lzk_punkte_1"].set("17")
-        pruefe("F3 andere Punkte: die berechnete Note folgt", dlg.vars["lzk_note_1"].get() == "2")
+        pruefe("F3 andere Punkte: die Anzeige rechnet neu", dlg._punkte_info[1].cget("text") == "= 77,3 % → Note 2")
         pruefe("F3b die Flammen setzt das nicht", dlg.vars["lzk_ergebnis_1"].get() == D.LZK_ERGEBNIS_TEXT[""])
-        dlg.vars["lzk_note_1"].set("2 (Nachschreiben)")
-        dlg.vars["lzk_punkte_1"].set("12")
-        pruefe("F4 von Hand geaenderte Note bleibt stehen, die Anzeige rechnet weiter",
-               dlg.vars["lzk_note_1"].get() == "2 (Nachschreiben)" and dlg._punkte_info[1].cget("text").endswith("Note 3-"))
-        dlg.vars["lzk_note_1"].set("")
-        dlg.vars["lzk_punkte_1"].set("12")
-        dlg.vars["lzk_punkte_1"].set("12,5")
-        pruefe("F5 Notizfeld geleert: berechnet wieder", dlg.vars["lzk_note_1"].get() == "3-")
         dlg.vars["lzk_punkte_1"].set("")
-        pruefe("F5b Punkte weg: berechnete Note weg, Anzeige leer",
-               dlg.vars["lzk_note_1"].get() == "" and dlg._punkte_info[1].cget("text") == "")
+        pruefe("F5 Punkte weg: Anzeige leer", dlg._punkte_info[1].cget("text") == "")
         dlg.vars["lzk_punkte_1"].set("abc")
         pruefe("F6 keine Zahl: Hinweis neben den Punkten", "Zahlen" in dlg._punkte_info[1].cget("text"))
         dlg._uebernehmen()
@@ -302,24 +328,35 @@ if bildschirm:
         rueckfragen_antwort = True
         dlg._uebernehmen()
         r = dlg.result
-        pruefe("F8 bei Ja gespeichert: Punkte einheitlich geschrieben, Noten intern dabei",
+        pruefe("F8 bei Ja gespeichert: Punkte einheitlich geschrieben, die Note aus den Punkten",
                r is not None and (r.lzk_punkte_1, r.lzk_max_1, r.lzk_note_1) == ("18,5", "22", "1-")
                and (r.lzk_punkte_2, r.lzk_max_2, r.lzk_note_2) == ("30", "25", "1+"), r)
 
-        # Vorhandener Baustein: die gespeicherte (berechnete) Note folgt neuen Punkten
+        # Vorhandener Baustein: neue Punkte -> neue Note
         vorh = D.Baustein(name="Terme", lzk_note_2="2", lzk_punkte_2="17", lzk_max_2="22")
         dlg2 = A.BausteinDialog(wurzel, vorh, notenspiegel=D.Notenspiegel())
         wurzel.update()
-        pruefe("F9 beim Oeffnen: Anzeige da, Note unveraendert", dlg2._punkte_info[2].cget("text") == "= 77,3 % → Note 2"
-               and dlg2.vars["lzk_note_2"].get() == "2")
+        pruefe("F9 beim Oeffnen: Prozent und Note neben den Punkten", dlg2._punkte_info[2].cget("text") == "= 77,3 % → Note 2")
         dlg2.vars["lzk_punkte_2"].set("20")
-        pruefe("F9b neue Punkte: Note folgt", dlg2.vars["lzk_note_2"].get() == "1")
-        dlg2.destroy()
-        handnote = D.Baustein(name="Terme", lzk_note_1="best", lzk_punkte_1="17", lzk_max_1="22")
+        dlg2._uebernehmen()
+        pruefe("F9b neue Punkte: gespeicherte Note folgt", dlg2.result.lzk_note_2 == "1", dlg2.result)
+
+        # Alter Freitext im Notenfeld: steht im Formular in der Bemerkung zur LZK
+        handnote = D.Baustein(name="Terme", lzk_note_1="best", lzk_punkte_1="17", lzk_max_1="22",
+                              lzk_note_2="n.b. da Klinik", lzk_bem_2="Nachschreiben")
         dlg3 = A.BausteinDialog(wurzel, handnote, notenspiegel=D.Notenspiegel())
-        dlg3.vars["lzk_punkte_1"].set("20")
-        pruefe("F10 eine alte Freitext-Note ('best') wird nie ueberschrieben", dlg3.vars["lzk_note_1"].get() == "best")
-        dlg3.destroy()
+        wurzel.update()
+        bem1 = dlg3.vars["lzk_bem_1"].get("1.0", "end").strip()
+        bem2 = dlg3.vars["lzk_bem_2"].get("1.0", "end").strip()
+        pruefe("F10 alter Freitext ('best', 'n.b. da Klinik') steht als 'Note: ...' in der Bemerkung zur LZK",
+               bem1 == "Note: best" and bem2 == "Nachschreiben\nNote: n.b. da Klinik", (bem1, bem2))
+        pruefe("F10b das Original bleibt unangetastet, solange nicht übernommen ist",
+               handnote.lzk_note_1 == "best" and handnote.lzk_bem_1 == "")
+        dlg3._uebernehmen()
+        r3 = dlg3.result
+        pruefe("F10c nach Übernehmen: berechnete Note bzw. leer, der Freitext steht in der Bemerkung",
+               (r3.lzk_note_1, r3.lzk_bem_1) == ("2", "Note: best")
+               and (r3.lzk_note_2, r3.lzk_bem_2) == ("", "Nachschreiben\nNote: n.b. da Klinik"), r3)
 
         # Einstellungs-Dialog
         nd = A.NotenspiegelDialog(wurzel, D.Notenspiegel())

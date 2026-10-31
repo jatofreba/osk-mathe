@@ -785,6 +785,7 @@ def lzk_falsches_halbjahr(student) -> list:
             d = _to_date((link or {}).get("datum"))
             spuren = ((getattr(b, f"lzk_note_{nummer}") or "").strip()
                       or (getattr(b, f"lzk_punkte_{nummer}", "") or "").strip()
+                      or _alte_note_in(getattr(b, f"lzk_bem_{nummer}", ""))
                       or (getattr(b, f"lzk_ergebnis_{nummer}") or "") not in ("", (link or {}).get("ergebnis") or ""))
             if d and halbjahr_fuer_datum(d) != b.halbjahr and spuren:
                 treffer.append({"baustein": b, "nummer": nummer, "datum": d,
@@ -1887,19 +1888,47 @@ def baustein_auswertung(b, nummer: int, sp: Optional[Notenspiegel] = None) -> Op
 
 
 def noten_neu_berechnen(students, alt: Notenspiegel, neu: Notenspiegel) -> int:
-    """Nach einer Aenderung des Notenspiegels: jede LZK-Note, die genau der mit dem
-    ALTEN Spiegel berechneten entspricht, folgt dem neuen. Von Hand eingetragene
-    Noten (etwas anderes als die berechnete) bleiben stehen. -> Anzahl geaendert."""
+    """Nach einer Aenderung des Notenspiegels folgt jede aus Punkten berechnete
+    LZK-Note dem neuen. -> Anzahl geaendert. (`alt` bleibt fuer die Aufrufer.)"""
     geaendert = 0
     for st in students:
         for b in st.bausteine:
             for nr in (1, 2):
-                vorher, nachher = baustein_auswertung(b, nr, alt), baustein_auswertung(b, nr, neu)
-                note = (getattr(b, f"lzk_note_{nr}") or "").strip()
-                if vorher and nachher and note == vorher["note"] and note != nachher["note"]:
+                nachher = baustein_auswertung(b, nr, neu)
+                if nachher and (getattr(b, f"lzk_note_{nr}") or "").strip() != nachher["note"]:
                     setattr(b, f"lzk_note_{nr}", nachher["note"])
                     geaendert += 1
     return geaendert
+
+
+# Die LZK-Note ist seit 2026-10-31 kein Eingabefeld mehr, sondern wird nur aus den Punkten
+# berechnet (Nutzerwunsch: "die errechnete lzk note sollte kein bearbeitbares feld sein -
+# das ja dann unter den bemerkungen moeglich"). Was bis dahin im Feld stand (Freitext wie
+# "best", "29/34 = 1-", eine von Hand eingetragene Note), zieht verlustfrei als eigene
+# Zeile in die Bemerkung zur LZK.
+LZK_NOTE_ALT = "Note: "
+
+
+def lzk_note_in_bemerkung(b, sp: Optional[Notenspiegel] = None) -> int:
+    """Stellt die LZK-Noten eines Bausteins auf den berechneten Wert (aus den Punkten,
+    sonst leer). Eine andere Angabe im Feld haengt vorher als Zeile "Note: ..." an die
+    Bemerkung zur jeweiligen LZK. Idempotent. -> Anzahl umgezogener Angaben."""
+    umgezogen = 0
+    for nr in (1, 2):
+        a = baustein_auswertung(b, nr, sp)
+        soll = a["note"] if a else ""
+        note = (getattr(b, f"lzk_note_{nr}") or "").strip()
+        if note and note != soll:
+            bem = (getattr(b, f"lzk_bem_{nr}") or "").rstrip()
+            setattr(b, f"lzk_bem_{nr}", (bem + "\n" if bem.strip() else "") + LZK_NOTE_ALT + note)
+            umgezogen += 1
+        setattr(b, f"lzk_note_{nr}", soll)
+    return umgezogen
+
+
+def _alte_note_in(bemerkung) -> bool:
+    """Steht in der LZK-Bemerkung eine umgezogene Note ("Note: ...")?"""
+    return any(z.strip().startswith(LZK_NOTE_ALT.strip()) for z in (bemerkung or "").splitlines())
 
 
 def notenspiegel_als_dict(sp: Notenspiegel) -> Optional[dict]:
@@ -2162,6 +2191,9 @@ class Arbeitsstaende:
                 warnungen.append("Ein Eintrag ohne Namen wurde uebersprungen.")
                 continue
             self.students.append(person)
+        for person in self.students:
+            for b in person.bausteine:
+                lzk_note_in_bemerkung(b, self.notenspiegel)
         return warnungen
 
     def laden_json(self, pfad: str) -> List[str]:
@@ -2338,6 +2370,7 @@ class Arbeitsstaende:
                 lzk_bem_2=_clean(werte[10]),
             )
             bausteinarbeit_in_bemerkung(b)
+            lzk_note_in_bemerkung(b)
             bausteine.append(b)
 
         return Student(

@@ -66,7 +66,9 @@ def test_laden_testmappe():
     assert anna.hj_note == "2"
     terme = next(x for x in anna.bausteine if x.name == "Terme")
     assert terme.status == "Abgeschlossen"
-    assert terme.lzk_note_1 == "2"
+    # Excel kennt keine Punkte: eine dort eingetragene Note ist Freitext und steht seit
+    # 2026-10-31 in der Bemerkung zur LZK (die Note selbst wird nur noch berechnet).
+    assert terme.lzk_note_1 == "" and terme.lzk_bem_1 == "Note: 2", (terme.lzk_note_1, terme.lzk_bem_1)
     assert terme.lzk_datum_1 == date(2026, 2, 1)
     zusatz = [x.name for x in anna.bausteine]
     assert "Zusatzübung Bruchrechnung" in zusatz, "individuelle Zeile fehlt"
@@ -276,7 +278,8 @@ def test_json_ist_verlustfrei():
     person.bausteine.append(Baustein(name="Kreise", status="In Bearbeitung",
                                      halbjahr="2627_1",
                                      lzk_datum_1=date(2026, 11, 5), lzk_bem_1="nur Teil 1",
-                                     lzk_datum_2=date(2027, 1, 12), lzk_note_2="3"))
+                                     lzk_datum_2=date(2027, 1, 12), lzk_note_2="3",
+                                     lzk_punkte_2="13", lzk_max_2="22"))
 
     def stand(a):
         return [(s.vorname, s.nachname, s.alias, s.kursung, s.jahrgangsstufe, s.hj_note,
@@ -300,7 +303,12 @@ def test_json_ist_verlustfrei():
     ausJson.speichern_excel(xlsx)
     ausExcel = Arbeitsstaende()
     ausExcel.laden(xlsx)
-    assert stand(ausExcel) == vorher
+    # Excel kennt keine Punkte: die aus Punkten berechnete Note der Kreise-LZK 2 kommt
+    # dort als Freitext an und steht danach in der Bemerkung zur LZK (seit 2026-10-31,
+    # die Note wird nur noch berechnet). Sonst ist alles gleich - verloren geht nichts.
+    erwartet = [p[:10] + (tuple(b[:9] + ("", "Note: 3") if b[0] == "Kreise" else b for b in p[10]),)
+                for p in vorher]
+    assert stand(ausExcel) == erwartet, stand(ausExcel)
     print("OK: test_json_ist_verlustfrei")
 
 

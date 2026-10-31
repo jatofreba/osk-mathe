@@ -5,6 +5,7 @@ Arbeitsstände -- Desktop-Anwendung zur Bausteinarbeit.
 Start: python3 arbeitsstaende_app.py
 Voraussetzung: pip install openpyxl
 """
+import copy
 import json
 import os
 import sys
@@ -31,6 +32,7 @@ from arbeitsstaende_data import (
     Notenspiegel, NOTEN, NOTENSPIEGEL_STANDARD, NOTEN_RUNDEN, NOTEN_RUNDEN_STANDARD,
     notenspiegel_werte, notenspiegel_tabelle, lzk_auswertung, lzk_auswertung_text,
     baustein_auswertung, noten_neu_berechnen, zahl_lesen, zahl_text, prozent_text,
+    lzk_note_in_bemerkung,
     STATUS_OPTIONEN, KURSUNG_OPTIONEN, STATUS_FARBEN, LT_MARKER,
 )
 # Zugriff auf die Lerntheken-App: Anmeldung und Auswertung sind reines Lesen;
@@ -187,6 +189,12 @@ class BausteinDialog(tk.Toplevel):
         self.grab_set()
 
         b = baustein or Baustein(halbjahr=halbjahr_fuer_datum())
+        # Die LZK-Note ist kein Eingabefeld mehr (2026-10-31): sie kommt aus den Punkten.
+        # Stand im Feld noch etwas anderes, zeigt das Formular es als Zeile "Note: ..." in
+        # der Bemerkung zur LZK (wie beim Laden) - an einer Kopie, das Original bleibt,
+        # bis "Übernehmen" gedrueckt ist.
+        b = copy.copy(b)
+        lzk_note_in_bemerkung(b, self._notenspiegel)
         # Nicht im Formular, aber Teil des Bausteins: die Verknuepfung mit der
         # LZK online. Ginge sie beim Bearbeiten verloren, erkennte das Senden
         # nicht mehr, auf welcher Seite ein Termin geaendert wurde.
@@ -208,12 +216,12 @@ class BausteinDialog(tk.Toplevel):
             # Die Bemerkung steht dort, wo frueher "Bausteinarbeit" stand.
             ("Bemerkung", "bemerkung", "text", 10),
             ("LZK-Datum 1 (TT.MM.JJJJ)", "lzk_datum_1", "entry", None),
-            ("LZK-Note 1 (intern)", "lzk_note_1", "entry", None),
             ("LZK-Ergebnis 1", "lzk_ergebnis_1", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
             # Unter der Bewertung: erreichte und maximale Punkte in EINER Zeile, daneben
-            # Prozent und Note nach dem Notenspiegel. Die Note fuellt das Feld
-            # "LZK-Note" (intern). Hochgeladen wird davon nichts - nur die Flammen.
-            # Die vierte Spalte ist hier die Nummer der LZK.
+            # Prozent und Note nach dem Notenspiegel. Die Note ist kein Eingabefeld: sie
+            # wird beim Uebernehmen aus den Punkten gesetzt (intern, wie Punkte und Prozent
+            # nie hochgeladen - nur die Flammen). Freie Notizen gehoeren in die Bemerkung
+            # zur LZK. Die vierte Spalte ist hier die Nummer der LZK.
             ("Punkte 1 (erreicht von max.)", "lzk_punkte_1", "punkte", 1),
             ("", "lzk_max_1", "punkte_max", 1),
             # Mehrzeilig: in eine LZK-Bemerkung gehoeren oft mehrere Punkte
@@ -221,7 +229,6 @@ class BausteinDialog(tk.Toplevel):
             # in eine Zeile. Die vierte Spalte ist bei "text" die Zeilenzahl.
             ("Bemerkung zur LZK 1", "lzk_bem_1", "text", 3),
             ("LZK-Datum 2 (TT.MM.JJJJ)", "lzk_datum_2", "entry", None),
-            ("LZK-Note 2 (intern)", "lzk_note_2", "entry", None),
             ("LZK-Ergebnis 2", "lzk_ergebnis_2", "ergebnis", list(LZK_ERGEBNIS_TEXT.values())),
             ("Punkte 2 (erreicht von max.)", "lzk_punkte_2", "punkte", 2),
             ("", "lzk_max_2", "punkte_max", 2),
@@ -303,16 +310,11 @@ class BausteinDialog(tk.Toplevel):
             if art != "punkte":
                 row += 1
 
-        # Punkte -> Prozent und Note. Die Note wandert ins Feld "LZK-Note" - aber nur,
-        # solange dort nichts anderes steht als die zuletzt berechnete (oder nichts):
-        # eine von Hand eingetragene Note bleibt stehen.
-        self._note_auto = {}
+        # Punkte -> Prozent und Note, sofort neben den Punkten.
         for nr in (1, 2):
-            a = baustein_auswertung(b, nr, self._notenspiegel)
-            self._note_auto[nr] = a["note"] if a else ""
             for feld in (f"lzk_punkte_{nr}", f"lzk_max_{nr}"):
                 self.vars[feld].trace_add("write", lambda *_, nr=nr: self._punkte_geaendert(nr))
-            self._punkte_geaendert(nr, note_setzen=False)
+            self._punkte_geaendert(nr)
 
         # Wechselt der Status auf "In Bearbeitung" oder "Abgeschlossen", gehoert der
         # Baustein ins laufende Halbjahr - sofort sichtbar im Feld, damit man es vor
@@ -360,8 +362,8 @@ class BausteinDialog(tk.Toplevel):
         event.widget.insert("insert", "\n")
         return "break"
 
-    def _punkte_geaendert(self, nr, note_setzen=True):
-        """Prozent und Note neben den Punkten zeigen und die Note uebernehmen."""
+    def _punkte_geaendert(self, nr):
+        """Prozent und Note neben den Punkten zeigen."""
         punkte = self.vars[f"lzk_punkte_{nr}"].get()
         max_punkte = self.vars[f"lzk_max_{nr}"].get()
         a = lzk_auswertung(punkte, max_punkte, self._notenspiegel)
@@ -375,15 +377,6 @@ class BausteinDialog(tk.Toplevel):
             except ValueError:
                 text = "bitte Zahlen eintragen, z. B. 18,5"
         self._punkte_info[nr].config(text=text)
-        if not note_setzen:
-            return
-        note_var = self.vars[f"lzk_note_{nr}"]
-        aktuell = note_var.get().strip()
-        if aktuell in ("", self._note_auto.get(nr, "")):
-            neu = a["note"] if a else ""
-            if neu != aktuell:
-                note_var.set(neu)
-            self._note_auto[nr] = neu
 
     def _status_geaendert(self, *_):
         feld, self._hj_auto = hj_nach_statuswechsel(
@@ -426,6 +419,9 @@ class BausteinDialog(tk.Toplevel):
                         f"LZK {nr}: {zahl_text(p)} von {zahl_text(m)} Punkten – trotzdem übernehmen?",
                         parent=self):
                     return
+                # Die Note steht nicht im Formular: sie ergibt sich aus den Punkten.
+                a = lzk_auswertung(p, m, self.__dict__.get("_notenspiegel"))
+                werte[f"lzk_note_{nr}"] = a["note"] if a else ""
             # Angezeigt wird der Text, gespeichert der Wert.
             wert_je_text = {t: w for w, t in LZK_ERGEBNIS_TEXT.items()}
             for feld in ("lzk_ergebnis_1", "lzk_ergebnis_2"):

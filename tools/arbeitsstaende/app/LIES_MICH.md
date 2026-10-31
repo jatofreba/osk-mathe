@@ -270,10 +270,15 @@ Halbjahresübersicht -- liest nur.
 
 Im Baustein-Formular steht unter jedem **LZK-Ergebnis** die Zeile
 **„Punkte (erreicht von max.)“**. Trägst du z. B. `18,5` von `22` ein, steht daneben
-sofort `= 84,1 % → Note 1-`, und die Note landet im Feld **„LZK-Note (intern)“**. Ändern
-sich die Punkte, zieht die berechnete Note nach. Hast du dort selbst etwas anderes
-eingetragen (z. B. „best“ oder „2 (Nachschreiben)“), bleibt das stehen. Die Tabelle
-zeigt die Note mit Prozent, z. B. `1- (84,1 %) 🔥🔥`.
+sofort `= 84,1 % → Note 1-`. Die Note ist **kein Eingabefeld**: Sie wird beim Übernehmen
+aus den Punkten gesetzt und folgt ihnen. Freie Notizen („best“, „Nachschreiben“) gehören
+in die **Bemerkung zur LZK**. Die Tabelle zeigt die Note mit Prozent, z. B.
+`1- (84,1 %) 🔥🔥`.
+
+Was früher von Hand im Notenfeld stand, ist nicht verloren: Es steht beim Öffnen der
+Datei als eigene Zeile **„Note: …“** in der Bemerkung zur jeweiligen LZK (z. B.
+„Note: 29/34 = 1-“). Eine Note, die genau zu eingetragenen Punkten passt, bleibt die Note.
+Beim Import aus Excel gilt dasselbe, denn Excel kennt keine Punkte.
 
 **Nur intern:** Punkte, Prozent und Note werden **nie hochgeladen**. Zum Server gehen
 weiterhin nur Termin und Ergebnis (Flammen). Die Flammen trägst du wie bisher selbst
@@ -286,7 +291,7 @@ Punkte gerundet (85 % von 22 = 18,7 → 18,5), und die Note richtet sich nach di
 Punktgrenze. Wahlweise rundest du auf ganze Punkte oder gar nicht (dann genau nach
 Prozent). Die Vorschau zeigt die Punktgrenzen für eine Beispiel-Gesamtpunktzahl. Der
 Notenspiegel gilt für die Arbeitsdatei und wird mit ihr gespeichert. Änderst du ihn,
-werden berechnete Noten neu berechnet; selbst eingetragene bleiben.
+werden alle Noten aus ihren Punkten neu berechnet.
 
 ## Halbjahres-Zusammenfassung
 

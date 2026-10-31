@@ -102,6 +102,9 @@ durchgereicht = ({"lzk_online_1", "lzk_online_2"}
 # auf (eigene Bausteine) bzw. wird unveraendert durchgereicht (App-Zeilen).
 if 'werte["bausteinarbeit"] = self.__dict__.get("_bausteinarbeit", "")' in dialog:
     durchgereicht |= {"bausteinarbeit"}
+# Seit 2026-10-31 kein Eingabefeld mehr: die LZK-Note wird beim Uebernehmen aus den Punkten gesetzt.
+if 'werte[f"lzk_note_{nr}"] = a["note"] if a else ""' in dialog:
+    durchgereicht |= {"lzk_note_1", "lzk_note_2"}
 pruefe("B1 JEDES Baustein-Feld steht im Dialog oder wird durchgereicht (sonst loescht Bearbeiten es)",
        alle <= felder_im_dialog | durchgereicht, sorted(alle - felder_im_dialog - durchgereicht))
 
@@ -122,11 +125,14 @@ dlg.vars = {f: Wert("") for f in felder_im_dialog}
 dlg.vars["name"] = Wert("Kreise und Zylinder")
 dlg.vars["lzk_ergebnis_1"] = Wert(D.LZK_ERGEBNIS_TEXT["2"])
 dlg.vars["lzk_ergebnis_2"] = Wert(D.LZK_ERGEBNIS_TEXT["nicht_bestanden"])
-dlg.vars["lzk_note_1"] = Wert("Teil 2 wackelig")
+dlg.vars["lzk_punkte_1"] = Wert("18,5")
+dlg.vars["lzk_max_1"] = Wert("22")
 dlg._uebernehmen()
 pruefe("B2 der Dialog speichert den Wert, nicht den Anzeigetext",
        dlg.result.lzk_ergebnis_1 == "2" and dlg.result.lzk_ergebnis_2 == "nicht_bestanden", dlg.result)
-pruefe("B2b die freie Note bleibt daneben", dlg.result.lzk_note_1 == "Teil 2 wackelig", dlg.result)
+# Seit 2026-10-31: die Note ist kein Eingabefeld, sie kommt aus den Punkten (Flammen unberuehrt).
+pruefe("B2b die Note daneben kommt aus den Punkten", dlg.result.lzk_note_1 == "1-"
+       and dlg.result.lzk_note_2 == "", dlg.result)
 dlg.vars["lzk_ergebnis_1"] = Wert(D.LZK_ERGEBNIS_TEXT[""])
 dlg._uebernehmen()
 pruefe("B3 'nicht bewertet' wird leer gespeichert", dlg.result.lzk_ergebnis_1 == "", dlg.result)
