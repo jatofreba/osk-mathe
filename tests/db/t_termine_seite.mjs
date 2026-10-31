@@ -117,6 +117,22 @@ pruefe('V11 ein freier Termin: einfache Rueckfrage', html('tv-inhalt').includes(
 await lauf(`tvAusfuehren('loeschen', true)`); await ruhe();
 pruefe('V12 geloescht, und die Liste ist neu geladen', !(await gibt(talk1)) && zeilen() === 2 && meldungen.length === 0, html('tv-inhalt'));
 
+// ── R) nichts springt (Wunsch des Users 2026-10-31) ──────────────────────────
+// Nach jedem Haekchen wird neu gezeichnet - die neue Liste muss da weiterstehen, wo die alte war.
+// Die Attrappe liefert beim ersten Aufruf die alte Liste (gerollt), beim zweiten die neue.
+{
+  const ziel = seite.element('tv-inhalt');
+  const altL = { scrollTop: 240 }, neuL = { scrollTop: 0 };
+  let aufrufe = 0;
+  ziel.querySelector = sel => (sel === '.tv-liste' ? (aufrufe++ === 0 ? altL : neuL) : null);
+  lauf(`tvWaehlen(${fabue2}, true)`);
+  pruefe('R1 ein Haekchen setzen: die Liste bleibt, wo sie war - kein Sprung nach oben', neuL.scrollTop === 240 && aufrufe === 2, { aufrufe, neuL });
+  ziel.querySelector = () => null;
+  pruefe('R2 die Bedienelemente haben feste Kennungen (damit der Fokus bleibt)',
+    html('tv-inhalt').includes(`id="tv-cb-${fabue2}"`) && html('tv-inhalt').includes('id="tv-f-art"') && html('tv-inhalt').includes('id="tv-alle"'), html('tv-inhalt'));
+  lauf('tvAlleWaehlen(false)');
+}
+
 // ── N) als normale Lernbegleitung ────────────────────────────────────────────
 const nochmal = await slot(LB1, tag(7), 'input', F.mathe, 'Von lb_super');
 wer = { userId: LB2, username: 'lb_normal', role: 'admin', klasse: 'M3M4', superAdmin: false };

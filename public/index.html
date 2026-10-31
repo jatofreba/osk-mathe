@@ -6665,7 +6665,7 @@ function tvZeile(t) {
       ? 'gebucht: ' + escHtml(t.buchend) : leute.length + ' dabei'}</span>`;
   const sperre = t.bewertet ? ' <span class="pill" title="Hier ist schon eine Bewertung oder Anwesenheit eingetragen – der Termin bleibt stehen.">schon eingetragen</span>' : '';
   return `<label class="tv-zeile${an ? ' an' : ''}${t.bewertet ? ' gesperrt' : ''}">
-    <input type="checkbox" ${an ? 'checked' : ''} ${t.bewertet ? 'disabled' : ''} onchange="tvWaehlen(${t.id}, this.checked)"
+    <input type="checkbox" id="tv-cb-${t.id}" ${an ? 'checked' : ''} ${t.bewertet ? 'disabled' : ''} onchange="tvWaehlen(${t.id}, this.checked)"
       aria-label="${escHtml(tag + ' ' + (t.uhrzeit || '') + ' ' + art + ' ' + subj.name)} auswählen">
     <span class="tv-wann">${escHtml(tag)}${t.uhrzeit ? ' · ' + escHtml(t.uhrzeit) : ''}</span>
     <span class="tv-art" style="color:${subj.color};">${lwIcon(t.typ)} ${escHtml(art)} · ${escHtml(subj.name)}</span>
@@ -6677,10 +6677,17 @@ function tvZeile(t) {
 function tvRender() {
   const el = document.getElementById('tv-inhalt');
   if (!el) return;
+  // Neu zeichnen, ohne dass etwas springt (Wunsch des Users 2026-10-31): die Rollposition der
+  // Liste und das Bedienelement mit dem Fokus bleiben. Vorher sprang die Liste nach jedem
+  // Haekchen wieder nach oben.
+  const altListe = el.querySelector ? el.querySelector('.tv-liste') : null;
+  const rollen = altListe ? altListe.scrollTop : 0;
+  const aktiv = document.activeElement;
+  const fokusId = aktiv && typeof aktiv.id === 'string' && aktiv.id.startsWith('tv-') ? aktiv.id : '';
   document.getElementById('tv-titel').textContent = _tv.superAdmin
     ? '☰ Termine verwalten – alle anstehenden des Tandems' : '☰ Termine verwalten – deine anstehenden';
   const f = _tv.filter;
-  const auswahlListe = (wert, optionen, feld) => `<select class="form-input" onchange="tvFilter('${feld}', this.value)">`
+  const auswahlListe = (wert, optionen, feld) => `<select class="form-input" id="tv-f-${feld}" onchange="tvFilter('${feld}', this.value)">`
     + optionen.map(([v, t]) => `<option value="${escHtml(v)}"${v === wert ? ' selected' : ''}>${escHtml(t)}</option>`).join('')
     + '</select>';
   const admins = [...new Map(_tv.termine.map(t => [String(t.adminId), t.adminName || '–'])).entries()]
@@ -6725,14 +6732,20 @@ function tvRender() {
       ${_tv.superAdmin ? auswahlListe(f.admin, [['', 'Alle Lernbegleitungen'], ...admins], 'admin') : ''}
       ${auswahlListe(f.fach, [['', 'Alle Fächer'], ...faecher], 'fach')}
       ${auswahlListe(f.art, [['', 'Alle Arten'], ['talk', 'Talks'], ['input', 'Fachbüro & Lernberatung']], 'art')}
-      <label class="tv-check"><input type="checkbox" ${f.nurFrei ? 'checked' : ''} onchange="tvFilter('nurFrei', this.checked)"> nur freie</label>
+      <label class="tv-check"><input type="checkbox" id="tv-f-nurFrei" ${f.nurFrei ? 'checked' : ''} onchange="tvFilter('nurFrei', this.checked)"> nur freie</label>
     </div>
-    ${waehlbar.length ? `<label class="tv-check" style="margin:0 0 6px 10px;"><input type="checkbox" ${alleAn ? 'checked' : ''}
+    ${waehlbar.length ? `<label class="tv-check" style="margin:0 0 6px 10px;"><input type="checkbox" id="tv-alle" ${alleAn ? 'checked' : ''}
       onchange="tvAlleWaehlen(this.checked)"> alle ${waehlbar.length} sichtbaren auswählen</label>` : ''}
     <div class="tv-liste">${sichtbar.length ? sichtbar.map(tvZeile).join('')
       : `<div class="lzk-ue-leer" style="padding:12px;">${_tv.termine.length ? 'Kein Termin passt zu den Filtern.' : 'Keine anstehenden Termine.'}</div>`}</div>
     ${leiste}
     ${_tv.meldung ? `<div class="tv-meldung" role="status">${escHtml(_tv.meldung)}</div>` : ''}`;
+  const neuListe = el.querySelector ? el.querySelector('.tv-liste') : null;
+  if (neuListe) neuListe.scrollTop = rollen;
+  if (fokusId) {
+    const f = document.getElementById(fokusId);
+    if (f && f.focus) f.focus({ preventScroll: true });
+  }
 }
 function tvFilter(feld, wert) {
   _tv.filter[feld] = wert;
