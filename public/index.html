@@ -227,6 +227,66 @@ label[data-name][hidden]{display:none !important;}
   background:#fef9c3;border:1px solid #fde68a;border-radius:8px;
   padding:7px 10px;margin-bottom:10px;
 }
+/* ── Allgemeine Infos (2026-11-04): "Aktuelles" und Reiter "Allgemeine Infos" ──
+   Die Farbe steht als Rand und heller Grund, die Schrift bleibt dunkel - so ist auch eine
+   gelbe Karte lesbar. --info-rand/--info-grund setzt die Seite je Karte. */
+.info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;}
+.info-karte{
+  background:var(--info-grund,#f8fafc);border:1px solid var(--md-outline-variant);
+  border-left:5px solid var(--info-rand,#64748b);border-radius:12px;padding:10px 12px;min-width:0;
+}
+.info-kopf{display:flex;align-items:flex-start;gap:6px;}
+.info-kopf .lw-chip-subj{margin-top:2px;}
+.info-titel{flex:1;font-weight:800;font-size:14px;line-height:1.3;min-width:0;overflow-wrap:anywhere;}
+.info-text{font-size:13px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere;margin-top:4px;}
+.info-text.zu{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
+.info-text a{color:var(--md-primary);}
+.info-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.info-link{
+  display:inline-block;max-width:100%;padding:4px 10px;border-radius:999px;
+  background:var(--md-surface);border:1px solid var(--md-outline-variant);
+  font-size:12px;font-weight:600;color:var(--md-primary);text-decoration:none;overflow-wrap:anywhere;
+}
+.info-link:hover{background:var(--md-surface-container-low);}
+.info-meta{font-size:11px;color:var(--md-on-surface-variant);margin-top:6px;}
+.info-mehr{border:none;background:none;color:var(--md-primary);font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;font-family:inherit;}
+.info-aktionen{display:flex;gap:4px;flex-shrink:0;}
+.info-aktionen .btn-icon{padding:2px 7px;font-size:12px;}
+.info-verwalten{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+#home-news:empty{display:none;}
+/* Plenum: gross genug fuer den Beamer */
+.pl-news .info-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
+.pl-news .info-titel{font-size:17px;}
+.pl-news .info-text{font-size:15px;}
+/* Reiter: Spalten nebeneinander (Wahl des Users), auf schmalen Bildschirmen untereinander */
+.iw-wrap{max-width:1500px;margin:0 auto;padding:18px;}
+.iw-board{
+  display:grid;grid-template-columns:repeat(var(--iw-spalten,4),minmax(230px,1fr));
+  gap:14px;align-items:start;overflow-x:auto;padding-bottom:6px;
+}
+@media (max-width:760px){.iw-board{grid-template-columns:1fr;}}
+.iw-spalte{background:var(--md-surface-container-low);border-radius:14px;padding:10px;min-width:0;}
+.iw-spalte-kopf{
+  display:flex;align-items:center;gap:8px;background:var(--md-surface);border-radius:10px;
+  border-top:5px solid var(--iw-farbe,#64748b);padding:8px 10px;margin-bottom:10px;
+}
+.iw-spalte-name{
+  flex:1;font-weight:800;font-size:15px;background:none;border:none;text-align:left;
+  cursor:pointer;font-family:inherit;color:var(--md-on-surface);padding:0;
+}
+.iw-zahl{font-size:12px;font-weight:600;color:var(--md-on-surface-variant);margin-left:4px;}
+.iw-spalte .info-karte{margin-bottom:10px;}
+.iw-spalte .info-karte:last-child{margin-bottom:0;}
+/* Farbwahl im Formular */
+.info-farbe{
+  display:inline-flex;align-items:center;gap:6px;border:1px solid var(--md-outline-variant);
+  background:var(--info-grund);border-radius:999px;padding:4px 10px 4px 6px;
+  font-size:12px;cursor:pointer;font-family:inherit;color:var(--md-on-surface);
+}
+.info-farbe span{width:14px;height:14px;border-radius:50%;background:var(--info-rand);flex-shrink:0;}
+.info-farbe.an{outline:2px solid var(--md-on-surface);outline-offset:1px;font-weight:700;}
+.info-link-zeile{display:flex;gap:6px;margin-bottom:6px;}
+.info-link-zeile .form-input{min-width:0;}
 /* Wunschkarten im Plenum: gross genug fuers Beamen, nebeneinander statt
    untereinander - sie sollen die Woche nicht nach unten druecken. */
 .pl-wuensche{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
@@ -1170,8 +1230,8 @@ textarea.form-input{
 
   <nav class="tabs" id="app-tabs" aria-label="Bereiche">
     <!-- Eine Reihenfolge fuer beide Rollen, ausgeblendet wird je Rolle:
-         Admin:   Kalender, Talks, LZK, Lerntheken-Uebersicht, Halbjahr, Plenum | rechts Tandem
-         Schueler:innen: Start, Kalender, Talks, Mathe-Lerntheken, Mein Halbjahr -->
+         Admin:   Kalender, Talks, LZK, Lerntheken-Uebersicht, Halbjahr, Plenum, Allgemeine Infos | rechts Tandem
+         Schueler:innen: Start, Kalender, Talks, Mathe-Lerntheken, Mein Halbjahr, Allgemeine Infos -->
     <button type="button" class="tab active" id="tab-home" onclick="showHome()">🏠 Start</button>
     <button type="button" class="tab" id="tab-calendar" onclick="showView('calendar')">📅 Mein Kalender</button>
     <button type="button" class="tab" id="tab-talking" onclick="showSubjectTalking(defaultSubjectKey())">🗣️ Talks</button>
@@ -1180,6 +1240,7 @@ textarea.form-input{
     <button type="button" class="tab" id="tab-admin" style="display:none" onclick="showView('admin')">📊 Lerntheken-Übersicht</button>
     <button type="button" class="tab" id="tab-halbjahr" style="display:none" onclick="showView('halbjahr')">🎓 Halbjahr-Übersicht</button>
     <button type="button" class="tab" id="tab-plenum" style="display:none" onclick="showView('plenum')">🖥️ Plenum</button>
+    <button type="button" class="tab" id="tab-infos" onclick="showView('infos')">ℹ️ Allgemeine Infos</button>
     <button type="button" class="tab" id="tab-klasse" style="display:none;margin-left:auto;" onclick="showView('klasse')">👥 Tandem-Übersicht</button>
   </nav>
 
@@ -1201,6 +1262,8 @@ textarea.form-input{
       <p style="color:var(--ink2);font-size:14px;margin-bottom:24px;">Deine Woche und deine in LZKs, Talks und Lerntheken gesammelten Flammen im Überblick.</p>
       <!-- Wünsche stehen ÜBER der Woche - wie beim Admin im Kalender: erst das,
            was man anstoßen kann, dann was schon feststeht. -->
+      <!-- "Aktuelles" der Lernbegleitungen ganz oben (2026-11-04) - verschwindet, wenn nichts ansteht. -->
+      <div id="home-news" style="margin-bottom:24px;"></div>
       <div id="home-wuensche" style="margin-bottom:24px;"></div>
       <div id="home-myweek" style="margin-bottom:24px;"></div>
       <div id="home-trophy-summary"></div>
@@ -1307,9 +1370,23 @@ textarea.form-input{
         </div>
       </div>
       <div class="pl-hinweis" id="pl-hinweis" role="status" aria-live="polite"></div>
+      <div id="pl-news"></div>
       <div id="pl-wuensche"></div>
       <div id="pl-grid">Lade…</div>
       <div class="pl-detail" id="pl-detail" hidden></div>
+    </div>
+  </div>
+
+  <div id="view-infos" style="display:none;">
+    <div class="iw-wrap">
+      <div class="pl-head">
+        <div>
+          <div class="cal-title">ℹ️ Allgemeine Infos</div>
+          <div class="cal-subtitle">Links und Infos, die bleiben – allgemein und nach Fach.</div>
+        </div>
+        <div class="pl-tools"><button type="button" class="pl-btn" onclick="loadInfos()">↺ Laden</button></div>
+      </div>
+      <div id="iw-inhalt">Lade…</div>
     </div>
   </div>
 
@@ -1814,6 +1891,63 @@ textarea.form-input{
 </div>
 
 <!-- ══ MODAL: Fachbüro-Termin - Schüler:innen einladen (Admin, bei Erstellung + nachträglich) ══ -->
+<!-- ══ MODAL: Info ("Aktuelles") oder Karte ("Allgemeine Infos") anlegen/bearbeiten ═══ -->
+<div class="overlay" id="modal-info">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title" id="info-kopf">Info</div>
+    <div class="form-group">
+      <label class="form-label" for="info-fach">Fach</label>
+      <select class="form-input" id="info-fach" onchange="infoFormFarbenZeigen()"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="info-titel">Titel</label>
+      <input class="form-input" id="info-titel" maxlength="120" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="info-text">Text</label>
+      <textarea class="form-input" id="info-text" rows="5" maxlength="3000"
+                placeholder="Adressen mit https:// werden von selbst klickbar."></textarea>
+    </div>
+    <div class="form-group">
+      <div class="form-label" id="info-links-lbl">Links</div>
+      <div id="info-links" role="group" aria-labelledby="info-links-lbl"></div>
+      <button type="button" class="wu-btn" onclick="infoLinkDazu()">+ Link</button>
+    </div>
+    <div class="form-group">
+      <div class="form-label" id="info-farbe-lbl">Farbe</div>
+      <div id="info-farben" role="group" aria-labelledby="info-farbe-lbl" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+    <div id="info-news-felder">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:150px;margin-bottom:10px;">
+          <label class="form-label" for="info-ab">Sichtbar ab</label>
+          <input class="form-input" id="info-ab" type="date" onchange="infoAbGeaendert()">
+        </div>
+        <div class="form-group" style="flex:1;min-width:150px;margin-bottom:10px;">
+          <label class="form-label" for="info-bis">Sichtbar bis</label>
+          <input class="form-input" id="info-bis" type="date" onchange="infoBisGeaendert()">
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;" role="group" aria-label="Wie lange sichtbar">
+        <button type="button" class="wu-btn" id="info-d1" onclick="infoDauer(1)">1 Tag</button>
+        <button type="button" class="wu-btn" id="info-d7" onclick="infoDauer(7)">1 Woche</button>
+        <button type="button" class="wu-btn" id="info-d14" onclick="infoDauer(14)">2 Wochen</button>
+      </div>
+      <div id="info-dauer" class="mw-sub" style="margin-bottom:12px;" role="status" aria-live="polite"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+        <input type="checkbox" id="info-oben"> 📌 Oben halten (steht vor den anderen)</label>
+      <button type="button" class="wu-btn" id="info-kopie" style="margin-top:10px;" onclick="infoKopie()"
+              title="Neue Info mit demselben Inhalt, sichtbar ab dem Tag nach dieser – z.B. die Dienste der nächsten Woche">⧉ Kopie für die Zeit danach</button>
+    </div>
+    <div id="info-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="info-loeschen" style="margin-right:auto;color:var(--md-error);" onclick="infoLoeschenAusForm()">Löschen</button>
+      <button class="btn-cancel" onclick="closeModal('modal-info')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="infoSpeichern()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: Wunsch → Termin (vorhandenen nehmen oder neu anlegen) ═══════════ -->
 <div class="overlay" id="modal-wunsch-termin">
   <div class="modal" style="max-width:520px;">
@@ -2814,7 +2948,7 @@ async function showHome() {
   showView('home');
   // Wochenansicht und Pokale-Übersicht laden parallel - die Woche steht oben und
   // soll nicht auf die (langsamere) Lerntheken-/Leaderboard-Auswertung warten.
-  await Promise.all([loadMyWeek(), loadPickerData(), loadWuensche()]);
+  await Promise.all([loadMyWeek(), loadPickerData(), loadWuensche(), loadInfos()]);
 }
 
 // ── "Meine Woche" (Startseite) ───────────────────────────────────────────────
@@ -3388,6 +3522,427 @@ async function wunschTerminAnSlot(slotId) {
   loadWuensche();
 }
 
+// ── Allgemeine Infos (Nutzerwunsch 2026-11-04) ───────────────────────────────────
+// Zwei Arten aus /api/infos: News fuer "📢 Aktuelles" (Startseite der Schueler:innen und
+// Plenum → Heute; sichtbar von-bis, vorplanbar) und Karten fuer den Reiter "Allgemeine Infos"
+// (bleiben; Spalten Allgemein + je Fach). Jede Lernbegleitung darf alles bearbeiten.
+// Farbe: zuerst die des Fachs, frei waehlbar aus INFO_FARBEN (dieselben Namen prueft server.js).
+const INFO_FARBEN = {
+  blau:    { name: 'Blau',   rand: '#2563eb', grund: '#eff6ff' },
+  tuerkis: { name: 'Türkis', rand: '#0d9488', grund: '#f0fdfa' },
+  gruen:   { name: 'Grün',   rand: '#16a34a', grund: '#f0fdf4' },
+  gelb:    { name: 'Gelb',   rand: '#ca8a04', grund: '#fefce8' },
+  orange:  { name: 'Orange', rand: '#ea580c', grund: '#fff7ed' },
+  rot:     { name: 'Rot',    rand: '#dc2626', grund: '#fef2f2' },
+  lila:    { name: 'Lila',   rand: '#7c3aed', grund: '#f5f3ff' },
+  grau:    { name: 'Grau',   rand: '#64748b', grund: '#f8fafc' },
+};
+const INFO_ALLGEMEIN_FARBE = 'tuerkis';
+const INFO_NEWS_TAGE = 7;        // Vorgabe "1 Woche" - wie in server.js
+const HOME_NEWS_MAX = 3;         // auf der Startseite, der Rest hinter "+ n weitere"
+let _infos = { heute: '', news: [], karten: [] };
+let _infoAufgeklappt = new Set();   // Karten, deren langer Text ganz gezeigt wird
+let _homeNewsAlle = false;
+let _plNewsListe = '';               // Plenum: aufgeklappte Liste '' | 'geplant' | 'abgelaufen'
+let _infoForm = null;                // { art, id, farbe, tage } waehrend das Formular offen ist
+
+async function loadInfos() {
+  try {
+    const r = await fetch('/api/infos');
+    if (r.ok) {
+      const d = await r.json();
+      _infos = { heute: d.heute || '', news: d.news || [], karten: d.karten || [] };
+    }
+  } catch {}
+  renderInfosUeberall();
+}
+function renderInfosUeberall() {
+  renderHomeNews();
+  plNewsRender();
+  renderInfoBoard();
+}
+function infoHeute() { return _infos.heute || lwDateStr(new Date()); }
+function infoTagPlus(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  return lwDateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+}
+function infoFach(subjectId) { return subjectId == null ? null : (subjectsMeta || []).find(x => x.id === subjectId) || null; }
+function infoFarbe(e) {
+  if (INFO_FARBEN[e.farbe]) return INFO_FARBEN[e.farbe];
+  const f = infoFach(e.subjectId);
+  return f ? { rand: f.color, grund: f.colorBg || '#f8fafc' } : INFO_FARBEN[INFO_ALLGEMEIN_FARBE];
+}
+// Reiner Text, nur http(s)-Adressen werden klickbar. Erst zerlegen, dann jedes Stueck
+// escapen - so kann aus dem Text nie HTML werden.
+function infoTextHtml(text) {
+  return String(text || '').split(/(https?:\/\/[^\s<>"']+)/g).map((t, i) => {
+    if (i % 2 === 0) return escHtml(t);
+    const m = t.match(/^(.*?)([.,;:!?)\]]*)$/);
+    return `<a href="${escHtml(m[1])}" target="_blank" rel="noopener noreferrer">${escHtml(m[1])}</a>${escHtml(m[2])}`;
+  }).join('');
+}
+function infoKurzUrl(url) {
+  const ohne = String(url || '').replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  return ohne.length > 40 ? ohne.slice(0, 38) + '…' : ohne;
+}
+function infoLinksHtml(links) {
+  const ok = (links || []).filter(l => /^https?:\/\//i.test(String(l.url || '')));
+  if (!ok.length) return '';
+  return `<div class="info-links">${ok.map(l => `<a class="info-link" href="${escHtml(l.url)}" target="_blank"
+    rel="noopener noreferrer" title="${escHtml(l.url)}">🔗 ${escHtml(l.titel || infoKurzUrl(l.url))}</a>`).join('')}</div>`;
+}
+// Eine Karte (News oder Pinnwand). opt.admin: ✎ (und opt.knoepfe davor), opt.meta: Zeile unten.
+function infoKarteHtml(e, opt = {}) {
+  const f = infoFarbe(e);
+  const fach = infoFach(e.subjectId);
+  const text = String(e.text || '');
+  const lang = text.length > 220 || text.split('\n').length > 4;
+  const offen = _infoAufgeklappt.has(e.id);
+  const name = e.titel || (e.art === 'news' ? 'Info' : 'Karte');
+  const badge = fach
+    ? `<span class="lw-chip-subj" style="background:${fach.color};" title="${escHtml(fach.name)}">${escHtml(fach.name.charAt(0).toUpperCase())}</span>` : '';
+  const aktionen = opt.admin ? `<span class="info-aktionen">${opt.knoepfe || ''}<button type="button" class="btn-icon"
+      title="Bearbeiten" aria-label="„${escHtml(name)}“ bearbeiten" onclick="openInfoForm('${e.art}', ${e.id})">✎</button></span>` : '';
+  return `<div class="info-karte" style="--info-rand:${f.rand};--info-grund:${f.grund};">
+    <div class="info-kopf">${badge}<div class="info-titel">${e.angeheftet ? '📌 ' : ''}${escHtml(e.titel)}</div>${aktionen}</div>
+    ${text ? `<div class="info-text${lang && !offen ? ' zu' : ''}">${infoTextHtml(text)}</div>` : ''}
+    ${lang ? `<button type="button" class="info-mehr" aria-expanded="${offen}" onclick="infoAufklappen(${e.id})">${offen ? 'weniger' : 'mehr …'}</button>` : ''}
+    ${infoLinksHtml(e.links)}
+    ${opt.meta ? `<div class="info-meta">${opt.meta}</div>` : ''}
+  </div>`;
+}
+function infoAufklappen(id) {
+  if (_infoAufgeklappt.has(id)) _infoAufgeklappt.delete(id); else _infoAufgeklappt.add(id);
+  renderInfosUeberall();
+}
+// News: angeheftete zuerst, dann die neuesten.
+function infoNewsSortiert(liste) {
+  return [...liste].sort((a, b) => (Number(!!b.angeheftet) - Number(!!a.angeheftet))
+    || String(b.sichtbarAb || '').localeCompare(String(a.sichtbarAb || '')) || (b.id - a.id));
+}
+function infoNewsZustand(n, heute) {
+  if (n.sichtbarAb && n.sichtbarAb > heute) return 'geplant';
+  if (n.sichtbarBis && n.sichtbarBis < heute) return 'abgelaufen';
+  return 'aktuell';
+}
+function infoNewsAktuell() {
+  const heute = infoHeute();
+  return infoNewsSortiert((_infos.news || []).filter(n => infoNewsZustand(n, heute) === 'aktuell'));
+}
+
+// Startseite der Schueler:innen: hoechstens HOME_NEWS_MAX, der Rest auf Klick.
+function renderHomeNews() {
+  const el = document.getElementById('home-news');
+  if (!el) return;
+  if (!me || me.role === 'admin') { el.innerHTML = ''; return; }
+  const aktuell = infoNewsAktuell();
+  if (!aktuell.length) { el.innerHTML = ''; return; }
+  const zeigen = _homeNewsAlle ? aktuell : aktuell.slice(0, HOME_NEWS_MAX);
+  const mehr = aktuell.length - HOME_NEWS_MAX;
+  el.innerHTML = `<div class="mw-panel">
+    <div class="mw-head"><div class="mw-title">📢 Aktuelles</div></div>
+    <div class="info-grid">${zeigen.map(n => infoKarteHtml(n)).join('')}</div>
+    ${mehr > 0 ? `<button type="button" class="wu-btn" style="margin-top:10px;" aria-expanded="${_homeNewsAlle}"
+      onclick="homeNewsAlle()">${_homeNewsAlle ? 'weniger anzeigen' : `+ ${mehr} weitere`}</button>` : ''}
+  </div>`;
+}
+function homeNewsAlle() {
+  _homeNewsAlle = !_homeNewsAlle;
+  renderHomeNews();
+}
+
+// Plenum: unter "Heute" gross mit "+ Info" und ✎; darunter zum Verwalten, was geplant oder
+// abgelaufen ist (zugeklappt, damit es am Beamer nicht stoert). Unter "Diese Woche" nur ein
+// Hinweisknopf.
+function plNewsRender() {
+  const el = document.getElementById('pl-news');
+  if (!el) return;
+  if (!me || me.role !== 'admin') { el.innerHTML = ''; return; }
+  const heute = infoHeute();
+  const alle = _infos.news || [];
+  const aktuell = infoNewsAktuell();
+  if (_plZeitraum !== 'heute') {
+    el.innerHTML = aktuell.length ? `<div style="margin-bottom:10px;"><button type="button" class="pl-btn"
+      onclick="plZeitraum('heute')">📢 Aktuelles (${aktuell.length}) – unter „Heute“</button></div>` : '';
+    return;
+  }
+  const geplant = alle.filter(n => infoNewsZustand(n, heute) === 'geplant')
+    .sort((a, b) => String(a.sichtbarAb).localeCompare(String(b.sichtbarAb)) || (a.id - b.id));
+  const abgelaufen = alle.filter(n => infoNewsZustand(n, heute) === 'abgelaufen')
+    .sort((a, b) => String(b.sichtbarBis).localeCompare(String(a.sichtbarBis)) || (b.id - a.id)).slice(0, 20);
+  const name = n => escHtml(n.titel || String(n.text || '').slice(0, 40) || 'Info');
+  const zeile = (n, art) => `<div class="wu-zeile">
+      <div class="wu-haupt">
+        <div class="wu-titel">${name(n)}</div>
+        <div class="wu-sub">${art === 'geplant'
+          ? `sichtbar ab ${escHtml(lwFmtDay(n.sichtbarAb))} bis ${escHtml(lwFmtDay(n.sichtbarBis))}`
+          : `war sichtbar bis ${escHtml(lwFmtDay(n.sichtbarBis))}`}</div>
+      </div>
+      ${art === 'geplant'
+        ? `<button type="button" class="wu-btn" onclick="openInfoForm('news', ${n.id})">✎ Bearbeiten</button>`
+        : `<button type="button" class="wu-btn dabei" onclick="openInfoForm('news', ${n.id}, undefined, true)">↻ Erneut zeigen</button>
+           <button type="button" class="wu-btn" title="Löschen" aria-label="„${name(n)}“ löschen" onclick="infoLoeschen(${n.id})">×</button>`}
+    </div>`;
+  const knopf = (art, text, n) => n ? `<button type="button" class="pl-btn${_plNewsListe === art ? ' active' : ''}"
+      aria-expanded="${_plNewsListe === art}" onclick="plNewsListe('${art}')">${text} (${n})</button>` : '';
+  const liste = _plNewsListe === 'geplant' ? geplant : _plNewsListe === 'abgelaufen' ? abgelaufen : [];
+  el.innerHTML = `<div class="mw-panel pl-news" style="margin-bottom:14px;">
+    <div class="mw-head">
+      <div class="mw-title">📢 Aktuelles</div>
+      <button type="button" class="pl-btn" onclick="openInfoForm('news')">+ Info</button>
+    </div>
+    ${aktuell.length
+      ? `<div class="info-grid">${aktuell.map(n => infoKarteHtml(n, { admin: true,
+          meta: `sichtbar bis ${escHtml(lwFmtDay(n.sichtbarBis))}` })).join('')}</div>`
+      : '<div class="lw-empty">Gerade keine aktuellen Infos.</div>'}
+    ${geplant.length || abgelaufen.length ? `<div class="info-verwalten">
+      ${knopf('geplant', '🗓 Geplant', geplant.length)}${knopf('abgelaufen', '⌛ Abgelaufen', abgelaufen.length)}</div>` : ''}
+    ${liste.length ? `<div class="wu-liste" style="margin-top:8px;">${liste.map(n => zeile(n, _plNewsListe)).join('')}</div>` : ''}
+  </div>`;
+}
+function plNewsListe(art) {
+  _plNewsListe = _plNewsListe === art ? '' : art;
+  plNewsRender();
+}
+
+// Reiter "Allgemeine Infos": Spalte Allgemein + je Angebotsfach. Eine Karte, deren Fach es
+// (nicht mehr) als Spalte gibt, steht unter Allgemein statt zu verschwinden.
+function infoSpalten() {
+  return [{ key: 'allg', subjectId: null, name: 'Allgemein', farbe: INFO_FARBEN[INFO_ALLGEMEIN_FARBE].rand },
+    ...angebotsFaecher().map(x => ({ key: String(x.id), subjectId: x.id, name: x.name, farbe: x.color }))];
+}
+function infoSpalteVon(k) {
+  return k.subjectId != null && angebotsFaecher().some(x => x.id === k.subjectId) ? String(k.subjectId) : 'allg';
+}
+// Zugeklappte Spalten merkt sich das Geraet (nur Bequemlichkeit - fehlt der Speicher, sind alle offen).
+let _iwZu = null;
+function iwZu() {
+  if (!_iwZu) {
+    _iwZu = new Set();
+    try { JSON.parse(localStorage.getItem('osklar-infos-zu') || '[]').forEach(k => _iwZu.add(String(k))); } catch {}
+  }
+  return _iwZu;
+}
+function iwSpalteUmschalten(key) {
+  const zu = iwZu();
+  if (zu.has(key)) zu.delete(key); else zu.add(key);
+  try { localStorage.setItem('osklar-infos-zu', JSON.stringify([...zu])); } catch {}
+  renderInfoBoard();
+}
+function renderInfoBoard() {
+  const el = document.getElementById('iw-inhalt');
+  if (!el) return;
+  const admin = !!(me && me.role === 'admin');
+  const spalten = infoSpalten();
+  const karten = [...(_infos.karten || [])].sort((a, b) => (a.position - b.position) || (a.id - b.id));
+  const html = spalten.map(sp => {
+    const liste = karten.filter(k => infoSpalteVon(k) === sp.key);
+    const zu = iwZu().has(sp.key);
+    const kartenHtml = liste.map((k, i) => infoKarteHtml(k, { admin, knoepfe: admin ? `
+        <button type="button" class="btn-icon" title="Nach oben" aria-label="„${escHtml(k.titel || 'Karte')}“ nach oben" ${i === 0 ? 'disabled' : ''}
+          onclick="infoVerschieben(${k.id}, 'hoch')">↑</button>
+        <button type="button" class="btn-icon" title="Nach unten" aria-label="„${escHtml(k.titel || 'Karte')}“ nach unten" ${i === liste.length - 1 ? 'disabled' : ''}
+          onclick="infoVerschieben(${k.id}, 'runter')">↓</button>` : '' })).join('');
+    const leer = `<div class="lw-empty" style="padding:4px 6px;">${admin ? 'Noch leer – mit + eine Karte anlegen.' : 'Noch nichts hier.'}</div>`;
+    return `<section class="iw-spalte" aria-label="${escHtml(sp.name)}">
+      <div class="iw-spalte-kopf" style="--iw-farbe:${sp.farbe};">
+        <button type="button" class="iw-spalte-name" aria-expanded="${!zu}" onclick="iwSpalteUmschalten('${sp.key}')">${zu ? '▸' : '▾'} ${escHtml(sp.name)}<span class="iw-zahl">${liste.length}</span></button>
+        ${admin ? `<button type="button" class="btn-icon" title="Karte hinzufügen" aria-label="Karte unter ${escHtml(sp.name)} hinzufügen"
+          onclick="openInfoForm('karte', null, ${sp.subjectId === null ? 'null' : sp.subjectId})">+</button>` : ''}
+      </div>
+      ${zu ? '' : (kartenHtml || leer)}
+    </section>`;
+  }).join('');
+  el.innerHTML = `<div class="iw-board" style="--iw-spalten:${spalten.length};">${html}</div>`;
+}
+
+// ── Formular: Info oder Karte anlegen/bearbeiten ─────────────────────────────
+// neuDatieren: eine abgelaufene Info "erneut zeigen" - derselbe Eintrag, frische Daten.
+function openInfoForm(art, id, subjectVorgabe, neuDatieren) {
+  const e = id ? [...(_infos.news || []), ...(_infos.karten || [])].find(x => x.id === id) : null;
+  if (id && !e) return;
+  art = e ? e.art : art;
+  const news = art === 'news';
+  _infoForm = { art, id: e ? e.id : null, farbe: e ? (e.farbe || '') : '', tage: null };
+  document.getElementById('info-kopf').textContent = e
+    ? (neuDatieren ? '📢 Info erneut zeigen' : news ? '📢 Info bearbeiten' : '📌 Karte bearbeiten')
+    : (news ? '📢 Neue Info für „Aktuelles“' : '📌 Neue Karte für „Allgemeine Infos“');
+  const faecher = angebotsFaecher();
+  const fachId = e ? e.subjectId : (subjectVorgabe === undefined ? null : subjectVorgabe);
+  // Ein Fach, das es nicht mehr als Angebot gibt, bleibt waehlbar - sonst ginge es beim Speichern verloren.
+  const zusatz = fachId != null && !faecher.some(x => x.id === fachId) && infoFach(fachId) ? [infoFach(fachId)] : [];
+  const sel = document.getElementById('info-fach');
+  sel.innerHTML = '<option value="">Allgemein</option>'
+    + [...faecher, ...zusatz].map(x => `<option value="${x.id}">${escHtml(x.name)}</option>`).join('');
+  sel.value = fachId == null ? '' : String(fachId);
+  document.getElementById('info-titel').value = e ? e.titel || '' : '';
+  document.getElementById('info-titel').placeholder = news ? 'z.B. Dienste diese Woche' : 'z.B. Berufsorientierung';
+  document.getElementById('info-text').value = e ? e.text || '' : '';
+  infoLinksZeigen(e ? (e.links || []) : (news ? [] : [{ titel: '', url: '' }]));
+  document.getElementById('info-news-felder').style.display = news ? '' : 'none';
+  if (news) {
+    const heute = infoHeute();
+    const behalten = e && !neuDatieren;
+    document.getElementById('info-ab').value = behalten ? e.sichtbarAb : heute;
+    document.getElementById('info-bis').value = behalten ? e.sichtbarBis : infoTagPlus(heute, INFO_NEWS_TAGE - 1);
+    document.getElementById('info-oben').checked = e ? !!e.angeheftet : false;
+    _infoForm.tage = behalten ? null : INFO_NEWS_TAGE;
+    infoDauerAnzeigen();
+  }
+  document.getElementById('info-loeschen').style.display = e ? '' : 'none';
+  document.getElementById('info-kopie').style.display = e && news && !neuDatieren ? '' : 'none';
+  document.getElementById('info-error').style.display = 'none';
+  infoFormFarbenZeigen();
+  openModal('modal-info');
+}
+// Fuer wiederkehrende Infos (Dienste jede Woche): derselbe Inhalt als NEUE Info, sichtbar ab
+// dem Tag nach dieser, wieder eine Woche lang. Das Original bleibt, wie es ist.
+function infoKopie() {
+  if (!_infoForm || _infoForm.art !== 'news') return;
+  const bis = document.getElementById('info-bis').value || infoHeute();
+  _infoForm.id = null;
+  document.getElementById('info-kopf').textContent = '📢 Neue Info (Kopie)';
+  document.getElementById('info-loeschen').style.display = 'none';
+  document.getElementById('info-kopie').style.display = 'none';
+  document.getElementById('info-ab').value = infoTagPlus(bis, 1);
+  infoDauer(INFO_NEWS_TAGE);
+}
+function infoLinksZeigen(links) {
+  document.getElementById('info-links').innerHTML = links.map((l, i) => `<div class="info-link-zeile">
+      <input class="form-input" id="info-lt-${i}" style="flex:2;" placeholder="Name, z.B. TaskCard" aria-label="Name des Links ${i + 1}" value="${escHtml(l.titel || '')}">
+      <input class="form-input" id="info-lu-${i}" style="flex:3;" placeholder="https://…" aria-label="Adresse des Links ${i + 1}" value="${escHtml(l.url || '')}">
+      <button type="button" class="btn-icon red" title="Link entfernen" aria-label="Link ${i + 1} entfernen" onclick="infoLinkWeg(${i})">✕</button>
+    </div>`).join('');
+}
+function infoLinksLesen() {
+  const links = [];
+  for (let i = 0; ; i++) {
+    const t = document.getElementById('info-lt-' + i);
+    const u = document.getElementById('info-lu-' + i);
+    if (!t || !u) break;
+    links.push({ titel: String(t.value || '').trim(), url: String(u.value || '').trim() });
+  }
+  return links;
+}
+function infoLinkDazu() {
+  infoLinksZeigen([...infoLinksLesen(), { titel: '', url: '' }]);
+  const neu = document.getElementById('info-lt-' + (infoLinksLesen().length - 1));
+  if (neu && neu.focus) neu.focus();
+}
+function infoLinkWeg(i) {
+  const links = infoLinksLesen();
+  links.splice(i, 1);
+  infoLinksZeigen(links);
+}
+function infoFormFarbenZeigen() {
+  if (!_infoForm) return;
+  const fachId = parseInt(document.getElementById('info-fach').value) || null;
+  const fach = infoFach(fachId);
+  const eigen = fach ? { name: 'wie ' + fach.name, rand: fach.color, grund: fach.colorBg || '#f8fafc' }
+    : { ...INFO_FARBEN[INFO_ALLGEMEIN_FARBE], name: 'Allgemein (Türkis)' };
+  const knopf = (key, f) => {
+    const an = _infoForm.farbe === key;
+    return `<button type="button" class="info-farbe${an ? ' an' : ''}" aria-pressed="${an}"
+      style="--info-rand:${f.rand};--info-grund:${f.grund};" onclick="infoFarbeWaehlen('${key}')"><span></span>${escHtml(f.name)}</button>`;
+  };
+  document.getElementById('info-farben').innerHTML = knopf('', eigen)
+    + Object.entries(INFO_FARBEN).map(([k, f]) => knopf(k, f)).join('');
+}
+function infoFarbeWaehlen(key) {
+  if (!_infoForm) return;
+  _infoForm.farbe = key;
+  infoFormFarbenZeigen();
+}
+// Dauer: "1 Woche" heisst sieben Tage ab dem ersten Tag (Mo bis So). Wer "sichtbar ab"
+// verschiebt, behaelt die gewaehlte Dauer; wer "bis" von Hand setzt, waehlt keine.
+function infoDauer(tage) {
+  if (!_infoForm) return;
+  _infoForm.tage = tage;
+  const ab = document.getElementById('info-ab').value || infoHeute();
+  document.getElementById('info-ab').value = ab;
+  document.getElementById('info-bis').value = infoTagPlus(ab, tage - 1);
+  infoDauerAnzeigen();
+}
+function infoAbGeaendert() {
+  if (_infoForm && _infoForm.tage) infoDauer(_infoForm.tage); else infoDauerAnzeigen();
+}
+function infoBisGeaendert() {
+  if (_infoForm) _infoForm.tage = null;
+  infoDauerAnzeigen();
+}
+function infoDauerAnzeigen() {
+  const ab = document.getElementById('info-ab').value;
+  const bis = document.getElementById('info-bis').value;
+  const el = document.getElementById('info-dauer');
+  let tage = 0;
+  if (ab && bis) tage = Math.round((new Date(bis + 'T12:00:00') - new Date(ab + 'T12:00:00')) / 86400000) + 1;
+  [1, 7, 14].forEach(n => {
+    const b = document.getElementById('info-d' + n);
+    if (!b) return;
+    const an = tage === n;
+    b.className = 'wu-btn' + (an ? ' dabei' : '');
+    b.setAttribute('aria-pressed', an ? 'true' : 'false');
+  });
+  if (!el) return;
+  if (!ab || !bis) { el.textContent = ''; return; }
+  if (tage < 1) { el.textContent = '⚠️ „Sichtbar bis“ liegt vor „sichtbar ab“.'; return; }
+  const heute = infoHeute();
+  el.textContent = `Sichtbar ${lwFmtDay(ab)} bis ${lwFmtDay(bis)} (${tage === 1 ? '1 Tag' : tage + ' Tage'})`
+    + (ab > heute ? ' – erscheint erst dann' : '');
+}
+function infoFehler(t) {
+  const el = document.getElementById('info-error');
+  el.textContent = t || '';
+  el.style.display = t ? 'block' : 'none';
+}
+async function infoSpeichern() {
+  const f = _infoForm;
+  if (!f) return;
+  const fach = document.getElementById('info-fach').value;
+  const body = {
+    subjectId: fach ? parseInt(fach) : null,
+    titel: document.getElementById('info-titel').value.trim(),
+    text: document.getElementById('info-text').value.trim(),
+    links: infoLinksLesen().filter(l => l.titel || l.url),
+    farbe: f.farbe,
+  };
+  if (!f.id) body.art = f.art;
+  if (f.art === 'news') {
+    body.sichtbarAb = document.getElementById('info-ab').value;
+    body.sichtbarBis = document.getElementById('info-bis').value;
+    body.angeheftet = document.getElementById('info-oben').checked;
+    if (!body.sichtbarAb || !body.sichtbarBis) return infoFehler('Bitte angeben, von wann bis wann die Info zu sehen ist.');
+    if (body.sichtbarBis < body.sichtbarAb) return infoFehler('„Sichtbar bis“ liegt vor „sichtbar ab“.');
+  }
+  if (!body.titel && !body.text && !body.links.length) return infoFehler('Bitte einen Titel, Text oder Link angeben.');
+  const r = await fetch(f.id ? `/api/admin/infos/${f.id}` : '/api/admin/infos', {
+    method: f.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return infoFehler(d.error || 'Speichern hat nicht geklappt.');
+  _infoForm = null;
+  closeModal('modal-info');
+  await loadInfos();
+}
+async function infoLoeschen(id) {
+  if (!id) return;
+  const e = [...(_infos.news || []), ...(_infos.karten || [])].find(x => x.id === id);
+  if (!confirm(`„${(e && e.titel) || 'Diesen Eintrag'}“ löschen?`)) return;
+  const r = await fetch(`/api/admin/infos/${id}`, { method: 'DELETE' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Löschen hat nicht geklappt.'); return; }
+  if (_infoForm && _infoForm.id === id) { _infoForm = null; closeModal('modal-info'); }
+  await loadInfos();
+}
+function infoLoeschenAusForm() {
+  if (_infoForm && _infoForm.id) infoLoeschen(_infoForm.id);
+}
+async function infoVerschieben(id, richtung) {
+  await fetch(`/api/admin/infos/${id}/verschieben`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ richtung })
+  });
+  await loadInfos();
+}
+
 // ── Plenums-Ansicht ──────────────────────────────────────────────────────────
 // Zum Zeigen im Tandem: dasselbe Wochenraster, aber gross, ohne Bearbeiten-Knoepfe
 // und ohne Namen in den Kacheln. Wer dabei ist, kommt auf Klick - und die
@@ -3402,7 +3957,7 @@ async function loadPlenum() {
   const grid = document.getElementById('pl-grid');
   if (grid) grid.innerHTML = '<div style="padding:18px;color:var(--md-on-surface-variant);">Lade…</div>';
   try {
-    const [r] = await Promise.all([fetch('/api/calendar'), loadWuensche()]);
+    const [r] = await Promise.all([fetch('/api/calendar'), loadWuensche(), loadInfos()]);
     _plDaten = r.ok ? await r.json() : { slots: [] };
   } catch { _plDaten = { slots: [] }; }
   plRender();
@@ -3589,6 +4144,7 @@ function plRender() {
       hinweis.textContent = '';
     }
   }
+  plNewsRender();
   plWuenscheRender();
   plDetailHtml();
   lwSerienKnoepfe();
@@ -4260,13 +4816,13 @@ function showView(v) {
   if (appEl) appEl.className = `view-${v}`;
   document.documentElement.classList.toggle('lt-vollbild', v === 'lerntheke');
   if (v === 'lerntheke') updateShellHeight();
-  ['lerntheke','home','picker','admin','talking','calendar','lzk','halbjahr','klasse','plenum','changepw'].forEach(id => {
+  ['lerntheke','home','picker','admin','talking','calendar','lzk','halbjahr','klasse','plenum','infos','changepw'].forEach(id => {
     const el = document.getElementById('view-' + id);
     if (!el) return;
     const isActive = (v === id);
     if (id === 'lerntheke') {
       el.style.display = isActive ? 'flex' : 'none';
-    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'lzk' || id === 'halbjahr' || id === 'klasse' || id === 'plenum') {
+    } else if (id === 'home' || id === 'picker' || id === 'admin' || id === 'talking' || id === 'calendar' || id === 'lzk' || id === 'halbjahr' || id === 'klasse' || id === 'plenum' || id === 'infos') {
       el.style.display = isActive ? 'block' : 'none';
       el.style.flex = isActive ? '1' : '';
     } else {
@@ -4299,6 +4855,7 @@ function showView(v) {
   if (v === 'halbjahr') loadHalbjahr();
   if (v === 'klasse') loadKlasse();
   if (v === 'plenum') loadPlenum();
+  if (v === 'infos') loadInfos();
   if (v === 'lzk') lzkUeOeffnen();
   if (v === 'changepw') {
     const forcedMsg = document.getElementById('cpw-forced-msg');

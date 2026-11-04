@@ -483,6 +483,29 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (wunsch_id, user_id)
     );
+    -- Allgemeine Infos (Nutzerwunsch 2026-11-04): Lernbegleitungen schreiben, alle im Tandem
+    -- lesen. art 'news' = "Aktuelles" (Plenum/Heute und Startseite der Schueler:innen), sichtbar
+    -- von sichtbar_ab bis sichtbar_bis, danach nur noch fuer Lernbegleitungen unter "Abgelaufen".
+    -- art 'karte' = Karte im Reiter "Allgemeine Infos" (bleibt), position = Reihenfolge in ihrer
+    -- Spalte. subject_id NULL = Allgemein. farbe '' = Farbe des Fachs. links = [{titel, url}].
+    CREATE TABLE IF NOT EXISTS infos (
+      id           SERIAL PRIMARY KEY,
+      klasse       TEXT NOT NULL,
+      art          TEXT NOT NULL DEFAULT 'news',
+      subject_id   INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+      titel        TEXT NOT NULL DEFAULT '',
+      text         TEXT NOT NULL DEFAULT '',
+      links        JSONB NOT NULL DEFAULT '[]',
+      farbe        TEXT NOT NULL DEFAULT '',
+      sichtbar_ab  DATE,
+      sichtbar_bis DATE,
+      angeheftet   BOOLEAN NOT NULL DEFAULT false,
+      position     INTEGER NOT NULL DEFAULT 0,
+      admin_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_infos_klasse ON infos(klasse, art);
     CREATE TABLE IF NOT EXISTS user_subject_kurs (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -3610,6 +3633,171 @@ app.post('/api/admin/wuensche/:id/termin', requireAdmin, async (req, res) => {
       `UPDATE wunsch SET status='geplant', slot_id=$1, admin_id=$2, updated_at=NOW() WHERE id=$3`,
       [slotId, req.session.userId, req.params.id]);
     res.json({ ok: true, eingeladen: okIds.length, conflicts });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// ── Allgemeine Infos (Nutzerwunsch 2026-11-04) ────────────────────────────────────
+// Zwei Arten in einer Tabelle: 'news' fuer "Aktuelles" (laeuft ab) und 'karte' fuer den Reiter
+// "Allgemeine Infos" (bleibt). Jede Lernbegleitung des Tandems darf alles bearbeiten (Wahl des
+// Users: ein gemeinsames Brett). Schueler:innen bekommen nur, was heute sichtbar ist.
+// Texte bleiben reiner Text - die Seite setzt sie escaped ein und macht nur http(s)-Adressen
+// klickbar. Dieselben Farbnamen stehen als INFO_FARBEN in public/index.html.
+const INFO_ARTEN = ['news', 'karte'];
+const INFO_FARBEN = ['blau', 'tuerkis', 'gruen', 'gelb', 'orange', 'rot', 'lila', 'grau'];
+const INFO_MAX_LINKS = 10;
+const INFO_NEWS_TAGE = 7;      // Vorgabe "1 Woche": ab dem ersten Tag sieben Tage sichtbar
+const istIsoTag = t => typeof t === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t)
+  && isoTagLokal(new Date(t + 'T00:00:00')) === t;
+const tagPlus = (iso, n) => {
+  const d = new Date(iso + 'T00:00:00');
+  return isoTagLokal(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+};
+// Links pruefen: leere Zeilen fallen weg, "www.…" bekommt https://, alles andere als http(s)
+// wird abgelehnt (kein javascript: o.ae.).
+function infoLinks(liste) {
+  if (liste === undefined || liste === null) return { links: [] };
+  if (!Array.isArray(liste)) return { fehler: 'Ungültige Links' };
+  const links = [];
+  for (const l of liste) {
+    const titel = String((l && l.titel) || '').trim();
+    let url = String((l && l.url) || '').trim();
+    if (!url) { if (titel) return { fehler: `Beim Link „${titel}“ fehlt die Adresse.` }; continue; }
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+    if (!/^https?:\/\/[^\s]+$/i.test(url)) return { fehler: 'Links müssen mit http:// oder https:// beginnen.' };
+    if (url.length > 1000 || titel.length > 120) return { fehler: 'Ein Link ist zu lang.' };
+    links.push({ titel, url });
+  }
+  if (links.length > INFO_MAX_LINKS) return { fehler: `Höchstens ${INFO_MAX_LINKS} Links je Eintrag.` };
+  return { links };
+}
+// Vollstaendigen Eintrag pruefen (beim Aendern nach dem Zusammenfuehren mit dem Bestand).
+async function infoPruefen(e) {
+  if (!INFO_ARTEN.includes(e.art)) return 'Ungültige Art';
+  e.titel = String(e.titel || '').trim();
+  e.text = String(e.text || '').replace(/\r\n/g, '\n').trim();
+  if (e.titel.length > 120) return 'Der Titel ist zu lang (höchstens 120 Zeichen).';
+  if (e.text.length > 3000) return 'Der Text ist zu lang (höchstens 3000 Zeichen).';
+  const l = infoLinks(e.links);
+  if (l.fehler) return l.fehler;
+  e.links = l.links;
+  if (!e.titel && !e.text && !e.links.length) return 'Bitte einen Titel, Text oder Link angeben.';
+  e.farbe = String(e.farbe || '');
+  if (e.farbe && !INFO_FARBEN.includes(e.farbe)) return 'Ungültige Farbe';
+  if (e.subjectId === '' || e.subjectId === undefined || e.subjectId === null) e.subjectId = null;
+  else {
+    e.subjectId = parseInt(e.subjectId);
+    const f = await pool.query('SELECT id FROM subjects WHERE id=$1', [e.subjectId || 0]);
+    if (!f.rows.length) return 'Ungültiges Fach';
+  }
+  if (e.art === 'news') {
+    const heute = isoTagLokal(new Date());
+    e.sichtbarAb = e.sichtbarAb || heute;
+    e.sichtbarBis = e.sichtbarBis || tagPlus(e.sichtbarAb, INFO_NEWS_TAGE - 1);
+    if (!istIsoTag(e.sichtbarAb) || !istIsoTag(e.sichtbarBis)) return 'Ungültiges Datum';
+    if (e.sichtbarBis < e.sichtbarAb) return '„Sichtbar bis“ liegt vor „sichtbar ab“.';
+    e.angeheftet = !!e.angeheftet;
+  } else {
+    e.sichtbarAb = null; e.sichtbarBis = null; e.angeheftet = false;
+  }
+  return '';
+}
+const INFO_SPALTEN = `i.id, i.art, i.subject_id AS "subjectId", i.titel, i.text, i.links, i.farbe,
+  to_char(i.sichtbar_ab,'YYYY-MM-DD') AS "sichtbarAb", to_char(i.sichtbar_bis,'YYYY-MM-DD') AS "sichtbarBis",
+  i.angeheftet, i.position`;
+// Neue Karte (oder Karte, die in eine andere Spalte wandert): ans Ende ihrer Spalte.
+const infoNaechstePosition = async (klasse, subjectId) => (await pool.query(
+  `SELECT COALESCE(MAX(position), 0) + 1 AS p FROM infos
+   WHERE klasse=$1 AND art='karte' AND subject_id IS NOT DISTINCT FROM $2`, [klasse, subjectId])).rows[0].p;
+
+app.get('/api/infos', requireLogin, async (req, res) => {
+  try {
+    const heute = isoTagLokal(new Date());
+    const istAdmin = req.session.role === 'admin';
+    const r = await pool.query(`
+      SELECT ${INFO_SPALTEN}${istAdmin ? `, u.username AS "vonUsername"` : ''}
+      FROM infos i LEFT JOIN users u ON u.id = i.admin_id
+      WHERE i.klasse = $1
+        AND ($2 OR i.art = 'karte'
+             OR ((i.sichtbar_ab IS NULL OR i.sichtbar_ab <= $3::date)
+                 AND (i.sichtbar_bis IS NULL OR i.sichtbar_bis >= $3::date)))
+      ORDER BY i.angeheftet DESC, i.position, i.sichtbar_ab DESC NULLS LAST, i.id DESC
+    `, [req.session.klasse, istAdmin, heute]);
+    res.json({ heute, news: r.rows.filter(x => x.art === 'news'), karten: r.rows.filter(x => x.art === 'karte') });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.post('/api/admin/infos', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const e = { art: b.art, subjectId: b.subjectId, titel: b.titel, text: b.text, links: b.links, farbe: b.farbe,
+      sichtbarAb: b.sichtbarAb, sichtbarBis: b.sichtbarBis, angeheftet: b.angeheftet };
+    const fehler = await infoPruefen(e);
+    if (fehler) return res.status(400).json({ error: fehler });
+    const position = e.art === 'karte' ? await infoNaechstePosition(req.session.klasse, e.subjectId) : 0;
+    const r = await pool.query(
+      `INSERT INTO infos (klasse, art, subject_id, titel, text, links, farbe, sichtbar_ab, sichtbar_bis, angeheftet, position, admin_id)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12) RETURNING id`,
+      [req.session.klasse, e.art, e.subjectId, e.titel, e.text, JSON.stringify(e.links), e.farbe,
+       e.sichtbarAb, e.sichtbarBis, e.angeheftet, position, req.session.userId]);
+    res.json({ ok: true, id: r.rows[0].id });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Aendern: nur, was mitgeschickt wird - der Rest bleibt, wie er ist.
+app.put('/api/admin/infos/:id', requireAdmin, async (req, res) => {
+  try {
+    const alt = await pool.query(`SELECT ${INFO_SPALTEN} FROM infos i WHERE i.id=$1 AND i.klasse=$2`,
+      [req.params.id, req.session.klasse]);
+    if (!alt.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const vorher = alt.rows[0];
+    const b = req.body || {};
+    const e = { art: vorher.art };
+    for (const k of ['subjectId', 'titel', 'text', 'links', 'farbe', 'sichtbarAb', 'sichtbarBis', 'angeheftet']) {
+      e[k] = b[k] !== undefined ? b[k] : vorher[k];
+    }
+    const fehler = await infoPruefen(e);
+    if (fehler) return res.status(400).json({ error: fehler });
+    const position = e.art === 'karte' && e.subjectId !== vorher.subjectId
+      ? await infoNaechstePosition(req.session.klasse, e.subjectId) : vorher.position;
+    await pool.query(
+      `UPDATE infos SET subject_id=$1, titel=$2, text=$3, links=$4::jsonb, farbe=$5, sichtbar_ab=$6,
+         sichtbar_bis=$7, angeheftet=$8, position=$9, updated_at=NOW() WHERE id=$10`,
+      [e.subjectId, e.titel, e.text, JSON.stringify(e.links), e.farbe, e.sichtbarAb, e.sichtbarBis,
+       e.angeheftet, position, vorher.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+app.delete('/api/admin/infos/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM infos WHERE id=$1 AND klasse=$2 RETURNING id',
+      [req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
+// Karte in ihrer Spalte eins nach oben/unten. Die ganze Spalte wird in EINER Anweisung neu
+// durchnummeriert - so bleibt die Reihenfolge eindeutig, auch wenn Positionen doppelt waren.
+app.post('/api/admin/infos/:id/verschieben', requireAdmin, async (req, res) => {
+  try {
+    const richtung = req.body && req.body.richtung;
+    if (richtung !== 'hoch' && richtung !== 'runter') return res.status(400).json({ error: 'Ungültige Richtung' });
+    const k = await pool.query(`SELECT id, subject_id FROM infos WHERE id=$1 AND klasse=$2 AND art='karte'`,
+      [req.params.id, req.session.klasse]);
+    if (!k.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    const spalte = (await pool.query(
+      `SELECT id FROM infos WHERE klasse=$1 AND art='karte' AND subject_id IS NOT DISTINCT FROM $2
+       ORDER BY position, id`, [req.session.klasse, k.rows[0].subject_id])).rows.map(x => x.id);
+    const i = spalte.indexOf(k.rows[0].id);
+    const j = richtung === 'hoch' ? i - 1 : i + 1;
+    if (j < 0 || j >= spalte.length) return res.json({ ok: true, unveraendert: true });
+    [spalte[i], spalte[j]] = [spalte[j], spalte[i]];
+    await pool.query(
+      `UPDATE infos AS i SET position = v.pos
+       FROM (SELECT unnest($1::int[]) AS id, generate_subscripts($1::int[], 1) AS pos) v
+       WHERE i.id = v.id`, [spalte]);
+    res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
