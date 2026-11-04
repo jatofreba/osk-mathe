@@ -172,9 +172,17 @@ pruefe("V6 hier bewertet: das Ergebnis geht hinaus",
 k = D.Baustein(name="Kreise", lzk_datum_1=D30, lzk_online_1=verkn())
 a, u, _ = plan(person(k), [eintrag(70, "Kreise", status="bestanden", pokale=3)])
 pruefe("V7 online bewertet: bleibt, gemeldet", a == [] and "online bewertet" in gruende(u), (a, u))
+# Bis 2026-11-04 blieb eine HIER zurueckgenommene Bewertung online stehen (nur gemeldet). Nutzerwunsch:
+# LZK-Aenderungen automatisch synchronisieren - die Verknuepfung beweist, dass nur hier geaendert wurde.
 k = D.Baustein(name="Kreise", lzk_datum_1=D30, lzk_online_1=verkn(e="2"))
 a, u, _ = plan(person(k), [eintrag(70, "Kreise", status="bestanden", pokale=2)])
-pruefe("V8 hier die Bewertung entfernt: online bleibt sie", a == [] and "nicht mehr bewertet" in gruende(u), (a, u))
+pruefe("V8 hier die Bewertung zurueckgenommen: online wieder 'ausstehend'",
+       arten(a) == [("aendern", "Kreise", 1)] and a[0]["felder"] == {"status": "ausstehend", "pokale": 0}
+       and a[0]["link"]["ergebnis"] == "" and not u, (a, u))
+k = D.Baustein(name="Kreise", lzk_datum_1=D30, lzk_online_1=verkn(e="2"))
+a, u, _ = plan(person(k), [eintrag(70, "Kreise", status="bestanden", pokale=3)])
+pruefe("V8b online inzwischen anders bewertet: nichts senden, melden (beide geaendert)",
+       a == [] and "beide geändert" in gruende(u), (a, u))
 k = D.Baustein(name="Kreise", lzk_online_1=verkn())
 a, u, _ = plan(person(k), [eintrag(70, "Kreise")])
 pruefe("V9 hier das Datum entfernt: online wird nichts geloescht", a == [] and "streichen nur in OSKlar" in gruende(u), (a, u))
@@ -467,10 +475,31 @@ b_o = D.Baustein(name="Kreise", lzk_datum_1=kurz2, lzk_online_1={"id": 950, "dat
 st5 = D.Student(vorname="Finn", nachname="K", alias="fi.kl", bausteine=[b_o])
 cache5 = [{"id": 11, "username": "fi.kl", "aktiv": True, "lzk": [eintrag(950, "Kreise", datum=(kurz2 + timedelta(days=2)).isoformat())]}]
 client5 = Client(cache5)
-app5, _ = app_mit([st5], cache5, client5)
+app5, merk5 = app_mit([st5], cache5, client5)
 app5._lt_serverstand = lambda c, neu_laden=False: (cache5, {})
 app5._lzk_auto_senden()
 pruefe("U7 online verschoben: die Automatik schickt NICHT das alte Datum", client5.aufrufe == [] and b_o.lzk_datum_1 == kurz2, client5.aufrufe)
+pruefe("U7b und sagt in der Statuszeile, dass etwas nicht automatisch ging (statt stumm zu bleiben)",
+       "1 LZK nicht automatisch abgeglichen" in (merk5["status"] or ""), merk5["status"])
+
+# Nutzerwunsch 2026-11-04: LZK-Aenderungen automatisch synchronisieren - auch ein hier
+# zurueckgenommenes Ergebnis ("nicht bestanden" -> nicht bewertet, etwa fuers Nachschreiben).
+b_n = D.Baustein(name="Kreise", lzk_datum_1=kurz2,
+                 lzk_online_1={"id": 960, "datum": kurz2.isoformat(), "ergebnis": "nicht_bestanden"})
+st6 = D.Student(vorname="Pia", nachname="N", alias="pi.no", bausteine=[b_n])
+cache6 = [{"id": 12, "username": "pi.no", "aktiv": True,
+           "lzk": [eintrag(960, "Kreise", datum=kurz2.isoformat(), status="nicht_bestanden")]}]
+client6 = Client([{"id": 12, "username": "pi.no", "aktiv": True,
+                   "lzk": [eintrag(960, "Kreise", datum=kurz2.isoformat(), status="nicht_bestanden")]}])
+app6, merk6 = app_mit([st6], cache6, client6)
+app6._lt_serverstand = lambda c, neu_laden=False: (cache6, {})
+app6._lzk_auto_senden()
+pruefe("U8 hier zurueckgenommenes Ergebnis: die Automatik stellt online auf 'ausstehend' und merkt sich das",
+       ("aendern", 960, {"status": "ausstehend", "pokale": 0}) in client6.aufrufe
+       and b_n.lzk_online_1["ergebnis"] == "" and "gesendet" in (merk6["status"] or ""), (client6.aufrufe, merk6))
+client6.aufrufe.clear()
+app6._lzk_auto_senden()
+pruefe("U8b danach ist nichts mehr zu tun", client6.aufrufe == [], client6.aufrufe)
 
 # ===========================================================================
 # 9) Baustein-Formular: die Verknuepfung geht beim Bearbeiten nicht verloren

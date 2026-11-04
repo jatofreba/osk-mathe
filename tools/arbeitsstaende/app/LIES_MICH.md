@@ -275,13 +275,18 @@ Kalender, wer wann eine LZK schreibt.
   die LZK hier seitdem nicht geändert hast. Haben sich beide Seiten
   verschieden geändert, entscheidest du über *Einzelne Schritte → Freie
   Mathe-LZK zuordnen…*. Eine online zurückgenommene Bewertung löscht hier
-  nichts -- das wird nur gemeldet.
-- **Automatisch**: sobald du in einem Baustein ein LZK-Datum änderst, geht es
-  kurz darauf an die App. Rückmeldung nur in der Statuszeile, nie als Fenster;
-  klappt es nicht, bleibt die Änderung hier stehen und geht beim nächsten
-  Versuch mit. Sind es mehr als fünf Termine auf einmal, zeigt die Anwendung
-  vorher die Liste. Abschaltbar unter *Lerntheken-App → Neue LZK-Termine
-  automatisch senden*.
+  nichts -- das wird nur gemeldet. Nimmst du dagegen **hier** eine Bewertung
+  zurück (z. B. fürs Nachschreiben), steht die LZK online wieder auf
+  „ausstehend“ (seit 2026-11-04).
+- **Automatisch**: sobald du in einem Baustein eine LZK änderst (Datum oder
+  Ergebnis, auch ein zurückgenommenes), geht es kurz darauf an die App.
+  Rückmeldung nur in der Statuszeile, nie als Fenster; klappt es nicht, bleibt
+  die Änderung hier stehen und geht beim nächsten Versuch mit. Was nicht
+  automatisch gehen kann (online inzwischen geändert, beide Seiten geändert,
+  offene Anfrage …), nennt die Statuszeile mit Anzahl -- *⟳ Synchronisieren*
+  zeigt den Grund und holt Änderungen von online. Sind es mehr als fünf
+  Änderungen auf einmal, zeigt die Anwendung vorher die Liste. Abschaltbar unter
+  *Lerntheken-App → LZK-Änderungen automatisch senden*.
 - **Von Hand**: *Synchronisieren* (oder *Einzelne Schritte → LZK-Termine zum
   Server schicken…*) zeigt
   vorher eine Liste mit **Person, Lerntheke/Baustein, LZK, altem und neuem

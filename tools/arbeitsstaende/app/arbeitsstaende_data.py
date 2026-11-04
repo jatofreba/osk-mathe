@@ -911,7 +911,10 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
     wird gemeldet -- hereingeholt wird es beim Abruf (lt_freie_lzk_uebernehmen);
     haben sich beide Seiten verschieden geaendert, entscheidet der Mensch
     ("Freie Mathe-LZK zuordnen…"). Online geloescht wird nie etwas, und ein leeres
-    Feld hier ueberschreibt nichts.
+    Feld hier ueberschreibt nichts - mit einer Ausnahme: ein HIER zurueckgenommenes
+    Ergebnis (etwa fuers Nachschreiben) stellt die LZK online wieder auf "ausstehend"
+    (Nutzerwunsch 2026-11-04). Das ist sicher, weil die Verknuepfung zeigt, dass
+    online noch der gemeinsame Stand steht.
 
     Neu angelegt wird, was ansteht (ab heute) oder hier schon ein Ergebnis hat --
     vergangene Termine ohne Ergebnis nicht, sonst stuenden online auf einen Schlag
@@ -989,12 +992,9 @@ def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, tite
                               f"beide geändert, {zuordnen} klären")
                 # Ergebnis
                 if lok_e != basis_e and on_e == basis_e:
-                    ziel = lzk_ergebnis_zum_server(lok_e)
-                    if ziel is None:
-                        melde(f"hier nicht mehr bewertet, online {txt(on_e)} – bleibt")
-                    else:
-                        felder["status"], felder["pokale"] = ziel
-                        danach["ergebnis"] = lok_e
+                    # Hier zurueckgenommen -> online wieder "ausstehend" (siehe oben).
+                    felder["status"], felder["pokale"] = lzk_ergebnis_zum_server(lok_e) or ("ausstehend", 0)
+                    danach["ergebnis"] = lok_e
                 elif lok_e == basis_e and on_e != basis_e:
                     melde(f"online bewertet ({txt(on_e)}) – {abruf}" if on_e else
                           f"online nicht mehr bewertet – hier bleibt {txt(lok_e)}")

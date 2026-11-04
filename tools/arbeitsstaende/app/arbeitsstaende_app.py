@@ -2023,7 +2023,7 @@ class App(tk.Tk):
             label="Offline arbeiten (nichts senden)", variable=self.offline_var,
             command=self._offline_umschalten)
         lerntheke_menu.add_checkbutton(
-            label="Neue LZK-Termine automatisch senden", variable=self.lzk_auto_var,
+            label="LZK-Änderungen automatisch senden", variable=self.lzk_auto_var,
             command=lambda: self._lt_einstellungen_speichern(
                 {"lzk_auto_senden": bool(self.lzk_auto_var.get())}))
         lerntheke_menu.add_separator()
@@ -4278,9 +4278,17 @@ class App(tk.Tk):
             self._lzk_cache_frei_auffrischen(frisch)
             frei, frei_uebersprungen, _ = self._lzk_frei_plan(frisch, titel)
         schreiben = aenderungen + [a for a in frei if a["art"] != "verknuepfen"]
+        # Was nicht automatisch hinausgeht (online inzwischen geaendert, beide Seiten
+        # geaendert, Anfrage offen, ...), sagt die Statuszeile - frueher blieb das stumm,
+        # und eine Aenderung schien verschluckt (Nutzerwunsch 2026-11-04).
+        offen = len(uebersprungen) + len(frei_uebersprungen)
+        hinweis = (f"{offen} LZK nicht automatisch abgeglichen – „⟳ Synchronisieren“ zeigt, "
+                   f"warum (und holt Änderungen von online)." if offen else "")
         if not schreiben:
             if self._lzk_frei_uebertragen(client, frei)[2]:
                 self._markiere_ungespeichert()
+            if hinweis:
+                self.status_leiste.config(text=hinweis)
             return
         if len(schreiben) > self.LZK_AUTO_GRENZE:
             # Beim ersten Abgleich nach einem Import koennen auf einen Schlag
@@ -4301,17 +4309,19 @@ class App(tk.Tk):
         fehler += f_frei
         if lokal:
             self._markiere_ungespeichert()
+        zusatz = f" · {hinweis}" if hinweis else ""
         if fehler:
             self.status_leiste.config(
-                text=f"⚠ {gesendet} von {len(schreiben)} LZK-Terminen gesendet, "
-                     f"{len(fehler)} nicht -- über „⟳ Synchronisieren“ "
-                     f"schicken…“ erneut versuchen.")
+                text=f"⚠ {gesendet} von {len(schreiben)} LZK-Änderungen gesendet, "
+                     f"{len(fehler)} nicht -- über „⟳ Synchronisieren“ erneut versuchen.{zusatz}")
         elif gesendet:
             zeit = datetime.now().strftime("%H:%M")
             neu = f", davon {angelegt} neu angelegt" if angelegt else ""
             self.status_leiste.config(
-                text=f"{gesendet} LZK-Termin(e){neu} um {zeit} Uhr an die "
-                     f"Lerntheken-App gesendet (Tandem {klasse}).")
+                text=f"{gesendet} LZK-Änderung(en){neu} um {zeit} Uhr an die "
+                     f"Lerntheken-App gesendet (Tandem {klasse}).{zusatz}")
+        elif hinweis:
+            self.status_leiste.config(text=hinweis)
 
     def app_lzk_senden(self):
         """Traegt hier geaenderte LZK-Termine in der Lerntheken-App ein.
