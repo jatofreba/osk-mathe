@@ -217,6 +217,11 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 .wu-liste-klein{max-height:76px;}
 .wu-liste .wu-zeile:last-child{margin-bottom:0;}
 .wu-form .form-input{padding:7px 10px;font-size:13px;}
+/* Suchfeld ueber Personenlisten (Nutzerwunsch 2026-11-04). Die Zeilen tragen display:flex im
+   style-Attribut - ohne !important gewaenne das gegen [hidden], und die Suche blendete nichts aus. */
+label[data-name][hidden]{display:none !important;}
+.personen-suche{margin-bottom:6px;}
+.personen-keiner{font-size:13px;color:var(--md-on-surface-variant);padding:4px 0;}
 .wu-aehnlich{
   font-size:12px;color:var(--md-on-surface-variant);
   background:#fef9c3;border:1px solid #fde68a;border-radius:8px;
@@ -1253,6 +1258,10 @@ textarea.form-input{
       <div style="font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:8px;">🔑 Mit-Administratoren dieses Tandems</div>
       <div id="admin-peers-list" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
+    <div class="toolbar" style="margin-bottom:10px;">
+      <input class="search" id="klasse-suche" type="search" placeholder="🔍 Suche nach Name…" autocomplete="off"
+             aria-label="Schüler:innen nach Namen suchen" oninput="renderKlasseTable()">
+    </div>
     <div class="tbl-wrap">
       <table>
         <thead><tr id="klasse-thead-row"><th>Name</th><th>Kurs</th><th></th></tr></thead>
@@ -1604,6 +1613,8 @@ textarea.form-input{
     <div id="tbet-liste"></div>
     <div class="form-group">
       <label class="form-label" for="tbet-person">Person hinzufügen oder umsetzen</label>
+      <input class="form-input personen-suche" id="tbet-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
+             aria-label="Personen nach Namen filtern" aria-controls="tbet-person" oninput="talkBeteiligteOptionen()">
       <select class="form-input" id="tbet-person"></select>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -1719,6 +1730,10 @@ textarea.form-input{
     </div>
     <div class="form-group" id="calbook-cm-gruppe">
       <label class="form-label" id="calbook-cm-label">Mitschüler:innen mitbringen (optional)</label>
+      <input class="form-input personen-suche" id="calbook-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
+             aria-label="Mitschüler:innen nach Namen filtern" aria-controls="calbook-classmates"
+             oninput="personenFiltern('calbook-classmates', this.value)">
+      <div id="calbook-classmates-keiner" class="personen-keiner" hidden>Niemand gefunden.</div>
       <div role="group" aria-labelledby="calbook-cm-label" id="calbook-classmates" style="max-height:200px;overflow-y:auto;"></div>
     </div>
     <div id="calbook-talk-auswahl"></div>
@@ -1822,6 +1837,10 @@ textarea.form-input{
     </div>
     <div class="form-group">
       <label class="form-label" id="iassign-cm-lbl">Wen einladen?</label>
+      <input class="form-input personen-suche" id="iassign-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
+             aria-label="Schüler:innen nach Namen filtern" aria-controls="iassign-classmates"
+             oninput="personenFiltern('iassign-classmates', this.value)">
+      <div id="iassign-classmates-keiner" class="personen-keiner" hidden>Niemand gefunden.</div>
       <div role="group" aria-labelledby="iassign-cm-lbl" id="iassign-classmates" style="max-height:220px;overflow-y:auto;"></div>
     </div>
     <div id="iassign-error" style="color:var(--md-error);font-size:13px;display:none;margin-top:8px;"></div>
@@ -3127,7 +3146,11 @@ function renderWuenscheHome() {
       ${w.status !== 'offen' ? `<div class="wu-sub">${wunschStatusPille(w)}</div>` : ''}
     </div>
     <span class="wu-zahl" title="So viele wünschen sich das">👥 ${w.anzahl}</span>
-    ${w.status === 'offen' ? `<button type="button" class="wu-btn${w.ichDabei ? ' dabei' : ''}"
+    ${w.status === 'offen' && w.vonMir
+      // Wer den Wunsch gestellt hat, ist immer dabei (Nutzerwunsch 2026-11-04) - kein Schalter,
+      // mit dem man sich versehentlich selbst austraegt. Zurueckziehen geht mit ×.
+      ? '<span class="wu-btn dabei" style="cursor:default;">✓ Dein Wunsch</span>'
+      : w.status === 'offen' ? `<button type="button" class="wu-btn${w.ichDabei ? ' dabei' : ''}"
       onclick="wunschInteresse(${w.id})"
       aria-pressed="${w.ichDabei ? 'true' : 'false'}">${w.ichDabei ? '✓ Ich bin dabei' : '+ Ich auch'}</button>` : ''}
     ${w.vonMir && w.status === 'offen'
@@ -3214,13 +3237,40 @@ async function wunschLoeschen(id) {
 }
 
 // ── Sicht der Lernbegleitung ─────────────────────────────────────────────────
+// Nach Fach (Nutzerwunsch 2026-11-04): normale Admins sehen zuerst nur die Wuensche ihres
+// Standard-Fachs, Super-Admins - und wer kein Standard-Fach hat - alle. Umschalten wie bei den
+// Talks; die Wahl gilt, bis die Seite neu geladen wird.
+let _wuFach = null;   // null = Vorgabe, '' = alle Faecher, sonst die Fach-id als Text
+function wunschFachVorgabe() {
+  if (!me || me.superAdmin || me.defaultSubjectId == null) return '';
+  return angebotsFaecher().some(x => x.id === me.defaultSubjectId) ? String(me.defaultSubjectId) : '';
+}
+function wunschFachWaehlen(wert) {
+  _wuFach = String(wert);
+  renderWuenscheAdmin();
+}
 function renderWuenscheAdmin() {
   const el = document.getElementById('cal-wuensche');
   if (!el) return;
   if (!me || me.role !== 'admin') { el.innerHTML = ''; return; }
-  const offen = _wuensche.filter(w => w.status === 'offen');
-  const rest = _wuensche.filter(w => w.status !== 'offen').slice(0, 8);
   if (!_wuensche.length) { el.innerHTML = ''; return; }
+  // Die Vorgabe erst festhalten, wenn jemand umschaltet - beim ersten Zeichnen sind die
+  // Faecher womoeglich noch nicht geladen.
+  const fach = _wuFach !== null ? _wuFach : wunschFachVorgabe();
+  const imFach = w => !fach || String(w.subjectId) === fach;
+  const offenAlle = _wuensche.filter(w => w.status === 'offen');
+  const offen = offenAlle.filter(imFach);
+  const rest = _wuensche.filter(w => w.status !== 'offen' && imFach(w)).slice(0, 8);
+  const knopf = (wert, name, farbe, n) => {
+    const an = fach === wert;
+    return `<button type="button" class="subject-btn${an ? ' active' : ''}" aria-pressed="${an}"
+      style="${an ? `background:${farbe};border-color:${farbe};` : `color:${farbe};border-color:${farbe}66;`}"
+      onclick="wunschFachWaehlen('${wert}')">${escHtml(name)} · ${n}</button>`;
+  };
+  const schalter = `<div class="subject-switch" role="group" aria-label="Wünsche nach Fach" style="margin-bottom:10px;">${
+    angebotsFaecher().map(x => knopf(String(x.id), x.name, x.color, offenAlle.filter(w => w.subjectId === x.id).length)).join('')
+  }${knopf('', 'Alle', '#64748b', offenAlle.length)}</div>`;
+  const fachName = fach ? ' in ' + (subjectById(Number(fach)).name || 'diesem Fach') : '';
 
   const zeile = (w) => {
     const leute = (w.interessierte || []);
@@ -3243,12 +3293,13 @@ function renderWuenscheAdmin() {
     <div class="mw-head">
       <div>
         <div class="mw-title">💡 Wünsche aus dem Tandem</div>
-        <div class="mw-sub">${offen.length} offen · nach Nachfrage sortiert</div>
+        <div class="mw-sub">${offen.length} offen${escHtml(fachName)} · nach Nachfrage sortiert</div>
       </div>
       <button type="button" class="wu-btn" onclick="loadWuensche()">↺ Laden</button>
     </div>
+    ${schalter}
     ${offen.length ? `<div class="wu-liste">${offen.map(zeile).join('')}</div>`
-      : '<div class="lw-empty">Gerade keine offenen Wünsche.</div>'}
+      : `<div class="lw-empty">Gerade keine offenen Wünsche${escHtml(fachName)}.</div>`}
     ${rest.length ? `<div class="mw-sub" style="margin-top:10px;">Schon bearbeitet:</div>
       <div class="wu-liste wu-liste-klein">${rest.map(zeile).join('')}</div>` : ''}
   </div>`;
@@ -4700,13 +4751,20 @@ function renderKlasseTable() {
     tbody.innerHTML = `<tr><td colspan="${kursFaecher.length + 3}" style="color:var(--ink2);text-align:center;padding:24px;">Noch keine Schüler:innen angelegt.</td></tr>`;
     return;
   }
+  // Suche nach Name (Nutzerwunsch 2026-11-04) - bleibt beim Neuzeichnen (Kurs, aktiv/passiv) stehen.
+  const suche = document.getElementById('klasse-suche');
+  const q = String((suche && suche.value) || '').trim().toLowerCase();
   // Aktive zuerst (jeweils neueste oben), passive Schüler:innen rutschen ans Ende - bleiben aber
   // sichtbar/reaktivierbar statt komplett zu verschwinden (das passiert nur in den Übersichten).
-  const sorted = [...allStudents].sort((a, b) => {
+  const sorted = allStudents.filter(s => !q || String(s.username || '').toLowerCase().includes(q)).sort((a, b) => {
     const aa = a.aktiv !== false, ba = b.aktiv !== false;
     if (aa !== ba) return aa ? -1 : 1;
     return new Date(b.created_at) - new Date(a.created_at);
   });
+  if (!sorted.length) {
+    tbody.innerHTML = `<tr><td colspan="${kursFaecher.length + 3}" style="color:var(--ink2);text-align:center;padding:24px;">Niemand gefunden für „${escHtml(q)}“.</td></tr>`;
+    return;
+  }
   tbody.innerHTML = sorted.map(s => {
     const isAktiv = s.aktiv !== false;
     const subjCols = kursFaecher.map(subj => {
@@ -5944,13 +6002,33 @@ function talkGrenzen(subj) {
 // Fach mehr als eine vortragende Person erlaubt), darunter, wer zuhoert. Dieselbe Person nie in
 // beiden Listen, und nie mehr Haken, als die Grenzen erlauben - das regelt talkAuswahlPruefen().
 // schon = wer bei einer bestehenden Buchung schon dabei ist (nicht abgesagt), fuer die Grenzen.
+// Suchfeld ueber Personenlisten (Nutzerwunsch 2026-11-04): blendet aus, wessen Name nicht passt.
+// Wer schon einen Haken hat, bleibt sichtbar - so sieht man beim Suchen, wen man gewaehlt hat.
+// Die Zeilen sind label[data-name] mit dem Namen in Kleinbuchstaben.
+function personenFiltern(bereichId, text) {
+  const t = String(text || '').trim().toLowerCase();
+  let sichtbar = 0;
+  document.querySelectorAll('#' + bereichId + ' label[data-name]').forEach(l => {
+    const cb = l.querySelector('input');
+    l.hidden = !!t && !l.dataset.name.includes(t) && !(cb && cb.checked);
+    if (!l.hidden) sichtbar++;
+  });
+  const keiner = document.getElementById(bereichId + '-keiner');
+  if (keiner) keiner.hidden = !t || sichtbar > 0;
+}
+function personenSucheHtml(bereichId) {
+  return `<input class="form-input personen-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
+      aria-label="Personen nach Namen filtern" aria-controls="${bereichId}" oninput="personenFiltern('${bereichId}', this.value)">
+    <div id="${bereichId}-keiner" class="personen-keiner" hidden>Niemand gefunden.</div>`;
+}
+function personenName(c) { return escHtml(String(c.username || '').toLowerCase()); }
 function talkAuswahlHtml(praefix, leute, g, schon) {
   const nachladen = !!schon;
   schon = schon || { mit: 0, zu: 0 };
   const mitPlaetze = Math.max(0, g.maxV - 1 - schon.mit);
   const zuPlaetze = Math.max(0, g.maxZ - schon.zu);
   const mitMin = Math.max(0, g.minV - 1);
-  const zeile = (typ, c) => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+  const zeile = (typ, c) => `<label data-name="${personenName(c)}" style="display:flex;align-items:center;gap:6px;padding:3px 0;">
       <input type="checkbox" value="${c.id}" class="${praefix}-${typ}-cb" onchange="talkAuswahlPruefen('${praefix}', ${mitPlaetze}, ${zuPlaetze})"><span>${escHtml(c.username)}</span></label>`;
   const leer = '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Mitschüler:innen gefunden.</span>';
   const teil = (typ, frage, zusatz) => `
@@ -5974,7 +6052,9 @@ function talkAuswahlHtml(praefix, leute, g, schon) {
   const zuTeil = zuPlaetze > 0
     ? teil('zu', '👂 Wen lädst du zum Zuhören ein?', nachladen ? `noch höchstens ${zuPlaetze}` : `${g.minZ}–${g.maxZ}`)
     : `<div class="form-group" style="color:var(--md-on-surface-variant);font-size:13px;">👂 Zum Zuhören sind schon ${schon.zu} eingeladen – mehr passen nicht (höchstens ${g.maxZ}).</div>`;
-  return mitTeil + zuTeil;
+  // Ein Suchfeld fuer beide Listen (wer vortraegt, wer zuhoert).
+  const suche = leute.length && (mitPlaetze > 0 || zuPlaetze > 0) ? personenSucheHtml(praefix + '-personen') : '';
+  return `<div id="${praefix}-personen">${suche}${mitTeil}${zuTeil}</div>`;
 }
 function talkAuswahlPruefen(praefix, mitPlaetze, zuPlaetze) {
   const mit = [...document.querySelectorAll('.' + praefix + '-mit-cb')];
@@ -6047,8 +6127,10 @@ function openCalBookModal(slotId) {
   // Fachbuero: wie bisher, wer mitkommt (optional). Talk: wer mit vortraegt und wer zuhoert, in
   // den Grenzen des Fachs.
   document.getElementById('calbook-cm-gruppe').style.display = isInput ? '' : 'none';
+  document.getElementById('calbook-suche').value = '';
+  document.getElementById('calbook-classmates-keiner').hidden = true;
   document.getElementById('calbook-classmates').innerHTML = !isInput ? '' : (calClassmates || []).map(c =>
-    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+    `<label data-name="${personenName(c)}" style="display:flex;align-items:center;gap:6px;padding:3px 0;">
       <input type="checkbox" value="${c.id}" class="calbook-cm-cb"> ${escHtml(c.username)}
     </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Mitschüler:innen gefunden.</span>';
   document.getElementById('calbook-talk-auswahl').innerHTML = isInput ? ''
@@ -6229,8 +6311,10 @@ function openInputAssignModal(slotId) {
   // Wer schon eingetragen ist - auch die buchende Person - steht nicht noch einmal zur Wahl.
   const already = new Set([...(slot.invitees || []).map(iv => iv.username), slot.presenterUsername].filter(Boolean));
   const available = (calClassmates || []).filter(c => !already.has(c.username));
+  document.getElementById('iassign-suche').value = '';
+  document.getElementById('iassign-classmates-keiner').hidden = true;
   document.getElementById('iassign-classmates').innerHTML = available.map(c =>
-    `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+    `<label data-name="${personenName(c)}" style="display:flex;align-items:center;gap:6px;padding:3px 0;">
       <input type="checkbox" value="${c.id}" class="iassign-cm-cb"> ${escHtml(c.username)}
     </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Alle Schüler:innen sind schon dabei.</span>';
   document.getElementById('iassign-error').style.display = 'none';
@@ -8136,6 +8220,7 @@ function openTalkBeteiligte(sessionId, quelle) {
   // Das Kaestchen lebt im festen Markup - ohne Zuruecksetzen bliebe es vom letzten Talk
   // ausgeschaltet, und beim naechsten Austausch flöge die bisherige Person ungewollt ganz raus.
   document.getElementById('tbet-alt-bleibt').checked = true;
+  document.getElementById('tbet-suche').value = '';
   talkBeteiligteRender();
   openModal('modal-talk-beteiligte');
 }
@@ -8166,12 +8251,9 @@ function talkBeteiligteRender() {
       ${d.invitees.map(iv => zeile(iv.username, zustand(iv), weg(iv))).join('')
         || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Noch niemand.</span>'}
     </div>`;
-  const rolleVon = {};
-  d.coPresenters.forEach(c => { rolleVon[c.username] = 'trägt vor'; });
-  d.invitees.forEach(iv => { rolleVon[iv.username] = iv.status === 'abgelehnt' ? 'hat abgesagt' : 'hört zu'; });
-  document.getElementById('tbet-person').innerHTML = '<option value="">– Person wählen –</option>' +
-    d.roster.filter(p => p.username !== d.presenter).map(p =>
-      `<option value="${p.id}">${escHtml(p.username)}${rolleVon[p.username] ? ' (' + rolleVon[p.username] + ')' : ''}</option>`).join('');
+  // Frisch geoeffnet oder nach einer Aktion: wieder "– Person wählen –" wie vorher.
+  document.getElementById('tbet-person').value = '';
+  talkBeteiligteOptionen();
   document.getElementById('tbet-alt-zeile').style.display = d.presenter ? 'flex' : 'none';
   document.getElementById('tbet-alt-text').textContent = `Beim Austauschen der buchenden Person trägt ${d.presenter || 'sie'} weiter mit vor`;
   const drueber = nV > g.maxV || dabeiZu.length > g.maxZ;
@@ -8179,12 +8261,35 @@ function talkBeteiligteRender() {
     'Wer schon dabei ist, wechselt mit „trägt vor“ / „hört zu“ die Rolle; „bucht“ macht die Person zur buchenden (sie verwaltet dann die Einladungen). Neu Eingetragene gelten als dabei und sehen den Termin mit dem Hinweis „Deine Lernbegleitung hat dich eingeladen“.'
     + (drueber ? ' Mehr als im Fach vorgesehen – für die Lernbegleitung ist das erlaubt.' : '');
 }
+// Die Auswahlliste "Person hinzufuegen oder umsetzen", gefiltert nach dem Suchfeld darueber
+// (Nutzerwunsch 2026-11-04). Bleibt genau eine Person uebrig, ist sie gleich gewaehlt - dann
+// reicht ein Klick auf die Rolle.
+function talkBeteiligteOptionen() {
+  const d = talkBeteiligteDaten();
+  const sel = document.getElementById('tbet-person');
+  if (!d || !sel) return;
+  const t = String(document.getElementById('tbet-suche').value || '').trim().toLowerCase();
+  const rolleVon = {};
+  d.coPresenters.forEach(c => { rolleVon[c.username] = 'trägt vor'; });
+  d.invitees.forEach(iv => { rolleVon[iv.username] = iv.status === 'abgelehnt' ? 'hat abgesagt' : 'hört zu'; });
+  const passend = d.roster.filter(p => p.username !== d.presenter
+    && (!t || String(p.username || '').toLowerCase().includes(t)));
+  const vorher = sel.value;
+  sel.innerHTML = (passend.length === 1 ? ''
+    : `<option value="">${t && !passend.length ? '– niemand gefunden –' : '– Person wählen –'}</option>`) +
+    passend.map(p =>
+      `<option value="${p.id}">${escHtml(p.username)}${rolleVon[p.username] ? ' (' + rolleVon[p.username] + ')' : ''}</option>`).join('');
+  sel.value = passend.length === 1 ? String(passend[0].id)
+    : passend.some(p => String(p.id) === vorher) ? vorher : '';
+}
 function talkBeteiligteFehler(t) {
   const el = document.getElementById('tbet-error');
   el.textContent = t; el.style.display = t ? 'block' : 'none';
 }
 async function talkBeteiligteNeuLaden() {
   if (_tbet.quelle === 'kalender') await loadCalendar(); else await loadTalkingAdmin();
+  // Erledigt - fuer die naechste Person wieder die ganze Liste.
+  document.getElementById('tbet-suche').value = '';
   talkBeteiligteRender();
 }
 async function talkBeteiligteSetzen(rolle) {

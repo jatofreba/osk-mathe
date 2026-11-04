@@ -3444,16 +3444,20 @@ app.get('/api/wuensche', requireLogin, async (req, res) => {
   try {
     const uid = req.session.userId;
     const istAdmin = req.session.role === 'admin';
+    // Wer den Wunsch gestellt hat, gehoert immer dazu (Nutzerwunsch 2026-11-04) - in der Zahl,
+    // bei "ich bin dabei" und in den Namen, auch wenn das eigene "ich auch" fehlt.
     const r = await pool.query(`
       SELECT w.id, w.titel, w.beschreibung, w.status, w.notiz, w.slot_id AS "slotId",
              to_char(w.created_at,'YYYY-MM-DD') AS erstellt,
              w.subject_id AS "subjectId", sub.name AS "subjectName", sub.color AS "subjectColor",
              u.username AS "vonUsername", (w.user_id = $2) AS "vonMir",
-             (SELECT COUNT(*) FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id)::int AS anzahl,
-             EXISTS (SELECT 1 FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id AND wi.user_id = $2) AS "ichDabei",
-             COALESCE((SELECT json_agg(iu.username ORDER BY iu.username)
-                       FROM wunsch_interesse wi JOIN users iu ON iu.id = wi.user_id
-                       WHERE wi.wunsch_id = w.id), '[]') AS interessierte,
+             (SELECT COUNT(*) FROM users iu
+              WHERE iu.id = w.user_id
+                 OR iu.id IN (SELECT wi.user_id FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id))::int AS anzahl,
+             (w.user_id = $2 OR EXISTS (SELECT 1 FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id AND wi.user_id = $2)) AS "ichDabei",
+             COALESCE((SELECT json_agg(iu.username ORDER BY iu.username) FROM users iu
+                       WHERE iu.id = w.user_id
+                          OR iu.id IN (SELECT wi.user_id FROM wunsch_interesse wi WHERE wi.wunsch_id = w.id)), '[]') AS interessierte,
              to_char(sl.datum,'YYYY-MM-DD') AS "terminDatum", sl.uhrzeit AS "terminUhrzeit"
       FROM wunsch w
       LEFT JOIN subjects sub ON sub.id = w.subject_id
@@ -3499,10 +3503,14 @@ app.post('/api/wuensche', requireLogin, async (req, res) => {
 // Termin dran, wird über die Einladung entschieden, nicht mehr über die Liste.
 app.post('/api/wuensche/:id/interesse', requireLogin, async (req, res) => {
   try {
-    const w = await pool.query('SELECT id, status FROM wunsch WHERE id=$1 AND klasse=$2',
+    const w = await pool.query('SELECT id, status, user_id FROM wunsch WHERE id=$1 AND klasse=$2',
       [req.params.id, req.session.klasse]);
     if (!w.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     if (w.rows[0].status !== 'offen') return res.status(409).json({ error: 'Dieser Wunsch ist schon abgehakt.' });
+    // Die anfragende Person ist immer dabei - wer nicht mehr will, zieht den Wunsch zurueck.
+    if (w.rows[0].user_id === req.session.userId) {
+      return res.status(409).json({ error: 'Das ist dein eigener Wunsch – du bist sowieso dabei.' });
+    }
     const vorhanden = await pool.query(
       'SELECT 1 FROM wunsch_interesse WHERE wunsch_id=$1 AND user_id=$2', [req.params.id, req.session.userId]);
     if (vorhanden.rows.length) {
@@ -3562,11 +3570,16 @@ app.post('/api/admin/wuensche/:id/termin', requireAdmin, async (req, res) => {
     const may = await mayManageSlot(req, slotId);
     if (!may.ok) return res.status(may.status).json({ error: may.error });
 
+    // Eingeladen werden alle mit "ich auch" UND die Person, die den Wunsch gestellt hat
+    // (Nutzerwunsch 2026-11-04) - vorher fehlte sie, wenn ihr eigenes "ich auch" fehlte.
     const interessierte = await pool.query(
-      `SELECT wi.user_id FROM wunsch_interesse wi JOIN users u ON u.id = wi.user_id
-       WHERE wi.wunsch_id=$1 AND u.role='student' AND u.klasse=$2 AND u.aktiv=true`,
+      `SELECT u.id FROM users u
+       WHERE u.role='student' AND u.klasse=$2 AND u.aktiv=true
+         AND (u.id = (SELECT user_id FROM wunsch WHERE id=$1)
+              OR u.id IN (SELECT wi.user_id FROM wunsch_interesse wi WHERE wi.wunsch_id=$1))
+       ORDER BY u.id`,
       [req.params.id, req.session.klasse]);
-    const ids = interessierte.rows.map(r => r.user_id);
+    const ids = interessierte.rows.map(r => r.id);
     const { okIds, conflicts } = await assignStudentsToSlot(req.session.klasse, slotId, ids);
 
     // Buchung: entweder es gibt schon eine (dann nur ergänzen) oder sie entsteht hier.
