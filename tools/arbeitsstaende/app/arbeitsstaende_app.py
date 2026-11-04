@@ -109,6 +109,40 @@ FENSTER_RAND_UNTEN = 90
 # Anteil der Personenliste an der Fensterbreite (Nutzerwunsch: ~1/3 bis 1/2).
 LISTE_ANTEIL = 0.4
 
+EINSTELLUNGEN_DATEI = "osk_einstellungen.json"
+# Wie weit die gebaute Anwendung oberhalb ihres Programms nach der Datei sucht
+# (.app/Contents/MacOS -> Contents -> .app -> dist -> Organisation -> ...).
+EINSTELLUNGEN_EBENEN = 6
+
+
+def einstellungen_pfad() -> str:
+    """Wo die Einstellungen (Server-Adresse, Benutzer, zuletzt geoeffnete Datei) liegen.
+
+    Als Skript gestartet: neben der Anwendung, wie bisher. Als gebautes Programm
+    (PyInstaller, die .app am Mac) laege "neben der Anwendung" IM Paket - dort fand
+    sie die Einstellungen im Ordner daneben nie, und jeder Neubau haette sie
+    ueberschrieben. Deshalb dann: die naechste osk_einstellungen.json oberhalb des
+    Programms (gebaut wird in Organisation/dist, die Datei liegt in Organisation),
+    sonst der Einstellungsordner des Benutzers."""
+    if not getattr(sys, "frozen", False):
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), EINSTELLUNGEN_DATEI)
+    ordner = os.path.dirname(os.path.abspath(sys.executable))
+    for _ in range(EINSTELLUNGEN_EBENEN):
+        kandidat = os.path.join(ordner, EINSTELLUNGEN_DATEI)
+        if os.path.isfile(kandidat):
+            return kandidat
+        oben = os.path.dirname(ordner)
+        if oben == ordner:
+            break
+        ordner = oben
+    if sys.platform == "darwin":
+        basis = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    elif os.name == "nt":
+        basis = os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        basis = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(basis, "OSK-Arbeitsstaende", EINSTELLUNGEN_DATEI)
+
 
 def fenster_ins_bild(fenster, eltern=None):
     """Einen Dialog ueber dem Hauptfenster zentrieren - aber nie ueber den
@@ -2797,7 +2831,7 @@ class App(tk.Tk):
         self._talks_anzeigen()
         self._knoepfe_aktualisieren()
 
-    def _talks_abgleichen(self, client):
+    def _talks_abgleichen(self, client, wartende_nennen: bool = True):
         """Holt die Mathe-Talks und traegt sie bei allen Personen ein. Gibt den
         Berichtstext zurueck (wirft bei Verbindungsfehlern)."""
         je_person = lt_mathe_talks(client.mathe_talks())
@@ -2813,7 +2847,7 @@ class App(tk.Tk):
             fehlen += b["fehlen"]
         warten = sum(len(lt_talks_hochladen_liste(st)) for st in self.az.students)
         text = f"Mathe-Talks: {neu} neu eingetragen, {len(uebernommen)} von online übernommen."
-        if warten:
+        if warten and wartende_nennen:
             text += (f"\n{warten} hier geänderte Bewertung(en) warten aufs Hochladen "
                      "(„⟳ Synchronisieren“ bietet sie an).")
         for titel, liste in (("Hier und online verschieden geändert -- hier bleibt", konflikte),
@@ -2843,17 +2877,49 @@ class App(tk.Tk):
         self._knoepfe_aktualisieren()
         self._bericht("Mathe-Talks abrufen", f"Tandem {klasse}.\n{text}\n\nNoch speichern nicht vergessen.")
 
+    def _talk_auftraege_alle(self):
+        return [(st, t, was, hier, online)
+                for st in self.az.students
+                for t, was, hier, online in lt_talks_hochladen_liste(st)]
+
     def talks_hochladen(self):
-        auftraege = [(st, t, was, hier, online)
-                     for st in self.az.students
-                     for t, was, hier, online in lt_talks_hochladen_liste(st)]
-        if not auftraege:
+        vorher = self._talk_auftraege_alle()
+        if not vorher:
             self._melde("Mathe-Talks: hier ist nichts geändert, was hochzuladen wäre.")
+            return
+        if self._dubletten_melden("Mathe-Talk-Bewertungen hochladen"):
             return
         angemeldet = self._lt_anmelden()
         if not angemeldet:
             return
         client, klasse = angemeldet
+        # Erst abrufen, wie "⟳ Synchronisieren": hat online jemand die buchende Person
+        # getauscht, gehoert die Buchung jetzt einer anderen Person. Der Eintrag hier ist
+        # danach "online nicht mehr da" und geht nicht hoch - statt die Bewertung der
+        # falschen Person zu geben. Klappt der Abruf nicht, geht nichts hoch.
+        try:
+            abruf_text, geaendert = self._talks_abgleichen(client, wartende_nennen=False)
+        except Exception as e:
+            messagebox.showerror("Mathe-Talk-Bewertungen hochladen",
+                                 "Vor dem Hochladen ließ sich der Stand online nicht abrufen – "
+                                 f"es wurde nichts hochgeladen.\n\n{e}")
+            return
+        if geaendert:
+            self._markiere_ungespeichert()
+            self._talks_anzeigen()
+        auftraege = self._talk_auftraege_alle()
+        noch_da = {id(t) for _, t, *_ in auftraege}
+        zurueck = sorted({f"{st.voller_name}: {fmt_datum(t.datum)} {t.thema or 'Talk'}"
+                          + (" – gehört online nicht mehr zu dieser Person" if t.online_fehlt else "")
+                          for st, t, *_ in vorher if id(t) not in noch_da})
+        nachtrag = ""
+        if zurueck:
+            nachtrag += ("\n\nNach dem Abruf nicht mehr hochzuladen (bitte in OSKlar prüfen):\n"
+                         + "\n".join(zurueck))
+        nachtrag += f"\n\nVorher abgerufen:\n{abruf_text}"
+        if not auftraege:
+            self._bericht("Mathe-Talk-Bewertungen hochladen", "Es ist nichts mehr hochzuladen." + nachtrag)
+            return
         dlg = TalkHochladenDialog(self, auftraege, klasse)
         self.wait_window(dlg)
         if not dlg.result:
@@ -2878,6 +2944,8 @@ class App(tk.Tk):
             text += "\n\n" + "\n".join(erledigt)
         if fehler:
             text += "\n\nNicht geklappt:\n" + "\n".join(fehler)
+        text += nachtrag
+        if fehler:
             messagebox.showwarning("Mathe-Talk-Bewertungen hochladen", text)
         else:
             self._bericht("Mathe-Talk-Bewertungen hochladen", text + "\n\nNoch speichern nicht vergessen.")
@@ -3537,9 +3605,9 @@ class App(tk.Tk):
 
         Das PASSWORT wird bewusst nicht gespeichert -- es wird bei jeder Aktion
         neu abgefragt. Sonst laege ein Admin-Zugang im Klartext auf der Platte.
+        Wo genau, sagt einstellungen_pfad() (gebaute App: nicht im Paket).
         """
-        pfad = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "osk_einstellungen.json")
+        pfad = einstellungen_pfad()
         try:
             with open(pfad, encoding="utf-8") as f:
                 return json.load(f)
@@ -3550,10 +3618,10 @@ class App(tk.Tk):
         """Schreibt die uebergebenen Werte in die Einstellungsdatei -- als
         Ergaenzung, damit z.B. die zuletzt geoeffnete Arbeitsdatei nicht
         verlorengeht, wenn nur die Serveradresse geaendert wird."""
-        pfad = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "osk_einstellungen.json")
+        pfad = einstellungen_pfad()
         bestand = self._lt_einstellungen_laden()
         bestand.update(werte)
+        os.makedirs(os.path.dirname(pfad), exist_ok=True)
         with open(pfad, "w", encoding="utf-8") as f:
             json.dump(bestand, f, indent=2, ensure_ascii=False)
 

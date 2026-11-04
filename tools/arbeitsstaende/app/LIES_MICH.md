@@ -144,7 +144,12 @@ Namen ändern sich.
   **gemeldet und nicht vergeben** -- sonst hätten beide denselben Zugang.
 - **Lerntheken-App → Einstellungen…**: Adresse der App und Admin-Benutzername.
   Das Passwort wird nicht gespeichert, sondern einmal pro Programmstart
-  abgefragt (siehe „Passwort und Offline-Arbeiten").
+  abgefragt (siehe „Passwort und Offline-Arbeiten"). Gespeichert wird das (mit der
+  zuletzt geöffneten Datei) in `osk_einstellungen.json` -- beim Start als Skript
+  neben der Anwendung, bei der **gebauten App** (`dist/Arbeitsstaende.app`) in der
+  nächsten `osk_einstellungen.json` oberhalb der App (also die in `Organisation`,
+  aus der gebaut wird; ein Neubau ersetzt sie nicht). Liegt die App woanders und
+  findet keine, nimmt sie `~/Library/Application Support/OSK-Arbeitsstaende/`.
 - **⟳ Synchronisieren** (Knopf unter der Personenliste, Menü *Lerntheken-App*,
   Strg+R): der Normalweg. Holt alles (wie *Ergebnisse abrufen…*, dazu die
   Mathe-Talks) und zeigt danach **ein** Fenster mit allem, was noch deine
