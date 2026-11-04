@@ -152,32 +152,45 @@ Namen ändern sich.
   findet keine, nimmt sie `~/Library/Application Support/OSK-Arbeitsstaende/`.
 - **⟳ Synchronisieren** (Knopf unter der Personenliste, Menü *Lerntheken-App*,
   Strg+R): der Normalweg. Holt alles (wie *Ergebnisse abrufen…*, dazu die
-  Mathe-Talks) und zeigt danach **ein** Fenster mit allem, was noch deine
-  Bestätigung braucht: ⬇ LZK aus OSKlar, die in einen noch leeren LZK-Platz
-  eines Bausteins gehören, ⬆ hier geänderte LZK-Termine und Talk-Bewertungen.
+  Mathe-Talks), fragt dann **jede neue LZK aus OSKlar einzeln** (siehe unten)
+  und zeigt danach **ein** Fenster mit dem Rest, der deine Bestätigung braucht:
+  ⬇ LZK im falschen Halbjahr, ⬆ hier geänderte LZK-Termine und Talk-Bewertungen.
   Jede Zeile lässt sich per Klick an- oder abwählen. Was sich nicht von selbst
   klären lässt (beide Seiten verschieden geändert, kein passender Baustein),
   steht darunter zum Lesen. Die Einzelschritte liegen unter *Lerntheken-App →
   Einzelne Schritte*.
-- **Online festgelegte LZK einem Baustein zuordnen** (seit 2026-10-04): Jede LZK
-  aus OSKlar – zu einer Lerntheke oder frei angelegt –, die noch zu keinem deiner
-  Bausteine gehört, steht in der Vorschau unter „⬇ Kommt in diese Liste“ mit einem
-  **Vorschlag**: dein gleichnamiger Baustein („Baustein Kreise“ → „Kreise“;
-  Groß/klein, „&“/„und“ egal). Eine Zeile markieren, dann unten den Baustein
-  wählen – oder „＋ neuer Baustein“. **„Für alle mit dieser LZK übernehmen“**
-  setzt dieselbe Wahl bei allen anderen Personen (je Person ihr Baustein dieses
-  Namens). Die Wahl merkt sich die Datei: beim nächsten Mal ist sie der
-  Vorschlag (ansehen/vergessen: *Einzelne Schritte → Gemerkte
-  LZK-Zuordnungen…*). „— nie zuordnen —“ fragt für diese Lerntheke bzw. dieses
-  Thema nicht mehr (Lerntheken-LZK bleiben dann in der App-Zeile).
+- **LZK aus OSKlar zuordnen – jede einzeln** (seit 2026-11-04): Jede LZK aus
+  OSKlar – zu einer Lerntheke oder frei angelegt –, die noch zu keinem deiner
+  Bausteine gehört, fragt das Synchronisieren in einem eigenen Fenster ab
+  („LZK 3 von 12“): **ob**, **in welchen Baustein** und **an welche LZK**
+  (1–4). Vorausgewählt ist ein Vorschlag – dein gleichnamiger Baustein
+  („Baustein Kreise“ → „Kreise“; Groß/klein, „&“/„und“ egal) und seine
+  passende LZK: derselbe Termin, sonst Basis → LZK 1 / Aufbau → LZK 2, sonst die
+  erste freie. Ist LZK 1 schon geschrieben, ist der Vorschlag also LZK 2 (z. B.
+  „Satz des Pythagoras teil 2“). Ohne Vorschlag ist nichts gewählt – erst
+  wählen, dann **✓ Zuordnen** (oder Enter). „＋ Neuer Baustein“ fragt nach dem
+  Namen. Jede LZK-Zeile sagt, was dort steht: *frei*, *derselbe Termin*,
+  *geplant … – wird …* (noch nicht geschrieben, verlegt), *andere LZK* (ihr
+  Stand wandert in die Bemerkung) oder *gehört schon zur OSKlar-LZK am …* (nicht
+  wählbar). LZK 3/4 heißen „zusätzlich“ – der Baustein hat danach so viele.
+  **Diesmal nicht** lässt die LZK für dieses Mal liegen (beim nächsten
+  Synchronisieren wird wieder gefragt, der Bericht nennt die Zahl); **Nie
+  zuordnen** fragt für diese Lerntheke bzw. dieses Thema nicht mehr
+  (Lerntheken-LZK bleiben dann in der App-Zeile); **‹ Zurück** nimmt die letzte
+  Antwort zurück; **Rest später** schließt. Die Wahl des Bausteins merkt sich
+  die Datei: bei der nächsten Person mit derselben LZK ist sie der Vorschlag
+  (ansehen/vergessen: *Einzelne Schritte → Gemerkte LZK-Zuordnungen…*).
   Zugeordnet ist zugeordnet: Termin und Ergebnis gleichen sich danach in beide
   Richtungen ab, die App-Zeile zeigt nur noch den Stationsstand; was dort an
   Note/Bemerkung zu dieser LZK stand, zieht in den Baustein mit um.
-- **Halbjahr zählt**: Eine LZK kommt nie in einen Platz, der schon eine LZK aus
-  einem anderen Halbjahr trägt – dann ist der Vorschlag ein neuer Baustein fürs
-  Halbjahr der LZK. Ein anderer Termin im selben Halbjahr gilt als dieselbe,
-  verschobene LZK (Note und Ergebnis bleiben). Wählst du bewusst einen belegten
-  Platz, wandert dessen alter Stand in die Bemerkung des Bausteins.
+- **Halbjahr zählt**: Trägt ein Baustein schon eine LZK aus einem anderen
+  Halbjahr, schlägt das Zuordnen einen neuen Baustein fürs Halbjahr der LZK vor.
+  Ein anderer, **noch nicht geschriebener** Termin im selben Halbjahr gilt als
+  dieselbe, verlegte LZK; eine schon geschriebene (Ergebnis, Punkte, Note) ist
+  eine andere – ihr Ergebnis hängt nie an der neuen. Wählst du bewusst einen
+  belegten Platz, wandert dessen alter Stand in die Bemerkung des Bausteins. Sind
+  beide Seiten verschieden bewertet, gewinnt keine still: das Synchronisieren
+  meldet „beide geändert“.
   Steht eine LZK schon im Baustein eines anderen Halbjahres und sind dort noch
   Spuren einer früheren LZK (Note), bietet die Vorschau an, sie in einen eigenen
   Baustein ihres Halbjahres **umzuziehen**.

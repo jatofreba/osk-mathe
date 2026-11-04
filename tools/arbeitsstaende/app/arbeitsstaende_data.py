@@ -567,7 +567,9 @@ def lzk_neuer_name(eintrag: dict, titel_je_key=None) -> str:
 
 
 def _platz_zustand(b, nummer: int, datum, hj: str):
-    """Passt diese LZK in diesen Platz? -> (ok, Beschreibung).
+    """Passt diese LZK in diesen Platz? -> (ok, Beschreibung). Fuer die AUTOMATISCHEN
+    Wege (Titel-Abgleich, Umziehen); was ein Mensch beim Zuordnen sieht und waehlt,
+    beschreibt das strengere lzk_platz_wahl.
 
     Nicht, wenn der Baustein zu einem anderen Halbjahr gehoert, der Platz schon
     mit einer anderen LZK online verknuepft ist oder eine LZK aus einem ANDEREN
@@ -596,12 +598,96 @@ def _platz_zustand(b, nummer: int, datum, hj: str):
     return False, belegt
 
 
-def _lzk_vorschlag(hand, nummer, datum, hj, namen, gemerkt=None):
-    """Bester Ziel-Baustein: gleichnamig (toleranter Vergleich) mit passendem
-    Platz, Baustein des Halbjahres vor einem ohne Halbjahr. Gibt es den Namen nur
-    mit belegtem Platz (fruehere LZK), dann ein neuer Baustein fuers Halbjahr.
-    Ohne jeden Treffer: die gemerkte Wahl als neuer Baustein, sonst nichts."""
-    rang = {"gleicher Termin": 0, "frei": 1}        # dann "frei · Notiz", dann "hier …, wird …"
+# Wie ein LZK-Platz zu einer LZK aus OSKlar steht - fuer die Frage beim Synchronisieren,
+# an welche LZK eines Bausteins sie kommt (Nutzerwunsch 2026-11-04: jede LZK einzeln,
+# Baustein UND LZK-Platz frei waehlbar):
+#   "gleich"     derselbe Termin steht schon da - dieselbe LZK, sie wird nur verknuepft
+#   "frei"       kein Termin, kein Ergebnis (eine Notiz ohne Termin blockiert nicht)
+#   "verschoben" ein anderer, noch nicht geschriebener Termin im selben Halbjahr:
+#                dieselbe LZK, nur verlegt - der Termin kommt von OSKlar
+#   "belegt"     eine andere LZK (schon geschrieben, aus einem anderen Halbjahr, oder ein
+#                Ergebnis ohne Termin) - waehlbar, ihr Stand wandert dann in die Bemerkung
+#   "gesperrt"   schon mit einer anderen LZK aus OSKlar verknuepft - nicht waehlbar
+LZK_PLATZ_PASST = ("gleich", "frei", "verschoben")
+
+
+def lzk_platz_wahl(b, nummer: int, datum, hj: str):
+    """-> (Zustand, Text) dieses Platzes fuer eine LZK am `datum` (Halbjahr `hj`), siehe
+    oben. Strenger als _platz_zustand, das die automatischen Abgleiche weiter benutzen:
+    eine schon geschriebene LZK im selben Halbjahr ist hier eine ANDERE LZK - sonst
+    stuende ihr Ergebnis nachher bei der neuen und ginge beim naechsten Senden mit."""
+    d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
+    erg = getattr(b, f"lzk_ergebnis_{nummer}") or ""
+    note = (getattr(b, f"lzk_note_{nummer}") or "").strip()
+    punkte = (getattr(b, f"lzk_punkte_{nummer}") or "").strip()
+    link = getattr(b, f"lzk_online_{nummer}", None)
+    if link:
+        return "gesperrt", (f"gehört schon zur OSKlar-LZK am "
+                            f"{_fmt_kurz(_to_date(link.get('datum'))) or '?'} – nicht möglich")
+    if d is None and not erg:
+        return "frei", "frei" + (f" (Notiz: {note})" if note else "")
+    if d == datum:
+        return "gleich", f"{_fmt_kurz(d)} – derselbe Termin, wird nur verknüpft"
+    if d is not None and halbjahr_fuer_datum(d) == hj and not lzk_erledigt(b, nummer):
+        return "verschoben", f"geplant {_fmt_kurz(d)} (noch nicht geschrieben) – wird {_fmt_kurz(datum)}"
+    teile = [_fmt_kurz(d) or "ohne Datum"]
+    if punkte:
+        teile.append(f"{punkte}/{(getattr(b, f'lzk_max_{nummer}') or '').strip() or '?'} Punkte")
+    if note:
+        teile.append(f"Note {note}")
+    if erg:
+        teile.append(LZK_ERGEBNIS_TEXT.get(erg, erg))
+    return "belegt", " · ".join(teile) + " – andere LZK: ihr Stand wandert in die Bemerkung"
+
+
+def lzk_typ_platz(z: dict):
+    """Basis-LZK gehoeren an LZK 1, Aufbau-LZK an LZK 2; LZK ohne Typ: None."""
+    return {"Basis": 1, "Aufbau": 2}.get(z.get("typ"))
+
+
+def lzk_platz_vorschlag(b, z: dict, vorgaben=None, streng: bool = False):
+    """An welche LZK dieses Bausteins passt die LZK aus OSKlar? Derselbe Termin vor allem,
+    dann Basis/Aufbau an ihren Platz, dann der erste passende Platz bis zur Anzahl LZK des
+    Bausteins (hat ein Mensch den Baustein gewaehlt, auch dahinter). None = keiner passt.
+
+    `streng` (Vorschlag ohne Zutun): Traegt der Baustein schon eine LZK aus einem anderen
+    Halbjahr, zaehlt bei Basis/Aufbau nur ihr eigener Platz, bei LZK ohne Typ keiner -
+    dann ist der Vorschlag ein neuer Baustein fuers Halbjahr (Nutzerwunsch 2026-10-04)."""
+    datum, hj = z["datum"], z["halbjahr"]
+    wahl = {nr: lzk_platz_wahl(b, nr, datum, hj)[0] for nr in LZK_NUMMERN}
+    gleich = next((nr for nr in LZK_NUMMERN if wahl[nr] == "gleich"), None)
+    if gleich:
+        return gleich
+    typ_platz = lzk_typ_platz(z)
+    anzahl = list(range(1, lzk_anzahl(b, vorgaben) + 1))
+    reihe = ([typ_platz] if typ_platz else []) + anzahl
+    if streng:
+        termine = (_to_date(getattr(b, f"lzk_datum_{nr}")) for nr in LZK_NUMMERN)
+        if any(d is not None and halbjahr_fuer_datum(d) != hj for d in termine):
+            reihe = [typ_platz] if typ_platz else []
+    else:
+        reihe += list(LZK_NUMMERN)
+    return next((nr for nr in reihe if wahl[nr] in LZK_PLATZ_PASST), None)
+
+
+def lzk_vorschlag(student, z: dict, ziele=None, vorgaben=None):
+    """-> (Ziel, Platz): der vorgeschlagene Baustein und seine LZK fuer eine LZK aus OSKlar.
+
+    Gesucht wird nach Namen - zuerst der gemerkten Wahl (`ziele`, je Lerntheke bzw.
+    Thema), dann dem Thema, dann dem Lerntheken-Titel ("Baustein Kreise" -> "Kreise";
+    Gross/klein, "&"/"und" egal). Unter gleichnamigen Bausteinen gewinnt der mit einem
+    passenden Platz, der des Halbjahres vor einem ohne Halbjahr vor einem anderen. Gibt
+    es den Namen nur ohne passenden Platz, ist der Vorschlag ein neuer Baustein fuers
+    Halbjahr. Ohne jeden Treffer: die gemerkte Wahl als neuer Baustein, sonst (None, None).
+    Ziel = ("baustein", b) | ("neu", name, halbjahr)."""
+    hand = [b for b in student.bausteine if not _ist_app_zeile(b)]
+    gemerkt = ((ziele or {}).get(z["schluessel"]) or {}).get("name")
+    if gemerkt == LZK_ZIEL_NIE:
+        gemerkt = None
+    e = z["eintrag"]
+    namen = [gemerkt, None if e.get("lerntheke") else e.get("thema"), z["neuer_name"]]
+    neu_platz = lzk_typ_platz(z) or 1
+    rang = {"gleich": 0, "frei": 1, "verschoben": 2}
     for name in namen:
         n = _name_norm(name)
         if not n:
@@ -611,26 +697,28 @@ def _lzk_vorschlag(hand, nummer, datum, hj, namen, gemerkt=None):
             continue
         moeglich = []
         for b in gleich:
-            ok, zustand = _platz_zustand(b, nummer, datum, hj)
-            if ok:
-                # Baustein des Halbjahres vor einem ohne Halbjahr vor einem aus einem anderen
-                hj_rang = 0 if b.halbjahr == hj else (1 if not b.halbjahr else 2)
-                moeglich.append((hj_rang, rang.get(zustand, 2 if zustand.startswith("frei") else 3), b))
+            nr = lzk_platz_vorschlag(b, z, vorgaben, streng=True)
+            if nr:
+                hj_rang = 0 if b.halbjahr == z["halbjahr"] else (1 if not b.halbjahr else 2)
+                zustand = lzk_platz_wahl(b, nr, z["datum"], z["halbjahr"])[0]
+                moeglich.append((hj_rang, rang.get(zustand, 3), b, nr))
         if moeglich:
             moeglich.sort(key=lambda x: (x[0], x[1]))
-            return ("baustein", moeglich[0][2])
-        return ("neu", gleich[0].name, hj)
+            return ("baustein", moeglich[0][2]), moeglich[0][3]
+        return ("neu", gleich[0].name, z["halbjahr"]), neu_platz
     if gemerkt:
-        return ("neu", gemerkt, hj)
-    return None
+        return ("neu", gemerkt, z["halbjahr"]), neu_platz
+    return None, None
 
 
-def lzk_zuordnungen(student, konto: dict, titel_je_key=None, ziele=None) -> list:
+def lzk_zuordnungen(student, konto: dict, titel_je_key=None, ziele=None, vorgaben=None) -> list:
     """Online-LZK dieser Person, die noch zu keinem Baustein gehoeren - je eine
     mit Vorschlag. Gemerkt "nie zuordnen" faellt heraus.
 
-    Je Eintrag ein dict: eintrag, nummer, datum, halbjahr, ergebnis, typ, titel
-    (wie online), schluessel, neuer_name, vorschlag (Ziel oder None).
+    Je Eintrag ein dict: eintrag, nummer (Platz nach Typ: Basis 1, Aufbau 2, sonst 1 -
+    dort steht eine Lerntheken-LZK in der App-Zeile), datum, halbjahr, ergebnis, typ,
+    titel (wie online), schluessel, neuer_name, lerntheke, vorschlag (Ziel oder None) und
+    platz (die vorgeschlagene LZK des Ziels), siehe lzk_vorschlag.
     Ziel = ("baustein", b) | ("neu", name, halbjahr) | ("nicht",) | ("nie",).
     """
     ziele = ziele or {}
@@ -642,21 +730,17 @@ def lzk_zuordnungen(student, konto: dict, titel_je_key=None, ziele=None) -> list
         if e.get("id") in verknuepft:
             continue
         schluessel = lzk_ziel_schluessel(e)
-        gemerkt = (ziele.get(schluessel) or {}).get("name")
-        if gemerkt == LZK_ZIEL_NIE:
+        if (ziele.get(schluessel) or {}).get("name") == LZK_ZIEL_NIE:
             continue
         datum = _to_date(e.get("datum"))
-        hj = halbjahr_fuer_datum(datum)
-        nummer = lzk_platz(e)
-        neuer_name = lzk_neuer_name(e, titel_je_key)
-        namen = [gemerkt, None if e.get("lerntheke") else e.get("thema"), neuer_name]
-        liste.append({
-            "eintrag": e, "nummer": nummer, "datum": datum, "halbjahr": hj,
+        z = {
+            "eintrag": e, "nummer": lzk_platz(e), "datum": datum, "halbjahr": halbjahr_fuer_datum(datum),
             "ergebnis": lzk_ergebnis_von_server(e), "typ": e.get("typ") or "LZK",
             "titel": _lzk_online_titel(e, titel_je_key), "schluessel": schluessel,
-            "neuer_name": neuer_name, "lerntheke": bool(e.get("lerntheke")),
-            "vorschlag": _lzk_vorschlag(hand, nummer, datum, hj, [n for n in namen if n], gemerkt),
-        })
+            "neuer_name": lzk_neuer_name(e, titel_je_key), "lerntheke": bool(e.get("lerntheke")),
+        }
+        z["vorschlag"], z["platz"] = lzk_vorschlag(student, z, ziele, vorgaben)
+        liste.append(z)
     return liste
 
 
@@ -674,34 +758,143 @@ def lzk_ziel_text(ziel) -> str:
     return "nicht zuordnen"
 
 
-def lzk_ziel_optionen(student, z: dict) -> list:
-    """Auswahl fuer eine LZK: [(Text, Ziel)] -- neue Bausteine, dann alle eigenen
-    (passende zuerst; was ersetzt wuerde, steht dabei), dann "nicht"/"nie"."""
+def lzk_baustein_optionen(student, z: dict) -> list:
+    """Auswahl "In welchen Baustein?" fuer eine LZK: [(Text, Ziel)] - zuerst ein neuer
+    Baustein (Name frei, Halbjahr der LZK), dann alle eigenen Bausteine der Person:
+    gleichnamige zuerst, dann die des Halbjahres bzw. ohne Halbjahr, sonst nach Namen."""
     hand = [b for b in student.bausteine if not _ist_app_zeile(b)]
     namen = {_name_norm(z["neuer_name"]), _name_norm(z["titel"])}
-    vorschlag = z.get("vorschlag")
-    neue = [z["neuer_name"]]
-    if vorschlag and vorschlag[0] == "neu" and vorschlag[1] not in neue:
-        neue.insert(0, vorschlag[1])
-    optionen = [(lzk_ziel_text(("neu", n, z["halbjahr"])), ("neu", n, z["halbjahr"])) for n in neue]
 
     def rang(b):
-        return (_name_norm(b.name) not in namen, b.halbjahr not in ("", z["halbjahr"]), (b.name or "").lower())
+        return (_name_norm(b.name) not in namen, b.halbjahr not in ("", z["halbjahr"]),
+                (b.name or "").lower(), b.halbjahr or "")
+    optionen = [(f"＋ Neuer Baustein (Halbjahr {z['halbjahr']}) …", ("neu", z["neuer_name"], z["halbjahr"]))]
     for b in sorted(hand, key=rang):
-        ok, zustand = _platz_zustand(b, z["nummer"], z["datum"], z["halbjahr"])
-        optionen.append((f"{lzk_ziel_text(('baustein', b))} – LZK {z['nummer']}: {zustand}"
-                         + ("" if ok else " ⚠ wird ersetzt"), ("baustein", b)))
-    optionen.append(("— nicht zuordnen (diesmal) —", ("nicht",)))
-    optionen.append(("— nie zuordnen" + (" (bleibt in der App-Zeile)" if z.get("lerntheke") else "")
-                     + " —", ("nie",)))
+        teile = [b.halbjahr or "ohne HJ"] + ([b.status] if (b.status or "").strip() else [])
+        optionen.append((f"{b.name} ({' · '.join(teile)})", ("baustein", b)))
     return optionen
 
 
-def lzk_ziel_nach_name(student, z: dict, name: str):
-    """Dieselbe Wahl fuer eine andere Person: ihr gleichnamiger Baustein mit
-    passendem Platz, sonst ein neuer Baustein dieses Namens fuers Halbjahr."""
-    hand = [b for b in student.bausteine if not _ist_app_zeile(b)]
-    return _lzk_vorschlag(hand, z["nummer"], z["datum"], z["halbjahr"], [name], gemerkt=name)
+def lzk_platz_optionen(b, z: dict, vorgaben=None, neuer_name=None) -> list:
+    """Auswahl "An welche LZK?": [(Nummer, Zustand, Text)] fuer LZK 1 bis LZK_MAX. Ohne
+    Baustein (b None: ein neuer namens `neuer_name`) sind alle frei. Plaetze hinter der
+    Anzahl LZK des Bausteins heissen "zusaetzlich" - waehlt man einen, hat der Baustein
+    danach so viele LZK."""
+    anzahl = (lzk_anzahl(b, vorgaben) if b is not None
+              else lzk_vorgabe(neuer_name or z.get("neuer_name") or "", vorgaben))
+    optionen = []
+    for nr in LZK_NUMMERN:
+        zustand, text = lzk_platz_wahl(b, nr, z["datum"], z["halbjahr"]) if b is not None else ("frei", "frei")
+        if nr > anzahl and zustand == "frei":
+            text = f"frei – zusätzliche LZK (der Baustein hat dann {nr})"
+        optionen.append((nr, zustand, text))
+    return optionen
+
+
+def lzk_stand_merken(student, ziele=None):
+    """Alles, was lzk_zuordnen an einer Person aendern kann (ihre Bausteine samt Feldern,
+    die gemerkten Ziele) - fuer "‹ Zurück" beim Zuordnen."""
+    return (list(student.bausteine), [(b, dict(vars(b))) for b in student.bausteine],
+            dict(ziele) if ziele is not None else None)
+
+
+def lzk_stand_zuruecksetzen(student, ziele, stand):
+    """Stellt den gemerkten Stand wieder her - dieselben Baustein-Objekte, nur ihre Felder
+    zurueck; ein dabei neu angelegter Baustein ist wieder weg."""
+    liste, felder, alte_ziele = stand
+    student.bausteine[:] = liste
+    for b, werte in felder:
+        vars(b).clear()
+        vars(b).update(werte)
+    if ziele is not None and alte_ziele is not None:
+        ziele.clear()
+        ziele.update(alte_ziele)
+
+
+class LzkFragen:
+    """Der Ablauf "jede LZK einzeln fragen" beim Synchronisieren (Nutzerwunsch 2026-11-04),
+    ohne Fenster - das Fenster (LzkZuordnenDialog) stellt nur dar.
+
+    `fragen` = [(Person, Zuordnung aus lzk_zuordnungen)]. Jede Antwort wirkt SOFORT (die
+    naechste Frage sieht schon den neuen Stand, etwa den eben angelegten Baustein);
+    `zurueck()` nimmt die letzte Antwort wieder zurueck. Was "nie zuordnen" bekommen hat,
+    wird bei den weiteren LZK derselben Lerntheke bzw. desselben Themas nicht mehr gefragt.
+    `zeilen` ist der Bericht."""
+
+    def __init__(self, fragen: list, ziele=None, vorgaben=None):
+        self.fragen = list(fragen)
+        self.ziele = ziele if ziele is not None else {}
+        self.vorgaben = vorgaben
+        self.zeilen = []
+        self._verlauf = []          # (Index, Stand vorher oder None, Anzahl Berichtszeilen vorher)
+        self.index = -1
+        self.weiter()
+
+    @property
+    def fertig(self) -> bool:
+        return self.index >= len(self.fragen)
+
+    @property
+    def geaendert(self) -> bool:
+        return any(stand is not None for _, stand, _ in self._verlauf)
+
+    @property
+    def beantwortet(self) -> int:
+        return len(self._verlauf)
+
+    def aktuell(self):
+        """(Person, Zuordnung) der laufenden Frage, oder None, wenn alles gefragt ist."""
+        return None if self.fertig else self.fragen[self.index]
+
+    def weiter(self):
+        self.index += 1
+        while not self.fertig:
+            _, z = self.fragen[self.index]
+            if (self.ziele.get(z["schluessel"]) or {}).get("name") != LZK_ZIEL_NIE:
+                break
+            self.index += 1
+
+    def vorschlag(self):
+        st, z = self.aktuell()
+        return lzk_vorschlag(st, z, self.ziele, self.vorgaben)
+
+    def _antwort(self, ziel, platz=None):
+        st, z = self.aktuell()
+        stand = lzk_stand_merken(st, self.ziele)
+        zeile, _b = lzk_zuordnen(st, z, ziel, self.ziele, self.vorgaben, platz)   # ValueError: nichts geschehen
+        self._verlauf.append((self.index, stand, len(self.zeilen)))
+        self.zeilen.append(f"{st.voller_name} · {zeile}")
+        self.weiter()
+
+    def zuordnen(self, ziel, platz: int):
+        """In diesen Baustein (("baustein", b) oder ("neu", Name, Halbjahr)) an LZK `platz`."""
+        if not ziel or ziel[0] not in ("baustein", "neu"):
+            raise ValueError("Bitte einen Baustein wählen.")
+        if ziel[0] == "neu" and not (ziel[1] or "").strip():
+            raise ValueError("Bitte einen Namen für den neuen Baustein eingeben.")
+        if platz not in LZK_NUMMERN:
+            raise ValueError("Bitte wählen, an welche LZK.")
+        self._antwort(("neu", ziel[1].strip(), ziel[2]) if ziel[0] == "neu" else ziel, platz)
+
+    def nie(self):
+        """Diese Lerntheke bzw. dieses Thema nie zuordnen (gemerkt; vergessen geht ueber
+        "Gemerkte LZK-Zuordnungen…")."""
+        self._antwort(("nie",))
+
+    def diesmal_nicht(self):
+        self._verlauf.append((self.index, None, len(self.zeilen)))
+        self.weiter()
+
+    def zurueck(self) -> bool:
+        """Die letzte Antwort zuruecknehmen und die Frage noch einmal stellen."""
+        if not self._verlauf:
+            return False
+        index, stand, n = self._verlauf.pop()
+        if stand is not None:
+            lzk_stand_zuruecksetzen(self.fragen[index][0], self.ziele, stand)
+        del self.zeilen[n:]
+        self.index = index
+        return True
 
 
 def lzk_import_status(b, datum=None) -> bool:
@@ -752,35 +945,35 @@ def lzk_abschluss_status(b, vorgaben=None) -> bool:
     return True
 
 
-def lzk_zuordnen(student, z: dict, ziel, ziele=None, vorgaben=None):
-    """Traegt die LZK in den gewaehlten Baustein ein und verknuepft den Platz.
+def lzk_zuordnen(student, z: dict, ziel, ziele=None, vorgaben=None, platz=None):
+    """Traegt die LZK in den gewaehlten Baustein an LZK `platz` ein (ohne: der Vorschlag
+    z["platz"], sonst der Platz nach Typ) und verknuepft den Platz.
 
-    Stand dort eine ANDERE LZK (anderer Termin, Note, Ergebnis, Bemerkung), wandert
-    sie in die Bemerkung des Bausteins - verloren geht nichts. Bei einer
-    Lerntheken-LZK zieht, was in der App-Zeile an diesem Platz stand (Note,
-    Bemerkung, Ergebnis), mit um; die App-Zeile gibt den Platz frei. Die Wahl merkt
-    sich `ziele` (je Lerntheke bzw. Thema). Kommt dabei ein Ergebnis dazu und sind damit
-    alle LZK bestanden, wird der Baustein "Abgeschlossen" (`vorgaben`: Anzahl LZK laut
-    Vorlage). Rueckgabe: (Zeile fuer den Bericht, Ziel-Baustein oder None bei "nie")."""
-    e, nummer, datum = z["eintrag"], z["nummer"], z["datum"]
+    Stand dort eine ANDERE LZK (lzk_platz_wahl: "belegt"), wandert sie in die Bemerkung
+    des Bausteins - verloren geht nichts. Ein Platz, der schon mit einer anderen LZK aus
+    OSKlar verknuepft ist, wird nicht angetastet (ValueError, nichts geaendert). Bei einer
+    Lerntheken-LZK zieht, was in der App-Zeile zu ihr stand (Note, Bemerkung, Ergebnis,
+    Punkte), mit um; die App-Zeile gibt ihren Platz frei. Sind beide Seiten verschieden
+    bewertet, gewinnt keine still: der naechste Abgleich meldet "beide geaendert". Die
+    Wahl merkt sich `ziele` (je Lerntheke bzw. Thema). Kommt ein Ergebnis dazu und sind
+    damit alle LZK bestanden, wird der Baustein "Abgeschlossen" (`vorgaben`: Anzahl LZK
+    laut Vorlage). Rueckgabe: (Zeile fuer den Bericht, Ziel-Baustein oder None bei "nie")."""
+    e, quelle, datum = z["eintrag"], z["nummer"], z["datum"]
+    nummer = platz or z.get("platz") or quelle
     if ziel[0] == "nie":
         if ziele is not None:
             ziele[z["schluessel"]] = {"name": LZK_ZIEL_NIE, "titel": z["titel"]}
         return f"„{z['titel']}“: nie zuordnen", None
+    b = Baustein(name=ziel[1], status="In Bearbeitung", halbjahr=ziel[2]) if ziel[0] == "neu" else ziel[1]
+    zustand, beschreibung = lzk_platz_wahl(b, nummer, datum, z["halbjahr"])
+    if zustand == "gesperrt":
+        raise ValueError(f"LZK {nummer} von „{b.name}“ {beschreibung}.")
     if ziel[0] == "neu":
-        b = Baustein(name=ziel[1], status="In Bearbeitung", halbjahr=ziel[2])
         student.bausteine.append(b)
-    else:
-        b = ziel[1]
     ergebnisse_vorher = [getattr(b, f"lzk_ergebnis_{nr}") for nr in LZK_NUMMERN]
     alt_d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
     alt = {f: (getattr(b, f"lzk_{f}_{nummer}") or "") for f in ("note", "bem", "ergebnis", "punkte", "max")}
-    # Eine ANDERE LZK stand hier, wenn ihr Termin in ein anderes Halbjahr faellt oder
-    # sie ein Ergebnis ohne Termin hat. Derselbe Termin oder ein verschobener im selben
-    # Halbjahr ist dieselbe LZK: Note, Bemerkung und Ergebnis bleiben dann stehen.
-    andere = ((alt_d is not None and alt_d != datum and halbjahr_fuer_datum(alt_d) != z["halbjahr"])
-              or (alt_d is None and bool(alt["ergebnis"])))
-    if andere:
+    if zustand == "belegt":
         teile = [f"LZK {nummer} vorher: {_fmt_kurz(alt_d) or 'ohne Datum'}"]
         if alt["note"].strip():
             teile.append(f"Note {alt['note'].strip()}")
@@ -795,20 +988,29 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None, vorgaben=None):
         for f in alt:
             setattr(b, f"lzk_{f}_{nummer}", "")
     setattr(b, f"lzk_datum_{nummer}", datum)
-    if z["ergebnis"] and not getattr(b, f"lzk_ergebnis_{nummer}"):
-        setattr(b, f"lzk_ergebnis_{nummer}", z["ergebnis"])
-    # Lerntheken-LZK: der Platz der App-Zeile gehoert jetzt dem Baustein.
+    # Lerntheken-LZK: der Platz der App-Zeile (nach Typ) gehoert jetzt dem Baustein.
     if e.get("lerntheke"):
         for app in student.bausteine:
             if not _ist_app_zeile(app) or _titel_norm(app.name) != _titel_norm(z["titel"]):
                 continue
             for f in ("note", "bem", "ergebnis", "punkte", "max"):
-                wert = getattr(app, f"lzk_{f}_{nummer}") or ""
+                wert = getattr(app, f"lzk_{f}_{quelle}") or ""
                 if wert and not getattr(b, f"lzk_{f}_{nummer}"):
                     setattr(b, f"lzk_{f}_{nummer}", wert)
-                setattr(app, f"lzk_{f}_{nummer}", "")
-            setattr(app, f"lzk_datum_{nummer}", None)
-    setattr(b, f"lzk_online_{nummer}", lzk_verknuepfung(e))
+                setattr(app, f"lzk_{f}_{quelle}", "")
+            setattr(app, f"lzk_datum_{quelle}", None)
+    link = lzk_verknuepfung(e)
+    hier_e = getattr(b, f"lzk_ergebnis_{nummer}") or ""
+    konflikt = ""
+    if z["ergebnis"] and not hier_e:
+        setattr(b, f"lzk_ergebnis_{nummer}", z["ergebnis"])
+    elif z["ergebnis"] and hier_e != z["ergebnis"]:
+        # Hier anders bewertet als online: als gemeinsamer Stand gilt "nicht bewertet" -
+        # dann sieht der Abgleich beide Seiten geaendert und fragt, statt eine zu ueberschreiben.
+        link["ergebnis"] = ""
+        konflikt = (f" – Ergebnis hier {LZK_ERGEBNIS_TEXT.get(hier_e, hier_e)}, online "
+                    f"{LZK_ERGEBNIS_TEXT.get(z['ergebnis'], z['ergebnis'])}: bitte klären")
+    setattr(b, f"lzk_online_{nummer}", link)
     status_neu = "In Bearbeitung" if lzk_import_status(b, datum) else ""
     if ([getattr(b, f"lzk_ergebnis_{nr}") for nr in LZK_NUMMERN] != ergebnisse_vorher
             and lzk_abschluss_status(b, vorgaben)):
@@ -817,7 +1019,8 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None, vorgaben=None):
         ziele[z["schluessel"]] = {"name": b.name, "titel": z["titel"]}
     return (f"„{z['titel']}“ {z['typ']}-LZK {_fmt_kurz(datum)} → {b.name} ({b.halbjahr or 'ohne HJ'}), "
             f"LZK {nummer}" + (" – neuer Baustein" if ziel[0] == "neu" else "")
-            + (f" – jetzt „{status_neu}“" if status_neu else "")), b
+            + (" – alter Stand in der Bemerkung" if zustand == "belegt" else "")
+            + (f" – jetzt „{status_neu}“" if status_neu else "") + konflikt), b
 
 
 def lzk_falsches_halbjahr(student) -> list:

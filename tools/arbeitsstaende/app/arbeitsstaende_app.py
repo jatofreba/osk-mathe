@@ -26,8 +26,9 @@ from arbeitsstaende_data import (
     lt_mathe_talks, lt_talks_uebernehmen, lt_talks_hochladen_liste, talk_hochgeladen,
     talk_wartet, talks_je_halbjahr, talks_zusammenfassung,
     hj_zusammenfassung, hj_zusammenfassung_text, hj_auswahl, hj_note_von, hj_note_setzen,
-    verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_optionen, lzk_ziel_nach_name, lzk_ziel_text,
-    lzk_zuordnen, lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
+    verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_text, lzk_baustein_optionen, lzk_platz_optionen,
+    lzk_platz_vorschlag, lzk_typ_platz, LzkFragen,
+    lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
     lzk_import_status,
     Notenspiegel, NOTEN, NOTENSPIEGEL_STANDARD, NOTEN_RUNDEN, NOTEN_RUNDEN_STANDARD,
     notenspiegel_werte, notenspiegel_tabelle, lzk_auswertung, lzk_auswertung_text,
@@ -1113,28 +1114,20 @@ class HjZusammenfassungDialog(tk.Toplevel):
 class SyncDialog(tk.Toplevel):
     """Vorschau beim Synchronisieren: was hereinkommt, was hinausgeht, was offen ist.
 
-    `posten` sind dicts {"gruppe", "person", "text", "an"}. Posten mit "art" ==
-    "zuordnen" tragen zusaetzlich ein "ziel" (siehe lzk_zuordnungen); fuer sie
-    zeigt die Vorschau unter der Liste eine Auswahl: `optionen(posten)` liefert
-    [(Text, Ziel)], `nach_name(posten, name)` das Ziel fuer "für alle
-    übernehmen", `text(posten)` den Zeilentext. `hinweise` sind nur zum Lesen.
-    `result` ist danach die Menge der gewaehlten Indizes (oder None bei Abbruch).
+    `posten` sind dicts {"gruppe", "person", "text", "an"}; `hinweise` sind nur zum
+    Lesen. `result` ist danach die Menge der gewaehlten Indizes (oder None bei Abbruch).
+    LZK aus OSKlar ohne Baustein fragt vorher LzkZuordnenDialog einzeln ab.
     """
 
     GRUPPEN = (("herein", "⬇ Kommt in diese Liste"), ("raus", "⬆ Geht zum Server"))
 
-    def __init__(self, parent, posten: list, hinweise: list, klasse: str, abruf_text: str,
-                 optionen=None, nach_name=None, text=None):
+    def __init__(self, parent, posten: list, hinweise: list, klasse: str, abruf_text: str):
         super().__init__(parent)
         self.title("Synchronisieren")
         self.result = None
         self.transient(parent)
         self.grab_set()
         self.posten = posten
-        self._optionen, self._nach_name = optionen, nach_name
-        self._text = text or (lambda p: p.get("text", ""))
-        self._opts = []
-        self._aktuell = None
         self.an = {i for i, p in enumerate(posten) if p.get("an", True)}
 
         ttk.Label(self, text=f"Tandem {klasse} — abgerufen ist schon alles. "
@@ -1172,7 +1165,7 @@ class SyncDialog(tk.Toplevel):
             self.baum.insert("", "end", iid=gruppe, text=f"{titel} ({len(zeilen)})", open=True)
             for i, p in zeilen:
                 self.baum.insert(gruppe, "end", iid=str(i), text=self._marke(i) + p["person"],
-                                 values=(self._text(p),))
+                                 values=(p.get("text", ""),))
         if hinweise:
             self.baum.insert("", "end", iid="hinweise",
                              text=f"ℹ Nicht automatisch – bitte ansehen ({len(hinweise)})", open=False)
@@ -1180,26 +1173,8 @@ class SyncDialog(tk.Toplevel):
                 self.baum.insert("hinweise", "end", iid=f"h{j}", text=h[0], values=(h[1],))
         self.baum.bind("<Button-1>", self._klick)
         self.baum.bind("<space>", lambda e: self._umschalten(self.baum.focus()))
-        self.baum.bind("<<TreeviewSelect>>", lambda e: self._markiert())
 
-        # Auswahl des Bausteins fuer die markierte LZK (nur, wenn es etwas zuzuordnen gibt)
-        self.ziel_box = self.btn_alle = None
-        if any(p.get("art") == "zuordnen" for p in posten):
-            zr = ttk.LabelFrame(self, text="Baustein für die markierte LZK", padding=6)
-            zr.pack(fill="x", padx=10, pady=(0, 4))
-            self.ziel_var = tk.StringVar()
-            self.ziel_box = ttk.Combobox(zr, textvariable=self.ziel_var, state="disabled", width=86)
-            self.ziel_box.pack(side="left", fill="x", expand=True)
-            self.ziel_box.bind("<<ComboboxSelected>>", lambda e: self._ziel_gewaehlt())
-            self.btn_alle = ttk.Button(zr, text="Für alle mit dieser LZK übernehmen",
-                                       command=self._fuer_alle, state="disabled")
-            self.btn_alle.pack(side="left", padx=(6, 0))
-            self.ziel_hinweis = ttk.Label(self, text="", foreground="#555")
-            self.ziel_hinweis.pack(anchor="w", padx=10)
-
-        ttk.Label(self, text="Ein Klick auf ☑/☐ wählt an oder ab; eine LZK markieren, dann unten den "
-                             "Baustein wählen. Nichts wird gelöscht; was ein belegter Platz vorher "
-                             "enthielt, wandert in die Bemerkung des Bausteins.",
+        ttk.Label(self, text="Ein Klick auf ☑/☐ wählt an oder ab. Nichts wird gelöscht.",
                   foreground="#555", wraplength=860, justify="left").pack(anchor="w", padx=10)
         btns = ttk.Frame(self)
         btns.pack(pady=10)
@@ -1214,96 +1189,229 @@ class SyncDialog(tk.Toplevel):
     def _marke(self, i) -> str:
         return "☑ " if i in self.an else "☐ "
 
-    def _zeichnen(self, i):
-        p = self.posten[i]
-        self.baum.item(str(i), text=self._marke(i) + p["person"], values=(self._text(p),))
-
     def _umschalten(self, iid):
         if not iid or not str(iid).isdigit():
             return
         i = int(iid)
-        p = self.posten[i]
-        # Eine Zuordnung ohne Ziel laesst sich nicht anwaehlen - erst den Baustein waehlen.
-        if p.get("art") == "zuordnen" and i not in self.an and not (p.get("ziel") and p["ziel"][0] != "nicht"):
-            return
         self.an.symmetric_difference_update({i})
-        self._zeichnen(i)
+        self.baum.item(str(i), text=self._marke(i) + self.posten[i]["person"])
 
     def _klick(self, event):
-        # Nur ein Klick in die erste Spalte (☑/☐ + Person) schaltet um - sonst
-        # wuerde schon das Markieren einer Zeile zum Waehlen des Bausteins umschalten.
+        # Nur ein Klick in die erste Spalte (☑/☐ + Person) schaltet um.
         if self.baum.identify_column(event.x) == "#0":
             self._umschalten(self.baum.identify_row(event.y))
-
-    def _markiert(self):
-        if self.ziel_box is None:
-            return
-        auswahl = self.baum.selection()
-        i = int(auswahl[0]) if len(auswahl) == 1 and auswahl[0].isdigit() else None
-        if i is None or self.posten[i].get("art") != "zuordnen" or self._optionen is None:
-            self._aktuell = None
-            self.ziel_var.set("")
-            self.ziel_box.config(state="disabled", values=())
-            self.btn_alle.config(state="disabled")
-            return
-        self._aktuell = i
-        p = self.posten[i]
-        self._opts = self._optionen(p)
-        self.ziel_box.config(state="readonly", values=[t for t, _ in self._opts])
-        jetzt = next((t for t, z in self._opts if self._gleich(z, p.get("ziel"))), "")
-        self.ziel_var.set(jetzt)
-        self.btn_alle.config(state="normal" if p.get("ziel") else "disabled")
-
-    @staticmethod
-    def _gleich(a, b) -> bool:
-        if not a or not b or a[0] != b[0]:
-            return False
-        if a[0] == "baustein":
-            return a[1] is b[1]
-        return tuple(a) == tuple(b)
-
-    def _ziel_setzen(self, i, ziel):
-        p = self.posten[i]
-        p["ziel"] = ziel
-        if ziel and ziel[0] != "nicht":
-            self.an.add(i)
-        else:
-            self.an.discard(i)
-        self._zeichnen(i)
-
-    def _ziel_gewaehlt(self):
-        if self._aktuell is None:
-            return
-        idx = self.ziel_box.current()
-        if idx < 0:
-            return
-        self._ziel_setzen(self._aktuell, self._opts[idx][1])
-        self.btn_alle.config(state="normal")
-
-    def _fuer_alle(self):
-        """Dieselbe Wahl fuer alle anderen Zuordnungen derselben LZK-Art (gleiche
-        Lerntheke bzw. gleiches Thema): je Person ihr gleichnamiger Baustein."""
-        if self._aktuell is None:
-            return
-        p = self.posten[self._aktuell]
-        ziel = p.get("ziel")
-        if not ziel:
-            return
-        name = ziel[1].name if ziel[0] == "baustein" else (ziel[1] if ziel[0] == "neu" else None)
-        n = 0
-        for i, q in enumerate(self.posten):
-            if q is p or q.get("art") != "zuordnen" or q["z"]["schluessel"] != p["z"]["schluessel"]:
-                continue
-            if name is None:
-                self._ziel_setzen(i, ziel)
-            elif self._nach_name is not None:
-                self._ziel_setzen(i, self._nach_name(q, name))
-            n += 1
-        self.ziel_hinweis.config(text=f"Für {n} weitere LZK übernommen – bitte kurz durchsehen.")
 
     def _ok(self):
         self.result = set(self.an)
         self.destroy()
+
+
+class LzkZuordnenDialog(tk.Toplevel):
+    """Beim Synchronisieren: jede LZK aus OSKlar, die noch zu keinem Baustein gehoert,
+    EINZELN - ob, in welchen Baustein und an welche LZK (Nutzerwunsch 2026-11-04;
+    vorher stand sie mit einem Vorschlag, schon angehakt, in der Vorschau, und der
+    Platz war fest: Basis/frei -> LZK 1, Aufbau -> LZK 2).
+
+    Den Ablauf haelt `ablauf` (LzkFragen): jede Antwort wirkt sofort, "‹ Zurück" nimmt
+    sie zurueck. Vorausgewaehlt ist der Vorschlag; ohne Vorschlag ist nichts gewaehlt und
+    "Zuordnen" erst nach einer Wahl moeglich. Schliessen/"Rest später" = die uebrigen
+    diesmal nicht (das naechste Synchronisieren fragt wieder)."""
+
+    HINWEIS_PLATZ = {
+        "gleich": "Derselbe Termin steht schon da – die LZK wird nur verknüpft.",
+        "verschoben": "Dieselbe LZK, nur verlegt: der Termin kommt aus OSKlar, die Bemerkung bleibt.",
+        "belegt": "⚠ Hier steht eine andere LZK. Ihr Stand (Datum, Punkte/Note, Ergebnis, Bemerkung) "
+                  "wandert in die Bemerkung des Bausteins – verloren geht nichts.",
+    }
+
+    def __init__(self, parent, ablauf):
+        super().__init__(parent)
+        self.title("LZK aus OSKlar zuordnen")
+        self.transient(parent)
+        self.grab_set()
+        self.ablauf = ablauf
+        self._opts = []
+        self._plaetze = {}
+
+        kopf = ttk.Frame(self)
+        kopf.pack(fill="x", padx=12, pady=(10, 2))
+        self.lbl_person = ttk.Label(kopf, font=("", 13, "bold"))
+        self.lbl_person.pack(side="left")
+        self.lbl_fortschritt = ttk.Label(kopf, foreground="#555")
+        self.lbl_fortschritt.pack(side="right")
+        self.lbl_lzk = ttk.Label(self, font=("", 11), wraplength=660, justify="left")
+        self.lbl_lzk.pack(anchor="w", padx=12)
+        self.lbl_vorschlag = ttk.Label(self, foreground="#555", wraplength=660, justify="left")
+        self.lbl_vorschlag.pack(anchor="w", padx=12, pady=(2, 6))
+
+        rb = ttk.LabelFrame(self, text="In welchen Baustein?", padding=8)
+        rb.pack(fill="x", padx=12, pady=4)
+        self.baustein_var = tk.StringVar()
+        self.baustein_box = ttk.Combobox(rb, textvariable=self.baustein_var, state="readonly", width=74)
+        self.baustein_box.pack(fill="x")
+        self.baustein_box.bind("<<ComboboxSelected>>", lambda e: self._baustein_gewaehlt())
+        self.neu_rahmen = ttk.Frame(rb)
+        ttk.Label(self.neu_rahmen, text="Name des neuen Bausteins:").pack(side="left")
+        self.neu_var = tk.StringVar()
+        ttk.Entry(self.neu_rahmen, textvariable=self.neu_var, width=40).pack(
+            side="left", padx=(6, 0), fill="x", expand=True)
+        self.neu_var.trace_add("write", lambda *a: self._ok_zustand())
+
+        rp = ttk.LabelFrame(self, text="An welche LZK?", padding=8)
+        rp.pack(fill="x", padx=12, pady=4)
+        self.platz_var = tk.IntVar(value=0)
+        self.platz_knoepfe = {}
+        for nr in LZK_NUMMERN:
+            k = ttk.Radiobutton(rp, text=f"LZK {nr}", variable=self.platz_var, value=nr,
+                                command=self._platz_gewaehlt)
+            k.pack(anchor="w")
+            self.platz_knoepfe[nr] = k
+        self.lbl_platz = ttk.Label(rp, foreground="#555", wraplength=640, justify="left")
+        self.lbl_platz.pack(anchor="w", pady=(4, 0))
+
+        btns = ttk.Frame(self)
+        btns.pack(fill="x", padx=12, pady=(8, 4))
+        self.btn_zurueck = ttk.Button(btns, text="‹ Zurück", command=self._zurueck)
+        self.btn_zurueck.pack(side="left")
+        ttk.Button(btns, text="Diesmal nicht", command=self._diesmal_nicht).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text="Nie zuordnen", command=self._nie).pack(side="left", padx=(6, 0))
+        self.btn_ok = ttk.Button(btns, text="✓ Zuordnen", command=self._zuordnen)
+        self.btn_ok.pack(side="right")
+        unten = ttk.Frame(self)
+        unten.pack(fill="x", padx=12, pady=(0, 10))
+        self.lbl_nie = ttk.Label(unten, foreground="#555", wraplength=500, justify="left")
+        self.lbl_nie.pack(side="left")
+        ttk.Button(unten, text="Rest später", command=self.destroy).pack(side="right")
+        self.bind("<Return>", lambda e: self._zuordnen())
+        self.bind("<Escape>", lambda e: self.destroy())
+        self._zeigen()
+        if self.winfo_exists():
+            fenster_ins_bild(self, parent)
+
+    @staticmethod
+    def _lzk_text(z) -> str:
+        erg = LZK_ERGEBNIS_TEXT.get(z["ergebnis"], z["ergebnis"]) if z["ergebnis"] else "noch nicht bewertet"
+        if z["lerntheke"]:
+            art = f"{z['typ']}-LZK der Lerntheke"
+        else:
+            art = "freie LZK" + (f" ({z['typ']})" if z["typ"] in ("Basis", "Aufbau") else "")
+        return f"„{z['titel']}“ · {art} · am {fmt_datum(z['datum'])} (Halbjahr {z['halbjahr']}) · online: {erg}"
+
+    def _zeigen(self):
+        frage = self.ablauf.aktuell()
+        if frage is None:
+            self.destroy()
+            return
+        st, z = frage
+        self.lbl_person.config(text=st.voller_name)
+        self.lbl_fortschritt.config(text=f"LZK {self.ablauf.index + 1} von {len(self.ablauf.fragen)}")
+        self.lbl_lzk.config(text=self._lzk_text(z))
+        ziel, platz = self.ablauf.vorschlag()
+        self.lbl_vorschlag.config(text=f"Vorschlag: {lzk_ziel_text(ziel)}, LZK {platz}" if ziel else
+                                  "Kein passender Baustein gefunden – bitte wählen (oder einen neuen anlegen).")
+        self._opts = lzk_baustein_optionen(st, z)
+        self.baustein_box.config(values=[t for t, _ in self._opts])
+        idx = -1
+        if ziel and ziel[0] == "baustein":
+            idx = next((i for i, (_, o) in enumerate(self._opts) if o[0] == "baustein" and o[1] is ziel[1]), -1)
+        elif ziel and ziel[0] == "neu":
+            idx = 0
+        self.neu_var.set(ziel[1] if ziel and ziel[0] == "neu" else z["neuer_name"])
+        if idx >= 0:
+            self.baustein_box.current(idx)
+        else:
+            self.baustein_var.set("")
+        self._neu_zeigen()
+        self._plaetze_zeigen(platz if ziel else None)
+        self.btn_zurueck.config(state="normal" if self.ablauf.beantwortet else "disabled")
+        self.lbl_nie.config(text=f"„Nie zuordnen“ gilt für alle LZK zu „{z['titel']}“"
+                                 + (" (sie bleiben in der Lerntheken-Zeile)" if z["lerntheke"] else "")
+                                 + ". Vergessen: Einzelne Schritte → Gemerkte LZK-Zuordnungen…")
+        self.baustein_box.focus_set()
+
+    def _gewaehltes_ziel(self):
+        i = self.baustein_box.current()
+        if i < 0:
+            return None
+        ziel = self._opts[i][1]
+        return ("neu", self.neu_var.get().strip(), ziel[2]) if ziel[0] == "neu" else ziel
+
+    def _neu_zeigen(self):
+        ziel = self._gewaehltes_ziel()
+        if ziel and ziel[0] == "neu":
+            self.neu_rahmen.pack(fill="x", pady=(6, 0))
+        else:
+            self.neu_rahmen.pack_forget()
+
+    def _plaetze_zeigen(self, vorwahl=None):
+        _, z = self.ablauf.aktuell()
+        ziel = self._gewaehltes_ziel()
+        if ziel is None:
+            self._plaetze = {}
+            for nr, k in self.platz_knoepfe.items():
+                k.config(text=f"LZK {nr}", state="disabled")
+            self.platz_var.set(0)
+            self.lbl_platz.config(text="Erst den Baustein wählen.")
+            self._ok_zustand()
+            return
+        b = ziel[1] if ziel[0] == "baustein" else None
+        opts = lzk_platz_optionen(b, z, self.ablauf.vorgaben, neuer_name=None if b else ziel[1])
+        self._plaetze = {nr: zustand for nr, zustand, _ in opts}
+        for nr, zustand, text in opts:
+            self.platz_knoepfe[nr].config(text=f"LZK {nr} – {text}",
+                                          state="disabled" if zustand == "gesperrt" else "normal")
+        if vorwahl is None:
+            vorwahl = (lzk_platz_vorschlag(b, z, self.ablauf.vorgaben) if b is not None
+                       else (lzk_typ_platz(z) or 1))
+        if self._plaetze.get(vorwahl) in (None, "gesperrt"):
+            vorwahl = 0
+        self.platz_var.set(vorwahl or 0)
+        self._platz_gewaehlt()
+
+    def _platz_gewaehlt(self):
+        nr = self.platz_var.get()
+        if not nr:
+            text = "Bitte wählen, an welche LZK." if self._plaetze else "Erst den Baustein wählen."
+        else:
+            text = self.HINWEIS_PLATZ.get(self._plaetze.get(nr), "")
+        self.lbl_platz.config(text=text)
+        self._ok_zustand()
+
+    def _bereit(self) -> bool:
+        ziel = self._gewaehltes_ziel()
+        nr = self.platz_var.get()
+        return bool(ziel and (ziel[0] != "neu" or ziel[1]) and nr
+                    and self._plaetze.get(nr) not in (None, "gesperrt"))
+
+    def _ok_zustand(self):
+        self.btn_ok.config(state="normal" if self._bereit() else "disabled")
+
+    def _baustein_gewaehlt(self):
+        self._neu_zeigen()
+        self._plaetze_zeigen()
+
+    def _zuordnen(self):
+        if not self._bereit():
+            self.bell()
+            return
+        try:
+            self.ablauf.zuordnen(self._gewaehltes_ziel(), self.platz_var.get())
+        except ValueError as e:
+            messagebox.showwarning("LZK zuordnen", str(e), parent=self)
+            return
+        self._zeigen()
+
+    def _diesmal_nicht(self):
+        self.ablauf.diesmal_nicht()
+        self._zeigen()
+
+    def _nie(self):
+        self.ablauf.nie()
+        self._zeigen()
+
+    def _zurueck(self):
+        if self.ablauf.zurueck():
+            self._zeigen()
 
 
 class LzkZieleDialog(tk.Toplevel):
@@ -3887,8 +3995,9 @@ class App(tk.Tk):
 
     def synchronisieren(self):
         """Alles in einem Schritt: abrufen (wie "Ergebnisse abrufen", sicher im
-        Drei-Wege-Abgleich), dann EINE Vorschau fuer alles, was bestaetigt werden
-        muss -- online-LZK ohne Baustein (mit Vorschlag und Auswahl), LZK im
+        Drei-Wege-Abgleich), dann jede LZK aus OSKlar, die noch zu keinem Baustein
+        gehoert, EINZELN fragen (ob, welcher Baustein, welche LZK - LzkZuordnenDialog),
+        dann EINE Vorschau fuer den Rest, der bestaetigt werden muss -- LZK im
         falschen Halbjahr, hier geaenderte LZK-Termine und Talk-Bewertungen."""
         titel_fenster = "Synchronisieren"
         # Ein noch anstehender automatischer LZK-Versand liefe sonst mitten in die
@@ -3919,17 +4028,29 @@ class App(tk.Tk):
         if vorab and self._lzk_frei_uebertragen(client, vorab)[2]:
             lokal = True
 
-        posten, hinweise = [], []
+        # 1) LZK aus OSKlar, die noch zu keinem Baustein gehoeren: jede einzeln fragen -
+        #    ob, in welchen Baustein und an welche LZK (Nutzerwunsch 2026-11-04). Jede
+        #    Antwort wirkt sofort; was danach hinausgeht, rechnet unten schon damit.
         ziele = self.az.lzk_ziele
+        fragen = []
+        for st in self.az.students:
+            konto = je_konto.get(st.alias.strip().lower()) if st.alias.strip() else None
+            if konto:
+                fragen += [(st, z) for z in lzk_zuordnungen(st, konto, titel, ziele, self.az.vorlage_lzk)]
+        ablauf = LzkFragen(fragen, ziele, self.az.vorlage_lzk)
+        if not ablauf.fertig:
+            self.wait_window(LzkZuordnenDialog(self, ablauf))
+        lokal = lokal or ablauf.geaendert
+        zugeordnet = [f"⬇ {zeile}" for zeile in ablauf.zeilen]
+        jetzt_verknuepft = verknuepfte_lzk_ids(self.az.students)
+        noch_offen = sum(1 for _, z in fragen if z["eintrag"].get("id") not in jetzt_verknuepft
+                         and (ziele.get(z["schluessel"]) or {}).get("name") != LZK_ZIEL_NIE)
+
+        posten, hinweise = [], []
         for st in self.az.students:
             konto = je_konto.get(st.alias.strip().lower()) if st.alias.strip() else None
             if not konto:
                 continue
-            # 1) Online-LZK ohne Baustein: mit Vorschlag, der Baustein wird gewaehlt
-            for z in lzk_zuordnungen(st, konto, titel, ziele):
-                posten.append({"gruppe": "herein", "art": "zuordnen", "st": st, "z": z,
-                               "ziel": z["vorschlag"], "an": z["vorschlag"] is not None,
-                               "person": st.voller_name})
             # 2) Schon verknuepft, aber im Baustein eines anderen Halbjahres
             for t in lzk_falsches_halbjahr(st):
                 b = t["baustein"]
@@ -3967,24 +4088,19 @@ class App(tk.Tk):
                                "person": st.voller_name,
                                "text": f"Talk {fmt_datum(t.datum)} „{t.thema}“: {ziel}"})
 
-        dlg = SyncDialog(self, posten, hinweise, klasse,
-                         abruf_text.replace("\nNoch speichern nicht vergessen.", ""),
-                         optionen=lambda p: lzk_ziel_optionen(p["st"], p["z"]),
-                         nach_name=lambda p, name: lzk_ziel_nach_name(p["st"], p["z"], name),
-                         text=self._sync_text)
-        self.wait_window(dlg)
-        gewaehlt = [p for i, p in enumerate(posten) if dlg.result and i in dlg.result]
+        # Wurde eben zugeordnet und ist sonst nichts zu bestaetigen, gleich zum Bericht.
+        auswahl = None
+        if posten or hinweise or not zugeordnet:
+            dlg = SyncDialog(self, posten, hinweise, klasse,
+                             abruf_text.replace("\nNoch speichern nicht vergessen.", ""))
+            self.wait_window(dlg)
+            auswahl = dlg.result
+        gewaehlt = [p for i, p in enumerate(posten) if auswahl and i in auswahl]
 
-        erledigt, fehler, uebergangen = [], [], []
-        beruehrt = set()        # (id(Baustein), Platz) - gerade zugeordnet oder umgezogen
+        erledigt, fehler, uebergangen = list(zugeordnet), [], []
+        beruehrt = set()        # (id(Baustein), Platz) - gerade umgezogen
         for p in gewaehlt:
-            if p["art"] == "zuordnen" and p.get("ziel") and p["ziel"][0] in ("baustein", "neu", "nie"):
-                zeile, b = lzk_zuordnen(p["st"], p["z"], p["ziel"], ziele, self.az.vorlage_lzk)
-                if b is not None:
-                    beruehrt.add((id(b), p["z"]["nummer"]))
-                erledigt.append(f"⬇ {p['person']} · {zeile}")
-                lokal = True
-            elif p["art"] == "umziehen":
+            if p["art"] == "umziehen":
                 beruehrt.add((id(p["t"]["baustein"]), p["t"]["nummer"]))
                 erledigt.append(f"⬇ {p['person']} · {lzk_umziehen(p['st'], p['t'])}")
                 lokal = True
@@ -4029,31 +4145,27 @@ class App(tk.Tk):
             self._markiere_ungespeichert()
         self._detail_anzeigen()
         self._liste_aktualisieren()
-        if not dlg.result and posten:
-            self._melde("Synchronisiert (nur abgerufen) – bestätigt wurde nichts.")
+        offen_text = (f"{noch_offen} LZK aus OSKlar diesmal nicht zugeordnet – das Synchronisieren "
+                      f"fragt beim nächsten Mal wieder." if noch_offen else "")
+        if not auswahl and posten and not zugeordnet:
+            self._melde("Synchronisiert (nur abgerufen) – bestätigt wurde nichts."
+                        + (f" {offen_text}" if offen_text else ""))
             return
         text = abruf_text
         if erledigt:
             text += f"\n\nÜbernommen bzw. gesendet ({len(erledigt)}):\n" + "\n".join(erledigt)
         if uebergangen:
             text += f"\n\nNicht gesendet ({len(uebergangen)}):\n" + "\n".join(uebergangen)
+        if offen_text:
+            text += f"\n\n{offen_text}"
         if fehler:
             text += f"\n\nNicht geklappt ({len(fehler)}):\n" + "\n".join(fehler)
             messagebox.showwarning(titel_fenster, text)
         elif erledigt:
             self._bericht(titel_fenster, text)
         else:
-            self._melde(f"Synchronisiert um {datetime.now().strftime('%H:%M')} Uhr – alles auf dem gleichen Stand.")
-
-    @staticmethod
-    def _sync_text(p) -> str:
-        """Zeilentext in der Vorschau; bei Zuordnungen mit dem gerade gewaehlten Ziel."""
-        if p.get("art") != "zuordnen":
-            return p.get("text", "")
-        z = p["z"]
-        erg = f" ({LZK_ERGEBNIS_TEXT.get(z['ergebnis'], z['ergebnis'])})" if z["ergebnis"] else ""
-        typ = f"{z['typ']}-LZK" if z["typ"] in ("Basis", "Aufbau") else "LZK"
-        return f"„{z['titel']}“ {typ} am {fmt_datum(z['datum'])}{erg} → {lzk_ziel_text(p.get('ziel'))}"
+            self._melde(f"Synchronisiert um {datetime.now().strftime('%H:%M')} Uhr – "
+                        + (offen_text or "alles auf dem gleichen Stand."))
 
     def lzk_ziele_zeigen(self):
         dlg = LzkZieleDialog(self, self.az.lzk_ziele)
