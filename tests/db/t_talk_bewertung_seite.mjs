@@ -115,13 +115,13 @@ pruefe('O4 erst nach der Auswahl erscheinen die Personen', !s.includes('tzb-pers
 lauf(`talkZbWaehlen(${T1})`);
 s = sektion();
 pruefe('W1 der gewaehlte Talk ist aufgeklappt', s.includes('aria-expanded="true"') && s.includes('tzb-personen'), s);
-pruefe('W2 je Person eigene Knoepfe: rita und sven je ✗ + 4 Flammen, ulla ✗ + 2',
-  knoepfe('presented', T1) === 5 && knoepfe('mitvortrag', svenE) === 5 && knoepfe('attended', ullaE) === 3
+pruefe('W2 je Person eigene Knoepfe: rita und sven je ✗ + ○ + 4 Flammen, ulla ✗ + ○ + 2',
+  knoepfe('presented', T1) === 6 && knoepfe('mitvortrag', svenE) === 6 && knoepfe('attended', ullaE) === 4
   && s.includes('aria-label="rita: hat stattgefunden – 4 Flammen"') && !s.includes('aria-label="ulla: hat stattgefunden – 3 Flammen"'), s);
 // Seit 2026-10-14 (Wunsch des Users): wer nie geantwortet hat, laesst sich hier direkt bewerten -
 // vorher stand nur "unten an der Terminkarte bewerten".
 pruefe('W3 vera (nie geantwortet) hat eigene Knoepfe, mit "keine Antwort" - wim (abgesagt) gar nicht',
-  knoepfe('attended', veraE) === 3 && s.includes('👂 vera') && s.includes('· keine Antwort') && !s.includes('wim')
+  knoepfe('attended', veraE) === 4 && s.includes('👂 vera') && s.includes('· keine Antwort') && !s.includes('wim')
   && !s.includes('Ohne Antwort eingeladen'), s);
 await klick('attended', veraE, 1);
 let z = await zeile('i', veraE);
@@ -135,6 +135,27 @@ await klick('attended', veraE, 1);
 z = await zeile('i', veraE);
 pruefe('W3d nochmal tippen: wieder unbewertet, wieder "keine Antwort"',
   z.st === 'ausstehend' && z.pokale === 0 && sektion().includes('· keine Antwort'), z);
+// ○ = hat stattgefunden, ohne Flamme (Nutzerwunsch 2026-11-05) - vorher nur ueber ✎.
+const ohneFlammeKnopf = `aria-label="vera: hat stattgefunden – ohne Flamme"`;
+pruefe('W3e ○ steht zwischen ✗ und der ersten Flamme, noch nicht gedrueckt',
+  sektion().includes(`${ohneFlammeKnopf} aria-pressed="false" onclick="talkZbBewerten('attended', ${veraE}, 0)">○</button>`)
+  && sektion().indexOf(`talkZbBewerten('attended', ${veraE}, -1)`) < sektion().indexOf(`talkZbBewerten('attended', ${veraE}, 0)`)
+  && sektion().indexOf(`talkZbBewerten('attended', ${veraE}, 0)`) < sektion().indexOf(`talkZbBewerten('attended', ${veraE}, 1)`), sektion());
+await klick('attended', veraE, 0);
+z = await zeile('i', veraE);
+s = sektion();
+pruefe('W3f ○ getippt: hat stattgefunden, keine Flamme - der Knopf ist gedrueckt (statt der alten Pille "✓ ohne Flamme")',
+  z.st === 'erledigt' && z.pokale === 0 && s.includes(`${ohneFlammeKnopf} aria-pressed="true"`) && !s.includes('✓ ohne Flamme')
+  && !s.includes('aria-label="vera: hat stattgefunden – 1 Flamme" aria-pressed="true"'), { z, s });
+await klick('attended', veraE, 0);
+z = await zeile('i', veraE);
+pruefe('W3g nochmal ○: wieder unbewertet', z.st === 'ausstehend' && z.pokale === 0
+  && sektion().includes(`${ohneFlammeKnopf} aria-pressed="false"`), z);
+await klick('attended', veraE, 2);
+await klick('attended', veraE, 0);
+z = await zeile('i', veraE);
+pruefe('W3h von 🔥🔥 direkt auf ○: die Flammen sind weg, stattgefunden bleibt', z.st === 'erledigt' && z.pokale === 0, z);
+await klick('attended', veraE, 0);
 await klick('attended', ullaE, 2);
 z = await zeile('i', ullaE);
 pruefe('W4 ein Klick auf 🔥🔥 bei ulla: hat stattgefunden, 2 Flammen', z.st === 'erledigt' && z.pokale === 2, z);
@@ -284,7 +305,7 @@ const xaverE = await eins(`SELECT id, status, rolle FROM talking_invitations WHE
 pruefe('D4 xaver ist eingetragen: hoert zu, gilt als dabei', xaverE && xaverE.status === 'angenommen' && xaverE.rolle === 'zuhoeren', xaverE);
 s = sektion();
 pruefe('D5 der Talk bleibt aufgeklappt - mit xavers eigenen Knoepfen, jetzt "2 offen"',
-  s.includes('aria-expanded="true"') && knoepfe('attended', xaverE.id) === 3 && s.includes('2 offen') && s.includes(beteiligteKnopf), s);
+  s.includes('aria-expanded="true"') && knoepfe('attended', xaverE.id) === 4 && s.includes('2 offen') && s.includes(beteiligteKnopf), s);
 pruefe('D6 ohne "Lade…" dazwischen neu gezeichnet', gezeigt.length >= 1 && !gezeigt.some(g => g.includes('Lade…')),
   gezeigt.map(g => g.slice(0, 80)));
 pruefe('D7 das Fenster zeigt xaver bei den Zuhoerenden', html('tbet-liste').includes('xaver'), html('tbet-liste'));

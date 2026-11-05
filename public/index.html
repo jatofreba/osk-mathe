@@ -9035,7 +9035,7 @@ function talkZuBewertenHtml(slots, auswahl, heute, herkunft, bewertetOffen) {
   const unten = imOben ? fertig.filter(x => x.session_id !== sel.session_id)
     : (imUnten && !hat(fertig, sel)) ? [...fertig, sel].sort(talkSpaeter) : fertig;
   const kopf = `<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten <span class="pill">${offen.length}</span></h3>
-    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🔥 bis 🔥🔥🔥🔥 (Zuhören bis 🔥🔥) hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji, ohne Flamme).</div>`;
+    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · ○ hat stattgefunden, ohne Flamme · 🔥 bis 🔥🔥🔥🔥 (Zuhören bis 🔥🔥) hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji).</div>`;
   const obenHtml = oben.length ? oben.map(s => talkZbTalkHtml(s, s.session_id === auswahl, 'offen')).join('')
     : '<div class="lzk-ue-leer">Nichts zu bewerten.</div>';
   const untenHtml = !unten.length ? '' : `<details class="lzk-ue-bewertet"${(bewertetOffen || imUnten) ? ' open' : ''} ontoggle="talkBewertetUmschalten(this.open)">
@@ -9078,15 +9078,16 @@ function talkZbPersonHtml(p) {
   const name = escHtml(p.name);
   const k = (n, text, titel) => `<button type="button" class="lzk-pokal-btn${an(n) ? ' active' : ''}" title="${titel}"`
     + ` aria-label="${name}: ${titel}" aria-pressed="${an(n)}" onclick="talkZbBewerten('${p.typ}', ${p.id}, ${n})">${text}</button>`;
-  const knoepfe = [k(-1, '✗', p.vortrag ? 'nicht gehalten' : 'nicht teilgenommen')];
+  // ○ = hat stattgefunden, ohne Flamme (Nutzerwunsch 2026-11-05) - vorher nur ueber ✎, und
+  // dafuer stand eine eigene Pille "✓ ohne Flamme" am Namen; jetzt zeigt der gedrueckte Knopf es.
+  const knoepfe = [k(-1, '✗', p.vortrag ? 'nicht gehalten' : 'nicht teilgenommen'),
+    k(0, '○', 'hat stattgefunden – ohne Flamme')];
   for (let n = 1; n <= p.max; n++) knoepfe.push(k(n, '🔥'.repeat(n), `hat stattgefunden – ${n} Flamme${n > 1 ? 'n' : ''}`));
-  const ohneFlamme = p.status === 'erledigt' && !p.pokale
-    ? ' <span class="pill pill-green" style="font-size:10px;">✓ ohne Flamme</span>' : '';
   const emoji = p.status === 'erledigt' && p.emoji ? ' ' + p.emoji : '';
   const ohneAntwort = !talkPersonDabei(p)
     ? ' <span class="tzb-zusatz" title="Hat auf die Einladung nicht geantwortet – nur bewerten, wenn sie oder er da war.">· keine Antwort</span>' : '';
   return `<div class="tzb-person">
-    <span class="tzb-name">${p.vortrag ? '🎤' : '👂'} ${name}${emoji}${ohneFlamme}${ohneAntwort}</span>
+    <span class="tzb-name">${p.vortrag ? '🎤' : '👂'} ${name}${emoji}${ohneAntwort}</span>
     <span class="tzb-knoepfe">${knoepfe.join('')}<button type="button" class="btn-icon" title="Alle Angaben" aria-label="${name}: alle Angaben" onclick="${talkRateAufruf(p)}">✎</button></span>
   </div>`;
 }
