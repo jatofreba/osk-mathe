@@ -3659,9 +3659,9 @@ function homeNewsAlle() {
   renderHomeNews();
 }
 
-// Plenum: unter "Heute" gross mit "+ Info" und ✎; darunter zum Verwalten, was geplant oder
-// abgelaufen ist (zugeklappt, damit es am Beamer nicht stoert). Unter "Diese Woche" nur ein
-// Hinweisknopf.
+// Plenum: gross mit "+ Info" und ✎; darunter zum Verwalten, was geplant oder abgelaufen ist
+// (zugeklappt, damit es am Beamer nicht stoert). Unter "Heute" UND "Diese Woche" gleich
+// (Nutzerwunsch 2026-11-05; vorher stand unter "Diese Woche" nur ein Hinweisknopf).
 function plNewsRender() {
   const el = document.getElementById('pl-news');
   if (!el) return;
@@ -3669,11 +3669,6 @@ function plNewsRender() {
   const heute = infoHeute();
   const alle = _infos.news || [];
   const aktuell = infoNewsAktuell();
-  if (_plZeitraum !== 'heute') {
-    el.innerHTML = aktuell.length ? `<div style="margin-bottom:10px;"><button type="button" class="pl-btn"
-      onclick="plZeitraum('heute')">📢 Aktuelles (${aktuell.length}) – unter „Heute“</button></div>` : '';
-    return;
-  }
   const geplant = alle.filter(n => infoNewsZustand(n, heute) === 'geplant')
     .sort((a, b) => String(a.sichtbarAb).localeCompare(String(b.sichtbarAb)) || (a.id - b.id));
   const abgelaufen = alle.filter(n => infoNewsZustand(n, heute) === 'abgelaufen')

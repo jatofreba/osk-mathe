@@ -1,7 +1,7 @@
 // Allgemeine Infos auf der Seite (Nutzerwunsch 2026-11-04) - Seite und Server ZUSAMMEN
 // (seite_im_test + server_im_test, pglite):
 //  - "📢 Aktuelles" auf der Startseite der Schueler:innen (hoechstens 3, Rest auf Klick)
-//  - Plenum → Heute: Aktuelles gross, "+ Info", ✎, Geplant/Abgelaufen; unter "Woche" nur ein Hinweis
+//  - Plenum → Heute und Woche: Aktuelles gross, "+ Info", ✎, Geplant/Abgelaufen
 //  - Formular: Vorgabe eine Woche, Schnellwahl, vorplanen, Farbe (Fach zuerst), Links, Fehler
 //  - Reiter "Allgemeine Infos": Spalten Allgemein + je Fach, Karten, Reihenfolge, Einklappen
 //  - Text bleibt Text (kein HTML), nur http(s)-Links
@@ -112,11 +112,16 @@ pruefe('B7 und wieder auf', spalteHtml(html('iw-inhalt'), 'Allgemein').includes(
 // ── P) Plenum (Lernbegleitung) ───────────────────────────────────────────────
 wer = { userId: LB, username: 'lb', role: 'admin', klasse: 'M3M4', superAdmin: false, defaultSubjectId: F.mathe };
 await lauf(`me = __werte.me; _plZeitraum = 'woche'; loadPlenum()`, { me: wer }); await ruhe();
-pruefe('P1 Woche: nur ein Hinweis-Knopf zu "Heute"', html('pl-news').includes(`onclick="plZeitraum('heute')">📢 Aktuelles (5) – unter „Heute“`)
-  && !html('pl-news').includes('info-karte'), html('pl-news'));
+// Seit 2026-11-05 (Wunsch des Users) auch unter "Diese Woche" ganz - vorher nur ein Hinweis-Knopf.
+h = html('pl-news');
+const wocheHtml = h;
+pruefe('P1 Woche: Aktuelles ganz da - alle fuenf Karten, "+ Info", Geplant/Abgelaufen, kein Hinweis-Knopf mehr',
+  karten(h) === 5 && h.includes(`onclick="openInfoForm('news')">+ Info`) && h.includes('🗓 Geplant (1)') && h.includes('⌛ Abgelaufen (1)')
+  && !h.includes(`plZeitraum('heute')`) && !h.includes('unter „Heute“'), h);
 pruefe('P2 Lernbegleitung: keine Schueler-Startseite', html('home-news') === '', html('home-news'));
 lauf(`plZeitraum('heute')`);
 h = html('pl-news');
+pruefe('P2b Heute zeigt dasselbe wie die Woche', h === wocheHtml, [h.slice(0, 300), wocheHtml.slice(0, 300)]);
 pruefe('P3 Heute: Aktuelles gross mit "+ Info", alle fuenf mit ✎ und "sichtbar bis"',
   h.includes('pl-news') && h.includes(`onclick="openInfoForm('news')">+ Info`) && karten(h) === 5
   && (h.match(/openInfoForm\('news', \d+\)">✎/g) || []).length === 5 && h.includes('sichtbar bis'), h);
