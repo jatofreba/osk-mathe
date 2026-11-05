@@ -311,6 +311,9 @@ pruefe("S1 gefragt werden genau die zwei LZK ohne Baustein (die verknuepfte nich
        gesehen.get("fragen") == ["Baustein Kreise", "Pythagoras Teil 2"], gesehen.get("fragen"))
 pruefe("S2 'Pythagoras Teil 2' steht an LZK 2 von 'Satz des Pythagoras'",
        pyth.lzk_online_2 and pyth.lzk_online_2["id"] == 52 and pyth.lzk_datum_2 == IN14, pyth)
+pruefe("S2b die neue LZK steht an LZK 2 als noch nicht geschrieben - die Flammen von LZK 1 bleiben bei LZK 1",
+       pyth.lzk_ergebnis_2 == "" and not pyth.lzk_punkte_2 and not pyth.lzk_note_2 and not D.lzk_erledigt(pyth, 2)
+       and pyth.lzk_ergebnis_1 == "2" and pyth.lzk_online_2["ergebnis"] == "" and pyth.status == "In Bearbeitung", pyth)
 pruefe("S3 sonst nichts zu bestaetigen: keine Vorschau, gleich der Bericht",
        "vorschau" not in gesehen and "LZK 2" in merk["bericht"], (gesehen.keys(), merk))
 pruefe("S4 der Bericht sagt, dass eine LZK diesmal nicht zugeordnet wurde und wieder gefragt wird",
