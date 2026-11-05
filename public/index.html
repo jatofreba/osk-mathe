@@ -222,6 +222,9 @@ h3{font-size:22px;font-weight:500;line-height:1.27;letter-spacing:0;}   /* Title
 label[data-name][hidden]{display:none !important;}
 .personen-suche{margin-bottom:6px;}
 .personen-keiner{font-size:13px;color:var(--md-on-surface-variant);padding:4px 0;}
+.personen-alle{display:flex;align-items:center;gap:6px;padding:3px 0 5px;margin-bottom:2px;
+  border-bottom:1px solid var(--md-outline-variant);font-size:13px;font-weight:600;}
+.personen-alle[hidden]{display:none !important;}
 .wu-aehnlich{
   font-size:12px;color:var(--md-on-surface-variant);
   background:#fef9c3;border:1px solid #fde68a;border-radius:8px;
@@ -750,6 +753,7 @@ html.lt-vollbild, html.lt-vollbild body{height:100%;min-height:0;overflow:hidden
 .tzb-knoepfe{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
 .tzb-hinweis{font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;}
 .tzb-pille{border:none;cursor:pointer;font-family:inherit;}
+.tzb-aktionen{margin-top:6px;}
 /* Talk buchen/nachladen: wer traegt mit vor, wer hoert zu */
 .talk-auswahl{max-height:180px;overflow-y:auto;}
 .talk-auswahl input:disabled + span{opacity:.45;}
@@ -1974,6 +1978,10 @@ textarea.form-input{
       <input class="form-input personen-suche" id="iassign-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
              aria-label="Schüler:innen nach Namen filtern" aria-controls="iassign-classmates"
              oninput="personenFiltern('iassign-classmates', this.value)">
+      <label class="personen-alle" id="iassign-classmates-alle-zeile" hidden>
+        <input type="checkbox" id="iassign-classmates-alle" aria-controls="iassign-classmates"
+               onchange="personenAlleWaehlen('iassign-classmates', this.checked)">
+        <span id="iassign-classmates-alle-text">Alle auswählen</span></label>
       <div id="iassign-classmates-keiner" class="personen-keiner" hidden>Niemand gefunden.</div>
       <div role="group" aria-labelledby="iassign-cm-lbl" id="iassign-classmates" style="max-height:220px;overflow-y:auto;"></div>
     </div>
@@ -6572,6 +6580,35 @@ function personenFiltern(bereichId, text) {
   });
   const keiner = document.getElementById(bereichId + '-keiner');
   if (keiner) keiner.hidden = !t || sichtbar > 0;
+  personenAlleStand(bereichId);
+}
+// "Alle auswählen" ueber einer Personenliste (Nutzerwunsch 2026-11-05: zu einem Fachbüro alle
+// einladen). Hakt alle angezeigten Zeilen an bzw. ab - bei aktiver Suche also nur, wen man sieht.
+// Markup: Kaestchen <bereichId>-alle und Text <bereichId>-alle-text; ohne sie tut das nichts.
+function personenAlleWaehlen(bereichId, an) {
+  document.querySelectorAll('#' + bereichId + ' label[data-name]').forEach(l => {
+    const cb = l.querySelector('input');
+    if (cb && !l.hidden) cb.checked = !!an;
+  });
+  personenAlleStand(bereichId);
+}
+// Stellt "Alle auswählen" passend zur Liste: an, wenn alle angezeigten gewaehlt sind, halb, wenn
+// nur einige. Der Text nennt, wie viele es betrifft.
+function personenAlleStand(bereichId) {
+  const alle = document.getElementById(bereichId + '-alle');
+  if (!alle) return;
+  let n = 0, an = 0, versteckt = 0;
+  document.querySelectorAll('#' + bereichId + ' label[data-name]').forEach(l => {
+    const cb = l.querySelector('input');
+    if (!cb) return;
+    if (l.hidden) { versteckt++; return; }
+    n++; if (cb.checked) an++;
+  });
+  alle.checked = n > 0 && an === n;
+  alle.indeterminate = an > 0 && an < n;
+  alle.disabled = n === 0;
+  const text = document.getElementById(bereichId + '-alle-text');
+  if (text) text.textContent = !n ? 'Alle auswählen' : `${versteckt ? 'Alle angezeigten' : 'Alle'} auswählen (${n})`;
 }
 function personenSucheHtml(bereichId) {
   return `<input class="form-input personen-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
@@ -6872,8 +6909,11 @@ function openInputAssignModal(slotId) {
   document.getElementById('iassign-classmates-keiner').hidden = true;
   document.getElementById('iassign-classmates').innerHTML = available.map(c =>
     `<label data-name="${personenName(c)}" style="display:flex;align-items:center;gap:6px;padding:3px 0;">
-      <input type="checkbox" value="${c.id}" class="iassign-cm-cb"> ${escHtml(c.username)}
+      <input type="checkbox" value="${c.id}" class="iassign-cm-cb" onchange="personenAlleStand('iassign-classmates')"> ${escHtml(c.username)}
     </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Alle Schüler:innen sind schon dabei.</span>';
+  // "Alle auswählen" erst ab zwei Personen - fuer eine reicht ihr eigener Haken.
+  document.getElementById('iassign-classmates-alle-zeile').hidden = available.length < 2;
+  personenAlleStand('iassign-classmates');
   document.getElementById('iassign-error').style.display = 'none';
   openModal('modal-input-assign');
 }
@@ -8844,7 +8884,9 @@ function talkBeteiligteFehler(t) {
   el.textContent = t; el.style.display = t ? 'block' : 'none';
 }
 async function talkBeteiligteNeuLaden() {
-  if (_tbet.quelle === 'kalender') await loadCalendar(); else await loadTalkingAdmin();
+  // Im Talks-Reiter ohne "Lade…" dazwischen: die Ansicht springt nicht, und ein unter
+  // "Noch zu bewerten" aufgeklappter Talk bleibt offen - mit den neuen Personen darin.
+  if (_tbet.quelle === 'kalender') await loadCalendar(); else await talkingAdminAktualisieren();
   // Erledigt - fuer die naechste Person wieder die ganze Liste.
   document.getElementById('tbet-suche').value = '';
   talkBeteiligteRender();
@@ -9023,7 +9065,11 @@ function talkZbTalkHtml(s, offen, herkunft) {
   // als Hinweis "unten an der Terminkarte bewerten" - Wunsch des Users 2026-10-14). Zaehlt
   // nicht zu "offen": ohne Zusage muss niemand bewertet werden. Absagen bleiben draussen.
   const zeigen = leute.filter(p => talkPersonDabei(p) || p.einladung === 'eingeladen');
-  return knopf + `<div class="tzb-personen">${zeigen.map(talkZbPersonHtml).join('')}</div>`;
+  // Fehlt jemand oder ist zu viel eingetragen, laesst sich das gleich hier richten
+  // (Nutzerwunsch 2026-11-05) - dasselbe Fenster wie 👥 an der Terminkarte.
+  return knopf + `<div class="tzb-personen">${zeigen.map(talkZbPersonHtml).join('')}
+    <div class="tzb-aktionen"><button type="button" class="btn-sm" onclick="openTalkBeteiligte(${s.session_id}, 'talks')">👥 Beteiligte bearbeiten</button></div>
+  </div>`;
 }
 function talkZbPersonHtml(p) {
   const an = n => n === -1 ? p.status === 'nicht_erledigt' : (p.status === 'erledigt' && p.pokale === n);

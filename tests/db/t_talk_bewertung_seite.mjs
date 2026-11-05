@@ -253,4 +253,45 @@ pruefe('U2 Halbjahr-Uebersicht: ullas Zuhoeren bei T2 zaehlt mit seinen 2 Flamme
   ullaMathe && ullaMathe.talkDetails.some(d => d.role === 'zugehört' && d.thema === 'Brüche' && d.pokale === 2), ullaHj);
 pruefe('U3 nichts mehr zu bewerten', zaehler() === '0' && sektion().includes('Nichts zu bewerten.'), sektion());
 
+// ── D) 👥 Beteiligte bearbeiten direkt unter "Noch zu bewerten" (Nutzerwunsch 2026-11-05) ──
+// T6 gestern: wim hat gebucht, sonst niemand - beim Bewerten faellt auf, dass xaver auch da war.
+const T6 = await buchung(tag(-1), '13:00', P.wim, 'Nachtrag');
+await lauf('loadTalkingAdmin()'); await ruhe();
+const beteiligteKnopf = `openTalkBeteiligte(${T6}, 'talks')`;
+s = sektion();
+pruefe('D1 zugeklappt: noch kein Beteiligte-Knopf unter "Noch zu bewerten"',
+  zaehler() === '1' && s.includes('Nachtrag') && !s.includes('openTalkBeteiligte('), s);
+lauf(`talkZbWaehlen(${T6})`);
+s = sektion();
+pruefe('D2 aufgeklappt: genau ein Knopf "👥 Beteiligte bearbeiten", unter den Personen dieses Talks',
+  s.split(beteiligteKnopf).length === 2 && s.includes('>👥 Beteiligte bearbeiten</button>')
+  && s.indexOf(beteiligteKnopf) > s.indexOf('class="tzb-personen"')
+  && s.indexOf(beteiligteKnopf) > s.indexOf(`talkZbBewerten('presented', ${T6}, 4)`), s);
+lauf(beteiligteKnopf);
+pruefe('D3 das Fenster zeigt diesen Talk', seite.element('tbet-info').textContent.includes('„Nachtrag“')
+  && html('tbet-liste').includes('wim') && html('tbet-liste').includes('hat gebucht'),
+  [seite.element('tbet-info').textContent, html('tbet-liste')]);
+// Was der Talks-Reiter unterwegs zeigt: ein "Lade…" dazwischen liesse die Ansicht springen.
+const reiter = seite.element('talking-admin');
+const zugriff = Object.getOwnPropertyDescriptor(reiter, 'innerHTML');
+const gezeigt = [];
+Object.defineProperty(reiter, 'innerHTML', { configurable: true, get: zugriff.get,
+  set(v) { gezeigt.push(String(v)); zugriff.set.call(reiter, v); } });
+seite.element('tbet-person').value = String(P.xaver);
+await lauf(`talkBeteiligteSetzen('zuhoeren')`); await ruhe();
+const xaverE = await eins(`SELECT id, status, rolle FROM talking_invitations WHERE session_id=$1 AND listener_id=$2`, [T6, P.xaver]);
+pruefe('D4 xaver ist eingetragen: hoert zu, gilt als dabei', xaverE && xaverE.status === 'angenommen' && xaverE.rolle === 'zuhoeren', xaverE);
+s = sektion();
+pruefe('D5 der Talk bleibt aufgeklappt - mit xavers eigenen Knoepfen, jetzt "2 offen"',
+  s.includes('aria-expanded="true"') && knoepfe('attended', xaverE.id) === 3 && s.includes('2 offen') && s.includes(beteiligteKnopf), s);
+pruefe('D6 ohne "Lade…" dazwischen neu gezeichnet', gezeigt.length >= 1 && !gezeigt.some(g => g.includes('Lade…')),
+  gezeigt.map(g => g.slice(0, 80)));
+pruefe('D7 das Fenster zeigt xaver bei den Zuhoerenden', html('tbet-liste').includes('xaver'), html('tbet-liste'));
+await lauf(`talkBeteiligteEntfernen(${xaverE.id})`); await ruhe();
+s = sektion();
+pruefe('D8 wieder herausgenommen: xaver ist weg, der Talk bleibt offen ("1 offen")',
+  !s.includes('xaver') && s.includes('aria-expanded="true"') && s.includes('1 offen')
+  && !(await eins(`SELECT id FROM talking_invitations WHERE id=$1`, [xaverE.id])), s);
+pruefe('D9 keine Fehlermeldung unterwegs', meldungen.length === 0 && seite.element('tbet-error').style.display === 'none', meldungen);
+
 console.log('\n' + ok + ' Pruefungen bestanden.');
