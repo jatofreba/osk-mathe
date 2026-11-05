@@ -753,7 +753,8 @@ html.lt-vollbild, html.lt-vollbild body{height:100%;min-height:0;overflow:hidden
 .tzb-knoepfe{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
 .tzb-hinweis{font-size:12px;color:var(--md-on-surface-variant);margin-top:4px;}
 .tzb-pille{border:none;cursor:pointer;font-family:inherit;}
-.tzb-aktionen{margin-top:6px;}
+.tzb-aktionen{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;}
+.tzb-aktionen .loeschen{color:var(--md-error);}
 /* Talk buchen/nachladen: wer traegt mit vor, wer hoert zu */
 .talk-auswahl{max-height:180px;overflow-y:auto;}
 .talk-auswahl input:disabled + span{opacity:.45;}
@@ -9063,10 +9064,34 @@ function talkZbTalkHtml(s, offen, herkunft) {
   // nicht zu "offen": ohne Zusage muss niemand bewertet werden. Absagen bleiben draussen.
   const zeigen = leute.filter(p => talkPersonDabei(p) || p.einladung === 'eingeladen');
   // Fehlt jemand oder ist zu viel eingetragen, laesst sich das gleich hier richten
-  // (Nutzerwunsch 2026-11-05) - dasselbe Fenster wie 👥 an der Terminkarte.
+  // (Nutzerwunsch 2026-11-05) - dasselbe Fenster wie 👥 an der Terminkarte. Hat der Talk
+  // entschuldigt nicht stattgefunden, kommt er ganz weg (nur unter "Noch zu bewerten" - unter
+  // "Bewertet" ist immer schon jemand bewertet, dann ginge es ohnehin nicht).
+  const loeschen = herkunft === 'bewertet' ? ''
+    : `<button type="button" class="btn-sm loeschen" onclick="talkZbLoeschen(${s.id})">🗑 Termin löschen</button>`;
   return knopf + `<div class="tzb-personen">${zeigen.map(talkZbPersonHtml).join('')}
-    <div class="tzb-aktionen"><button type="button" class="btn-sm" onclick="openTalkBeteiligte(${s.session_id}, 'talks')">👥 Beteiligte bearbeiten</button></div>
+    <div class="tzb-aktionen"><button type="button" class="btn-sm" onclick="openTalkBeteiligte(${s.session_id}, 'talks')">👥 Beteiligte bearbeiten</button>${loeschen}</div>
   </div>`;
+}
+// "🗑 Termin löschen" (Nutzerwunsch 2026-11-05): ein Talk, der entschuldigt nicht stattgefunden
+// hat, verschwindet ganz - Termin, Buchung und Einladungen; er zaehlt fuer niemanden. Ist schon
+// jemand bewertet, bleibt er (der Server prueft dasselbe) - sonst gingen Flammen still verloren.
+async function talkZbLoeschen(slotId) {
+  const s = (talkingAdminSlots || []).find(x => x.id === slotId);
+  if (!s) return;
+  const leute = talkPersonen(s);
+  if (leute.some(p => p.status !== 'ausstehend')) {
+    alert('Hier ist schon jemand bewertet – erst die Bewertungen zurücksetzen (nochmal tippen), dann löschen.');
+    return;
+  }
+  const namen = leute.filter(p => p.einladung !== 'abgelehnt').map(p => p.name).join(', ');
+  if (!confirm(`Talk am ${fmtTalkingDatum(s.datum)}${s.uhrzeit ? ' um ' + s.uhrzeit : ''}${s.thema ? ' „' + s.thema + '“' : ''} ganz löschen?\n\n`
+    + `Termin, Buchung und Einladungen${namen ? ' (' + namen + ')' : ''} sind danach weg – der Talk zählt für niemanden. `
+    + 'Das lässt sich nicht rückgängig machen.')) return;
+  const r = await fetch(`/api/admin/talking-slots/${slotId}?mitBuchung=1`, { method: 'DELETE' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Löschen.'); return; }
+  if (_talkZbAuswahl === s.session_id) _talkZbAuswahl = null;
+  await talkingAdminAktualisieren();
 }
 function talkZbPersonHtml(p) {
   const an = n => n === -1 ? p.status === 'nicht_erledigt' : (p.status === 'erledigt' && p.pokale === n);

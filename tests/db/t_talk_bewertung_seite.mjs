@@ -316,4 +316,46 @@ pruefe('D8 wieder herausgenommen: xaver ist weg, der Talk bleibt offen ("1 offen
   && !(await eins(`SELECT id FROM talking_invitations WHERE id=$1`, [xaverE.id])), s);
 pruefe('D9 keine Fehlermeldung unterwegs', meldungen.length === 0 && seite.element('tbet-error').style.display === 'none', meldungen);
 
+// ── L) 🗑 Termin löschen unter "Noch zu bewerten" (Nutzerwunsch 2026-11-05) ────────
+// T6 ist weiter aufgeklappt und unbewertet. Hat ein Talk entschuldigt nicht stattgefunden,
+// verschwindet er ganz.
+const slotT6 = (await eins(`SELECT slot_id FROM talking_sessions WHERE id=$1`, [T6])).slot_id;
+const loeschKnopf = `talkZbLoeschen(${slotT6})`;
+s = sektion();
+pruefe('L1 im aufgeklappten Talk: "🗑 Termin löschen" neben "Beteiligte bearbeiten"',
+  s.split(loeschKnopf).length === 2 && s.includes(`onclick="${loeschKnopf}">🗑 Termin löschen</button>`)
+  && s.indexOf(loeschKnopf) > s.indexOf(beteiligteKnopf), s);
+const fragen = [];
+let antwort = false;
+seite.kontext.confirm = t => { fragen.push(String(t)); return antwort; };
+await klick('presented', T6, -1);
+await lauf(loeschKnopf); await ruhe();
+pruefe('L2 wim schon mit ✗ bewertet: Hinweis statt Rueckfrage, der Talk bleibt',
+  fragen.length === 0 && meldungen.length === 1 && meldungen[0].includes('erst die Bewertungen zurücksetzen')
+  && !!(await eins(`SELECT 1 FROM talking_slots WHERE id=$1`, [slotT6])), [fragen, meldungen]);
+await klick('presented', T6, -1);           // zurueck auf unbewertet
+meldungen.length = 0;
+await lauf(loeschKnopf); await ruhe();
+pruefe('L3 Rueckfrage nennt Tag, Uhrzeit, Thema und wer dabei ist - "Abbrechen" laesst alles stehen',
+  fragen.length === 1 && fragen[0].includes(lauf(`fmtTalkingDatum('${tag(-1)}')`)) && fragen[0].includes('um 13:00')
+  && fragen[0].includes('„Nachtrag“') && fragen[0].includes('(wim)') && fragen[0].includes('nicht rückgängig')
+  && !!(await eins(`SELECT 1 FROM talking_sessions WHERE id=$1`, [T6])), fragen);
+antwort = true;
+gezeigt.length = 0;
+await lauf(loeschKnopf); await ruhe();
+s = sektion();
+pruefe('L4 bestaetigt: Termin und Buchung sind weg', !(await eins(`SELECT 1 FROM talking_slots WHERE id=$1`, [slotT6]))
+  && !(await eins(`SELECT 1 FROM talking_sessions WHERE id=$1`, [T6])));
+pruefe('L5 die Liste ist ohne ihn neu gezeichnet - ohne "Lade…", nichts mehr aufgeklappt',
+  !s.includes('Nachtrag') && zaehler() === '0' && lauf('_talkZbAuswahl') === null
+  && gezeigt.length >= 1 && !gezeigt.some(g => g.includes('Lade…')), s);
+pruefe('L6 keine Fehlermeldung', meldungen.length === 0, meldungen);
+// Unter "Bewertet" ist immer schon jemand bewertet - dort gibt es den Knopf nicht.
+if (hjVon(tag(-2)) === hjVon(tag(0))) {
+  lauf(`talkZbWaehlen(${T4}, 'bewertet')`);
+  const b = bewertetTeil();
+  pruefe('L7 unter "Bewertet" aufgeklappt: Beteiligte ja, Loeschen nein',
+    b.includes(`openTalkBeteiligte(${T4}, 'talks')`) && !b.includes('talkZbLoeschen('), b);
+}
+
 console.log('\n' + ok + ' Pruefungen bestanden.');

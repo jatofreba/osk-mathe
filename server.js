@@ -3123,19 +3123,35 @@ app.post('/api/admin/termine/sammel', requireAdmin, async (req, res) => {
   }
 });
 
+// Einen gebuchten Termin loescht nur ?mitBuchung=1 - samt Buchung und Einladungen (ON DELETE
+// CASCADE). Fuer einen Talk, der entschuldigt nicht stattgefunden hat (Nutzerwunsch 2026-11-05,
+// Knopf unter "Noch zu bewerten"). Ist schon etwas bewertet, bleibt der Termin stehen - sonst
+// gingen Flammen still verloren (erst zuruecksetzen, wie beim Herausnehmen von Beteiligten).
+// Der Termin ist gesperrt, bis geloescht ist: eine Buchung dazwischen wartet und scheitert dann.
 app.delete('/api/admin/talking-slots/:id', requireAdmin, async (req, res) => {
+  const mitBuchung = req.query.mitBuchung === '1';
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    // Immer mit "return await fehler(...)" - siehe Presenter-Tausch.
+    const fehler = async (code, text) => { await client.query('ROLLBACK'); return res.status(code).json({ error: text }); };
     const may = await mayManageSlot(req, req.params.id);
-    if (!may.ok) return res.status(may.status).json({ error: may.error });
-    const booked = await pool.query('SELECT id FROM talking_sessions WHERE slot_id=$1', [req.params.id]);
-    if (booked.rows.length) return res.status(409).json({ error: 'Termin ist bereits gebucht' });
-    const r = await pool.query(
-      'DELETE FROM talking_slots WHERE id=$1 AND klasse=$2 RETURNING id',
-      [req.params.id, req.session.klasse]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    if (!may.ok) return await fehler(may.status, may.error);
+    const t = await client.query(`
+      SELECT s.id, ts.id AS "sessionId", ${TERMIN_BEWERTET_SQL} AS bewertet
+      FROM talking_slots s LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+      WHERE s.id=$1 AND s.klasse=$2 FOR UPDATE OF s`, [req.params.id, req.session.klasse]);
+    if (!t.rows.length) return await fehler(404, 'Nicht gefunden');
+    if (t.rows[0].sessionId && !mitBuchung) return await fehler(409, 'Termin ist bereits gebucht');
+    if (t.rows[0].bewertet)
+      return await fehler(409, 'Hier ist schon jemand bewertet - erst die Bewertungen zurücksetzen (nochmal tippen), dann löschen.');
+    await client.query('DELETE FROM talking_slots WHERE id=$1', [t.rows[0].id]);
+    await client.query('COMMIT');
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally { client.release(); }
 });
 
 // Admin erstellt eine Input-Session OHNE festen "Presenter" direkt und weist Schüler:innen zu
