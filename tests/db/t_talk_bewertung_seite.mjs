@@ -104,8 +104,9 @@ pruefe('O1 "✍️ Noch zu bewerten" steht ganz oben, gleich vor den Terminen',
 pruefe('O1b die Soll-Uebersicht ist raus (steht in der Halbjahr-Uebersicht)',
   !h.includes('Wer hat sein Soll erledigt') && !h.includes('Übersicht vergangener Halbjahre') && !h.includes('tov-'), h.slice(0, 600));
 let s = sektion();
-pruefe('O2 zwei Talks offen, aelteste zuerst - der kuenftige und der fertig bewertete fehlen',
-  zaehler() === '2' && (s.match(/class="tzb-talk/g) || []).length === 2 && s.indexOf('Brüche') < s.indexOf('Pythagoras')
+// Seit 2026-11-05 neueste zuerst (Wunsch des Users; vorher aelteste zuerst wie bei den LZK).
+pruefe('O2 zwei Talks offen, neueste zuerst - der kuenftige und der fertig bewertete fehlen',
+  zaehler() === '2' && (s.match(/class="tzb-talk/g) || []).length === 2 && s.indexOf('Pythagoras') < s.indexOf('Brüche')
   && !s.includes('Zukunft') && !s.includes('Fertig'), s);
 pruefe('O3 an jedem Talk steht, wie viele noch offen sind', s.includes('3 offen') && s.includes('1 offen'), s);
 pruefe('O4 erst nach der Auswahl erscheinen die Personen', !s.includes('tzb-personen'), s);
@@ -154,8 +155,8 @@ await klick('presented', T1, 4);
 z = await zeile('s', T1);
 pruefe('W9 rita von ✗ auf 4 Flammen umgestellt', z.st === 'erledigt' && z.pokale === 4, z);
 s = sektion();
-pruefe('W10 alle bewertet: der Talk bleibt stehen, solange er gewaehlt ist - der Zaehler sinkt',
-  zaehler() === '1' && s.includes('✓ alle bewertet') && s.includes('Pythagoras'), s);
+pruefe('W10 alle bewertet: der Talk bleibt stehen, solange er gewaehlt ist (an seinem Platz, oben) - der Zaehler sinkt',
+  zaehler() === '1' && s.includes('✓ alle bewertet') && s.includes('Pythagoras') && s.indexOf('Pythagoras') < s.indexOf('Brüche'), s);
 lauf(`talkZbWaehlen(${T1})`);
 s = sektion();
 pruefe('W11 abgewaehlt: der fertige Talk ist weg', !s.includes('Pythagoras') && s.includes('Brüche') && !s.includes('tzb-personen'), s);

@@ -8957,13 +8957,15 @@ function talkFrueher(a, b) {
   return calDateStr(new Date(a.datum)).localeCompare(calDateStr(new Date(b.datum)))
     || (a.uhrzeit || '').localeCompare(b.uhrzeit || '');
 }
+function talkSpaeter(a, b) { return talkFrueher(b, a); }
 // Termine fuer "Noch zu bewerten": gebucht, Termintag erreicht, und mindestens eine Person,
-// die dabei ist, hat noch keine Bewertung. Aelteste zuerst (wie bei den LZK).
+// die dabei ist, hat noch keine Bewertung. Neueste zuerst (Nutzerwunsch 2026-11-05; vorher
+// aelteste zuerst wie bei den LZK) - der Talk von eben steht oben.
 function talksZuBewerten(slots, heute) {
   return (slots || [])
     .filter(s => s.session_id && talkTagErreicht(s, heute)
       && talkPersonen(s).some(p => talkPersonDabei(p) && p.status === 'ausstehend'))
-    .sort(talkFrueher);
+    .sort(talkSpaeter);
 }
 // Bewertung einer Person als Text (Terminkarte).
 function talkBewertungText(p, tagErreicht) {
@@ -9019,7 +9021,7 @@ function talksBewertet(slots, heute) {
   return (slots || [])
     .filter(s => s.session_id && talkTagErreicht(s, heute) && halbjahrForDateClient(new Date(s.datum)) === hj
       && !talkPersonen(s).some(p => talkPersonDabei(p) && p.status === 'ausstehend'))
-    .sort((a, b) => talkFrueher(b, a));
+    .sort(talkSpaeter);
 }
 function talkZuBewertenHtml(slots, auswahl, heute, herkunft, bewertetOffen) {
   const offen = talksZuBewerten(slots, heute);
@@ -9029,9 +9031,9 @@ function talkZuBewertenHtml(slots, auswahl, heute, herkunft, bewertetOffen) {
   const imOben = !!sel && !imUnten;
   const hat = (liste, x) => liste.some(y => y.session_id === x.session_id);
   const oben = imUnten ? offen.filter(x => x.session_id !== sel.session_id)
-    : (imOben && !hat(offen, sel)) ? [...offen, sel].sort(talkFrueher) : offen;
+    : (imOben && !hat(offen, sel)) ? [...offen, sel].sort(talkSpaeter) : offen;
   const unten = imOben ? fertig.filter(x => x.session_id !== sel.session_id)
-    : (imUnten && !hat(fertig, sel)) ? [...fertig, sel].sort((a, b) => talkFrueher(b, a)) : fertig;
+    : (imUnten && !hat(fertig, sel)) ? [...fertig, sel].sort(talkSpaeter) : fertig;
   const kopf = `<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten <span class="pill">${offen.length}</span></h3>
     <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🔥 bis 🔥🔥🔥🔥 (Zuhören bis 🔥🔥) hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji, ohne Flamme).</div>`;
   const obenHtml = oben.length ? oben.map(s => talkZbTalkHtml(s, s.session_id === auswahl, 'offen')).join('')
