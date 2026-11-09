@@ -484,6 +484,27 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .aw-person-main{font-weight:700;color:var(--md-on-surface);}
 .aw-person-pending{font-style:italic;color:var(--md-on-surface);}
 .aw-person-fehlt{color:var(--md-error);}
+/* Schnellanlegen in der Admin-Woche (2026-11-09): freie Stelle in einem Feld antippen.
+   Das ＋ erscheint nur beim Drueberfahren mit der Maus und nicht ueber einer Kachel -
+   sonst sieht das Raster aus wie vorher. */
+.lw-cell.aw-feld{position:relative;}
+.lw-cell.aw-feld-frei{cursor:pointer;}
+@media (hover:hover){
+  .lw-cell.aw-feld-frei:hover:not(:has(.lw-chip:hover)){box-shadow:inset 0 0 0 1px var(--md-outline-variant);}
+  .lw-cell.aw-feld-frei:hover:not(:has(.lw-chip:hover))::after{
+    content:'＋';position:absolute;right:6px;bottom:3px;font-size:14px;line-height:1;
+    color:var(--md-on-surface-variant);pointer-events:none;}
+}
+.aw-schnell{position:fixed;z-index:60;min-width:210px;max-width:290px;padding:6px;
+  display:flex;flex-direction:column;gap:2px;
+  background:var(--md-surface);border:1px solid var(--md-outline-variant);border-radius:10px;
+  box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:13px;}
+.aw-schnell[hidden]{display:none;}
+.aw-schnell-kopf{font-weight:700;color:var(--md-on-surface);padding:2px 8px 0;}
+.aw-schnell-hinweis{font-size:12px;color:var(--md-on-surface-variant);padding:0 8px 4px;}
+.aw-schnell-knopf{text-align:left;padding:7px 8px;border:none;border-radius:6px;background:none;
+  font:inherit;color:var(--md-on-surface);cursor:pointer;}
+.aw-schnell-knopf:hover,.aw-schnell-knopf:focus-visible{background:var(--md-surface-container);outline:none;}
 /* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
    (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
 .login-taskcards{
@@ -1595,7 +1616,7 @@ textarea.form-input{
 <!-- ══ MODAL: Mathe-Talk-Termin anlegen (Admin) ═══════════════════════════ -->
 <div class="overlay" id="modal-talking-slot">
   <div class="modal" style="max-width:440px;">
-    <div class="modal-title">Termin anlegen</div>
+    <div class="modal-title" id="tslot-titel">Termin anlegen</div>
     <div class="form-group">
       <label class="form-label" for="tslot-halbjahr">Halbjahr</label>
       <input class="form-input" id="tslot-halbjahr" placeholder="z.B. 2627_1">
@@ -1828,6 +1849,9 @@ textarea.form-input{
 </div>
 
 <!-- ══ MODAL: Fachbüro-Termin freischalten (Admin) ═══════════════════════════════ -->
+<!-- Schnellanlegen in "Meine Woche" der Lernbegleitung: kleines Menue am angetippten Feld -->
+<div id="aw-schnell" class="aw-schnell" hidden aria-label="Termin hier anlegen"></div>
+
 <div class="overlay" id="modal-input-slot">
   <div class="modal" style="max-width:400px;">
     <div class="modal-title" id="islot-modal-title">Fachbüro-Termin freischalten</div>
@@ -3506,7 +3530,7 @@ function wunschTerminNeu() {
   const w = _wuensche.find(x => x.id === _wunschFuerTermin);
   if (!w) return;
   closeModal('modal-wunsch-termin');
-  openInputSlotModal(null, { subjectId: w.subjectId, thema: w.titel });
+  openInputSlotModal(null, { subjectId: w.subjectId, thema: w.titel, ausWunsch: true });
 }
 
 // Vorhandenen Termin nehmen: Thema am Termin nachtragen, Buchung anlegen,
@@ -6774,6 +6798,10 @@ function applyInputSlotSubjectDefaults() {
   if (themaHinweis) themaHinweis.style.display = subj.nurZugewiesen ? 'none' : '';
 }
 async function openInputSlotModal(presetDate, vorbelegung) {
+  // Ein Wunsch haengt nur an dem Fenster, das aus ihm heraus geoeffnet wurde. Vorher blieb er
+  // nach "Abbrechen" stehen - der naechste Termin, egal von wo angelegt, lud dann die
+  // Interessierten ein.
+  if (!(vorbelegung && vorbelegung.ausWunsch)) _wunschFuerTermin = null;
   const subjSel = document.getElementById('islot-subject');
   if (subjSel) {
     subjSel.innerHTML = subjectsMeta.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
@@ -6822,6 +6850,9 @@ async function openInputSlotModal(presetDate, vorbelegung) {
       applyInputSlotSubjectDefaults();
     }
     if (vorbelegung.thema) document.getElementById('islot-thema').value = vorbelegung.thema;
+    // Aus "Meine Woche" (Schnellanlegen): die freie Zeit im angetippten Feld.
+    if (vorbelegung.uhrzeit) document.getElementById('islot-uhrzeit').value = vorbelegung.uhrzeit;
+    if (vorbelegung.dauer) document.getElementById('islot-dauer').value = String(vorbelegung.dauer);
   }
   openModal('modal-input-slot');
 }
@@ -7867,6 +7898,120 @@ async function awVortrag(sessionId, status) {
   loadCalendar();
 }
 
+// ── Schnellanlegen in der Woche der Lernbegleitung (Nutzerwunsch 2026-11-09) ──────
+// Freie Stelle in einem Feld antippen (oder Rechtsklick) -> kleines Menue "＋ Mathe-FaBü /
+// ＋ Mathe-Talk". Daraus oeffnet das bekannte Anlege-Fenster, vorausgefuellt mit dem Tag und
+// der ersten Zeit, die im Feld fuer das eigene Fach noch frei ist. Die Dauer reicht bis zum
+// naechsten belegten Termin bzw. zum Feldende, aber nicht ueber die Fach-Vorgabe hinaus (bei
+// 15-Minuten-Fachbueros also 15). Im Fenster bleibt alles aenderbar.
+// Belegt ist, was das eigene Fach im Feld hat oder was man selbst haelt - andere Faecher
+// laufen bewusst parallel (wie beim Verschieben, siehe reschedule im Server).
+let _awSchnell = null;
+
+// "Mein Fach": das Standard-Fach der Lernbegleitung, sonst wie beim Fachbuero-Fenster.
+function awSchnellFach() {
+  return (me && me.defaultSubjectId != null) ? subjectById(me.defaultSubjectId) : subjectByKey(activeSubject);
+}
+
+// Zustand eines Felds (Tag + Block): vorbei / frist (hinter der 8-Wochen-Frist) / voll / frei.
+// frei = die freien Zeitspannen [von, bis] in Minuten, jede mindestens 5 Minuten lang
+// (kuerzere Termine nimmt der Server nicht an).
+function awFeldZustand(datum, bi) {
+  const b = LW_BLOCKS[bi];
+  const fach = awSchnellFach();
+  const jetzt = new Date();
+  const heute = calDateStr(jetzt);
+  let von = lwMin(b.von);
+  const bis = lwMin(b.bis);
+  if (datum < heute) return { art: 'vorbei', fach, frei: [] };
+  if (datum === heute) {
+    // Heute zaehlt erst die Zeit ab jetzt (auf 5 Minuten aufgerundet).
+    von = Math.max(von, Math.ceil((jetzt.getHours() * 60 + jetzt.getMinutes()) / 5) * 5);
+    if (von >= bis) return { art: 'vorbei', fach, frei: [] };
+  }
+  if (datum > planStichtagClient()) return { art: 'frist', fach, frei: [] };
+  // Auch ein Termin aus dem Feld davor belegt mit, wenn er hineinreicht.
+  const belegt = (calData.slots || [])
+    .filter(s => s.datum === datum && (s.subjectId === fach.id || (me && s.teacherId === me.userId)))
+    .map(s => { const a = lwMin(s.uhrzeit); return a === null ? null : [a, a + (parseInt(s.dauer, 10) || 45)]; })
+    .filter(Boolean)
+    .sort((x, y) => x[0] - y[0]);
+  const frei = [];
+  for (const [a, e] of belegt) {
+    if (e <= von) continue;
+    if (a >= bis) break;
+    if (a > von) frei.push([von, a]);
+    von = Math.max(von, e);
+  }
+  if (von < bis) frei.push([von, bis]);
+  const lang = frei.filter(([a, e]) => e - a >= 5);
+  return { art: lang.length ? 'frei' : 'voll', fach, frei: lang };
+}
+
+function awFeldKlick(e, datum, bi) {
+  // Auf einer Kachel bleibt der Klick bei der Kachel (Termin auswaehlen, Serie aufklappen).
+  // Der Rechtsklick oeffnet das Menue auch dort - in vollen Feldern bleibt sonst kaum Flaeche.
+  if (e.type !== 'contextmenu' && e.target && e.target.closest && e.target.closest('.lw-chip, .mw-serie')) return;
+  e.preventDefault();
+  awSchnellZeigen(datum, bi, e.clientX, e.clientY);
+}
+
+function awSchnellZeigen(datum, bi, x, y) {
+  const menue = document.getElementById('aw-schnell');
+  if (!menue) return;
+  _awSchnell = null;
+  const z = awFeldZustand(datum, bi);
+  if (z.art === 'vorbei') { awSchnellZu(); return; }
+  const fach = z.fach;
+  const kopf = `<div class="aw-schnell-kopf">${escHtml(lwFmtDay(datum))} · ${escHtml(LW_BLOCKS[bi].label)}</div>`;
+  let inhalt;
+  if (z.art === 'frist') {
+    inhalt = `<div class="aw-schnell-hinweis">Liegt hinter der ${PLAN_WOCHEN}-Wochen-Frist – planbar bis ${escHtml(planTagText(planStichtagClient()))}.</div>`;
+  } else if (z.art === 'voll') {
+    inhalt = `<div class="aw-schnell-hinweis">In diesem Feld ist für ${escHtml(fach.name)} keine Zeit mehr frei.</div>`;
+  } else {
+    const [von, bis] = z.frei[0];
+    const dauer = Math.min(parseInt(fach.defaultDauer, 10) || 45, bis - von);
+    _awSchnell = { datum, uhrzeit: lwFmtMin(von), dauer, subjectId: fach.id };
+    const zeit = `${lwFmtMin(von)}–${lwFmtMin(von + dauer)}`;
+    const knopf = (typ, text) => `<button type="button" class="aw-schnell-knopf" onclick="awSchnellAnlegen('${typ}')">＋ ${escHtml(text)} · ${zeit}</button>`;
+    inhalt = `<div class="aw-schnell-hinweis">noch frei: ${z.frei.map(([a, e]) => `${lwFmtMin(a)}–${lwFmtMin(e)}`).join(', ')}</div>`
+      + knopf('input', fach.nurZugewiesen ? `${fach.name}-Termin` : `${fach.name}-FaBü`)
+      // Lernberatung & Co. werden zugeordnet - Talks gibt es dort nicht.
+      + (fach.nurZugewiesen ? '' : knopf('talk', `${fach.name}-Talk`));
+  }
+  menue.innerHTML = kopf + inhalt;
+  menue.hidden = false;
+  // Am Klickpunkt, aber nie aus dem Bild heraus.
+  const w = menue.offsetWidth || 220, h = menue.offsetHeight || 120;
+  menue.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 8)) + 'px';
+  menue.style.top = Math.max(8, y + h > window.innerHeight - 8 ? y - h : y) + 'px';
+  const erster = menue.querySelector('button');
+  if (erster) erster.focus();
+}
+
+function awSchnellZu() {
+  const menue = document.getElementById('aw-schnell');
+  if (menue) { menue.hidden = true; menue.innerHTML = ''; }
+}
+
+function awSchnellAnlegen(typ) {
+  const v = _awSchnell;
+  awSchnellZu();
+  if (!v) return;
+  if (typ === 'talk') openTalkingSlotModal({ ...v, quelle: 'kalender' });
+  else openInputSlotModal(v.datum, v);
+}
+
+// Das Menue geht zu bei Escape, beim Tippen daneben und beim Scrollen - es steht fest im
+// Fenster und wuerde sonst vom Feld wegwandern.
+document.addEventListener('pointerdown', e => {
+  const menue = document.getElementById('aw-schnell');
+  if (menue && !menue.hidden && !menue.contains(e.target)) awSchnellZu();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') awSchnellZu(); });
+window.addEventListener('scroll', () => awSchnellZu(), true);
+
 function renderAdminWeek() {
   const el = document.getElementById('cal-adminweek');
   if (!el) return;
@@ -7908,7 +8053,16 @@ function renderAdminWeek() {
   const blockRows = LW_BLOCKS.map((b, bi) => {
     const { trenner, zebra } = lwZeilenStil(bi);
     return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${awZelleHtml(cells[bi][di])}</div>`).join('');
+      LW_DAY_NAMES.map((_, di) => {
+        // Vergangenes bleibt stumm. Volle Felder und solche hinter der Frist antworten auch -
+        // mit dem Grund, warum dort nichts mehr geht.
+        const feld = awFeldZustand(dayStrs[di], bi);
+        const ruf = `awFeldKlick(event,'${dayStrs[di]}',${bi})`;
+        const klasse = feld.art === 'vorbei' ? '' : feld.art === 'frei' ? ' aw-feld aw-feld-frei' : ' aw-feld';
+        const attr = feld.art === 'vorbei' ? ''
+          : `${feld.art === 'frei' ? ' title="Hier einen Termin anlegen"' : ''} onclick="${ruf}" oncontextmenu="${ruf}"`;
+        return `<div class="lw-cell${zebra}${klasse}"${attr}>${awZelleHtml(cells[bi][di])}</div>`;
+      }).join('');
   }).join('');
 
   const extrasHtml = extras.length ? `<div class="lw-extra">
@@ -7937,9 +8091,9 @@ function renderAdminWeek() {
         <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
       </div>
     </div>
+    <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
     ${weekSlots.length
-      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
-         <div class="mw-legend">
+      ? `<div class="mw-legend">
            <span>Buchstabe/Farbe = Fach</span>
            <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
            <span>${lwBadge('input', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('input')} FaBü – eckiger</span>
@@ -7953,8 +8107,9 @@ function renderAdminWeek() {
            <span>👥 = Anzahl statt Namen, wenn es viele sind</span>
            <span>Termin antippen zeigt alle Namen – beim FaBü trägst du dort Leute ein und aus und vermerkst ab dem Termintag, wer unentschuldigt gefehlt hat.</span>
            <span>Kacheln wie „3 × 15 Min" fassen freie Termine zusammen – gebuchte stehen immer einzeln.</span>
+           <span>＋ freie Stelle in einem Feld antippen: Termin dort anlegen – Tag, Uhrzeit und noch freie Zeit sind schon eingetragen.</span>
          </div>`
-      : '<div class="lw-empty">Diese Woche sind keine Termine angelegt.</div>'}
+      : '<div class="lw-empty">Diese Woche sind keine Termine angelegt – freie Stelle in einem Feld antippen legt einen an.</div>'}
     <div class="mw-bar" id="aw-actionbar"></div>
     ${extrasHtml}
   </div>`;
@@ -8649,12 +8804,21 @@ function planGekuerztText(d) {
 }
 
 function toTimeInputValue(u) { const m = String(u || '').match(/(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2,'0') + ':' + m[2] : ''; }
-function openTalkingSlotModal() {
-  const subj = subjectByKey(activeSubject);
-  document.getElementById('tslot-halbjahr').value = currentHalbjahrGuess();
-  document.getElementById('tslot-datum').value = '';
-  document.getElementById('tslot-uhrzeit').value = '';
-  document.getElementById('tslot-dauer').value = String(subj.defaultDauer || 45);
+// Aus dem Talks-Reiter gilt das dort offene Fach. Aus "Meine Woche" (Schnellanlegen) kommen
+// Fach, Tag, Uhrzeit und Dauer mit - danach wird die Ansicht aufgefrischt, aus der es kam.
+let _tslotFachId = null;
+let _tslotQuelle = 'admin';
+function openTalkingSlotModal(vorbelegung) {
+  const v = vorbelegung || {};
+  const subj = v.subjectId != null ? subjectById(v.subjectId) : subjectByKey(activeSubject);
+  _tslotFachId = subj.id;
+  _tslotQuelle = v.quelle || 'admin';
+  document.getElementById('tslot-titel').textContent = `${subj.name}-Talk-Termin anlegen`;
+  document.getElementById('tslot-halbjahr').value =
+    (v.datum && halbjahrForDateClient(v.datum + 'T00:00:00')) || currentHalbjahrGuess();
+  document.getElementById('tslot-datum').value = v.datum || '';
+  document.getElementById('tslot-uhrzeit').value = v.uhrzeit || '';
+  document.getElementById('tslot-dauer').value = String(v.dauer || subj.defaultDauer || 45);
   document.getElementById('tslot-ort').value = subj.defaultOrt || '';
   document.getElementById('tslot-recurring').checked = false;
   document.getElementById('tslot-recurring-fields').style.display = 'none';
@@ -8678,7 +8842,7 @@ async function submitTalkingSlot() {
   const dauer = parseInt(document.getElementById('tslot-dauer').value) || 45;
   const ort = document.getElementById('tslot-ort').value.trim();
   if (!halbjahr) { alert('Bitte Halbjahr angeben.'); return; }
-  const subjectId = subjectByKey(activeSubject).id;
+  const subjectId = _tslotFachId;
   const recurring = document.getElementById('tslot-recurring').checked;
   let body;
   if (recurring) {
@@ -8699,7 +8863,7 @@ async function submitTalkingSlot() {
   if (!r.ok) { alert(d.error || 'Fehler beim Anlegen.'); return; }
   if (d.gekuerzt) alert(planGekuerztText(d));
   closeModal('modal-talking-slot');
-  loadTalkingAdmin();
+  if (_tslotQuelle === 'kalender') loadCalendar(); else loadTalkingAdmin();
 }
 
 let _talkingEditSlotId = null;
