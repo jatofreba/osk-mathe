@@ -59,8 +59,9 @@ pruefe("A6 und beim naechsten Laden nicht doppelt", az2.students[0].bausteine[0]
 dialog = quelle.split("class BausteinDialog")[1].split("\nclass ")[0]
 namen = formular_felder(quelle)
 pruefe("B1 keine Zeile 'Bausteinarbeit' mehr", "bausteinarbeit" not in namen, namen)
-pruefe("B2 die Bemerkung steht oben (wo frueher 'Bausteinarbeit' stand), Halbjahr unter dem Status",
-       namen[:4] == ["name", "status", "halbjahr", "bemerkung"], namen)
+pruefe("B2 die Bemerkung steht oben (wo frueher 'Bausteinarbeit' stand), Halbjahr unter dem Status,"
+       " darunter Beginn und Ende der Bearbeitung (2026-11-09)",
+       namen[:6] == ["name", "status", "halbjahr", "beginn", "ende", "bemerkung"], namen)
 pruefe("B3 die Bemerkungen zur LZK bleiben", "lzk_bem_1" in namen and "lzk_bem_2" in namen, namen)
 pruefe("B4 die Knoepfe stehen ausserhalb des scrollenden Formulars",
        'leiste.pack(side="bottom", fill="x")' in dialog and "self._leinwand.create_window" in dialog)

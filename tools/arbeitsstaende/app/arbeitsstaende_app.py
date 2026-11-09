@@ -29,7 +29,7 @@ from arbeitsstaende_data import (
     verknuepfte_lzk_ids, lzk_zuordnungen, lzk_ziel_text, lzk_baustein_optionen, lzk_platz_optionen,
     lzk_platz_vorschlag, lzk_typ_platz, LzkFragen,
     lzk_falsches_halbjahr, lzk_umziehen, LZK_ZIEL_NIE, hj_nach_statuswechsel,
-    lzk_import_status,
+    lzk_import_status, bearbeitung_nach_statuswechsel, bearbeitung_text, status_wechseln,
     Notenspiegel, NOTEN, NOTENSPIEGEL_STANDARD, NOTEN_RUNDEN, NOTEN_RUNDEN_STANDARD,
     notenspiegel_werte, notenspiegel_tabelle, lzk_auswertung, lzk_auswertung_text,
     baustein_auswertung, noten_neu_berechnen, zahl_lesen, zahl_text, prozent_text,
@@ -254,6 +254,10 @@ class BausteinDialog(tk.Toplevel):
             ("Status", "status", "combo", STATUS_OPTIONEN),
             # Gleich unter dem Status: das Halbjahr folgt ihm (hj_nach_statuswechsel).
             ("Halbjahr", "halbjahr", "entry_or_combo", halbjahr_optionen([b.halbjahr])),
+            # Beginn und Ende der Bearbeitung (Nutzerwunsch 2026-11-09): folgen dem Status
+            # wie das Halbjahr, bleiben aber aenderbar.
+            ("Beginn der Bearbeitung", "beginn", "entry", None),
+            ("Ende der Bearbeitung", "ende", "entry", None),
             # Die Bemerkung steht dort, wo frueher "Bausteinarbeit" stand.
             ("Bemerkung", "bemerkung", "text", 10),
             # Wie viele LZK der Baustein hat (Nutzerwunsch 2026-10-31) - darunter stehen
@@ -313,7 +317,7 @@ class BausteinDialog(tk.Toplevel):
                 wert = str(lzk_anzahl(b, self._vorlage_lzk))
             else:
                 wert = bemerkung if feld == "bemerkung" else getattr(b, feld)
-            if feld.startswith("lzk_datum_"):
+            if feld.startswith("lzk_datum_") or feld in ("beginn", "ende"):
                 wert = fmt_datum(wert)
             if art == "ergebnis":
                 wert = LZK_ERGEBNIS_TEXT.get(wert or "", LZK_ERGEBNIS_TEXT[""])
@@ -382,6 +386,9 @@ class BausteinDialog(tk.Toplevel):
         self._status_vorher = b.status or ""
         self._hj_vorher = (b.halbjahr or "").strip()
         self._hj_auto = None
+        # Beginn und Ende der Bearbeitung folgen ebenso (zuletzt automatisch gesetzt: Text).
+        self._zeiten_vorher = {"beginn": b.beginn, "ende": b.ende}
+        self._zeiten_auto = {"beginn": None, "ende": None}
         self.vars["status"].trace_add("write", self._status_geaendert)
 
         # Anzahl LZK: blendet die LZK-Bloecke ein und aus. Solange sie fuer diesen Baustein
@@ -549,11 +556,29 @@ class BausteinDialog(tk.Toplevel):
         self._punkte_info[nr].config(text=text)
 
     def _status_geaendert(self, *_):
-        feld, self._hj_auto = hj_nach_statuswechsel(
-            self._status_vorher, self.vars["status"].get(), self._hj_vorher,
-            self.vars["halbjahr"].get().strip(), self._hj_auto)
-        if feld != self.vars["halbjahr"].get().strip():
-            self.vars["halbjahr"].set(feld)
+        # App-Zeilen findet der Abruf ueber ihr Halbjahr wieder - dort folgt es nicht,
+        # sonst stuende nach dem naechsten Abruf eine zweite Zeile da.
+        if not self.__dict__.get("_app_zeile"):
+            feld, self._hj_auto = hj_nach_statuswechsel(
+                self._status_vorher, self.vars["status"].get(), self._hj_vorher,
+                self.vars["halbjahr"].get().strip(), self._hj_auto)
+            if feld != self.vars["halbjahr"].get().strip():
+                self.vars["halbjahr"].set(feld)
+        if "_zeiten_vorher" not in self.__dict__ or "beginn" not in self.vars:
+            return
+        # Beginn und Ende: gerechnet vom Stand beim Oeffnen - zurueck auf den alten Status
+        # bringt die alten Werte zurueck. Eine eigene Eingabe wird nie ueberschrieben.
+        neu = bearbeitung_nach_statuswechsel(
+            self._status_vorher, self.vars["status"].get(), self._zeiten_vorher["beginn"],
+            self._zeiten_vorher["ende"], self.vars["halbjahr"].get().strip())
+        for feld, wert in zip(("beginn", "ende"), neu):
+            vorher, auto = fmt_datum(self._zeiten_vorher[feld]), self._zeiten_auto[feld]
+            jetzt = self.vars[feld].get().strip()
+            if jetzt == vorher or (auto is not None and jetzt == auto):
+                text = fmt_datum(wert)
+                self._zeiten_auto[feld] = text if text != vorher else None
+                if text != jetzt:
+                    self.vars[feld].set(text)
 
     def _uebernehmen(self):
         try:
@@ -600,6 +625,18 @@ class BausteinDialog(tk.Toplevel):
                 werte[feld] = wert_je_text.get(werte.get(feld, ""), "")
             if not werte["status"]:
                 werte["status"] = "Ausstehend"
+            # Beginn und Ende der Bearbeitung (Test-Attrappen kennen sie nicht immer - dann
+            # bleiben die bisherigen Werte).
+            for feld, wort in (("beginn", "Beginn der Bearbeitung"), ("ende", "Ende der Bearbeitung")):
+                if feld not in werte:
+                    werte[feld] = self.__dict__.get("_zeiten_vorher", {}).get(feld)
+                    continue
+                try:
+                    werte[feld] = parse_datum(werte[feld])
+                except ValueError:
+                    raise ValueError(f"{wort}: Datum bitte als TT.MM.JJJJ.")
+            if werte["beginn"] and werte["ende"] and werte["ende"] < werte["beginn"]:
+                raise ValueError("Das Ende der Bearbeitung liegt vor ihrem Beginn.")
             for nr, link in zip(LZK_NUMMERN, self._verknuepfung):
                 werte[f"lzk_online_{nr}"] = link
             # Steht nicht im Formular: bei eigenen Bausteinen in der Bemerkung aufgegangen,
@@ -2308,6 +2345,13 @@ class App(tk.Tk):
         self.tabelle.configure(displaycolumns=self._baustein_spalten(LZK_ANZAHL_STANDARD))
         self.tabelle.pack(fill="both", expand=True)
         self.tabelle.bind("<Double-1>", lambda e: self.baustein_bearbeiten())
+        # Rechtsklick: Status wechseln (Nutzerwunsch 2026-11-09) - auf dem Mac die zweite
+        # Maustaste oder Ctrl-Klick.
+        for taste in (("<Button-2>", "<Control-Button-1>") if sys.platform == "darwin" else ("<Button-3>",)):
+            self.tabelle.bind(taste, self._baustein_menue)
+        # Je Baustein der Verlauf der Wechsel per Rechtsklick (status_wechseln) - damit
+        # der Wechsel zurueck auch Halbjahr, Beginn und Ende zurueckbringt.
+        self._status_verlauf = {}
 
         for status, farbe in STATUS_FARBEN.items():
             self.tabelle.tag_configure(status, background=f"#{farbe}")
@@ -4590,6 +4634,79 @@ class App(tk.Tk):
         del self.aktueller_schueler.bausteine[idx]
         self._markiere_ungespeichert()
         self._detail_anzeigen()
+
+    def _markierte_bausteine(self) -> list:
+        s = self.aktueller_schueler
+        if not s:
+            return []
+        return [s.bausteine[int(i)] for i in self.tabelle.selection()
+                if i.isdigit() and int(i) < len(s.bausteine)]
+
+    def _baustein_menue(self, event):
+        """Rechtsklick auf einen Baustein: Menue mit dem Status - fuer alle markierten,
+        wenn der angeklickte dazugehoert, sonst nur fuer ihn."""
+        zeile = self.tabelle.identify_row(event.y)
+        if not zeile or not self.aktueller_schueler:
+            return "break"
+        if zeile not in self.tabelle.selection():
+            self.tabelle.selection_set(zeile)
+        self.tabelle.focus(zeile)
+        menue = self._status_menue()
+        try:
+            menue.tk_popup(event.x_root, event.y_root)
+        finally:
+            menue.grab_release()
+        return "break"
+
+    def _status_menue(self) -> tk.Menu:
+        bausteine = self._markierte_bausteine()
+        menue = tk.Menu(self, tearoff=0)
+        if len(bausteine) == 1:
+            menue.add_command(label=bausteine[0].name or "(ohne Namen)", state="disabled")
+            zeit = bearbeitung_text(bausteine[0])
+            if zeit:
+                menue.add_command(label=zeit, state="disabled")
+        else:
+            menue.add_command(label=f"{len(bausteine)} Bausteine markiert", state="disabled")
+        menue.add_separator()
+        stati = {(b.status or "").strip() for b in bausteine}
+        self._status_menue_var = tk.StringVar(value=stati.pop() if len(stati) == 1 else "")
+        for status in STATUS_OPTIONEN:
+            menue.add_radiobutton(label=status, value=status, variable=self._status_menue_var,
+                                  command=lambda s=status: self.status_setzen(s))
+        menue.add_separator()
+        menue.add_command(label="Bearbeiten…", command=self.baustein_bearbeiten,
+                          state="normal" if len(bausteine) == 1 else "disabled")
+        return menue
+
+    def status_setzen(self, status: str):
+        """Die markierten Bausteine auf `status` setzen. Halbjahr, Beginn und Ende folgen wie
+        im Formular; zurueck auf den vorigen Status bringt sie zurueck (status_wechseln)."""
+        auswahl = self.tabelle.selection()
+        bausteine = [b for b in self._markierte_bausteine() if (b.status or "").strip() != status]
+        if not bausteine:
+            return
+        folgen = []
+        for b in bausteine:
+            vorher = (b.halbjahr, b.beginn, b.ende)
+            alt = self._status_verlauf.get(id(b))
+            verlauf = status_wechseln(b, status, alt[1] if alt and alt[0] is b else None)
+            self._status_verlauf[id(b)] = (b, verlauf)
+            if b.halbjahr != vorher[0]:
+                folgen.append(f"Halbjahr {b.halbjahr or '–'}")
+            if b.beginn != vorher[1]:
+                folgen.append(f"Beginn {fmt_datum(b.beginn) or 'entfernt'}")
+            if b.ende != vorher[2]:
+                folgen.append(f"Ende {fmt_datum(b.ende) or 'entfernt'}")
+        self._markiere_ungespeichert()
+        self._detail_anzeigen()
+        self._liste_aktualisieren()
+        self.tabelle.selection_set([i for i in auswahl if self.tabelle.exists(i)])
+        if len(bausteine) == 1:
+            self._melde(f"„{bausteine[0].name}“ jetzt „{status}“" + (f" – {', '.join(folgen)}." if folgen else "."))
+        else:
+            self._melde(f"{len(bausteine)} Bausteine jetzt „{status}“"
+                        + (" – Halbjahr, Beginn bzw. Ende wie im Formular nachgeführt." if folgen else "."))
 
     def vorlage_bearbeiten(self):
         dlg = VorlageDialog(self, self.az.vorlage_bausteine, self.az.vorlage_lzk)

@@ -82,7 +82,7 @@ pruefe("J5 aeltere Datei: laedt ohne Warnung, LZK 1 und 2 wie bisher, 3/4 leer, 
        and not D.lzk_belegt(b, 3) and not D.lzk_belegt(b, 4) and b.lzk_anzahl is None and az.vorlage_lzk == {}, b)
 neu = az.als_dict()
 pruefe("J6 und wird ohne neue Schluessel wieder gespeichert (nur die Version steigt)",
-       neu["version"] == 2 and "vorlage_lzk_anzahl" not in neu
+       neu["version"] == D.JSON_VERSION and "vorlage_lzk_anzahl" not in neu
        and neu["personen"] == [{**alt_datei["personen"][0]}], neu["personen"])
 az.vorlage_lzk = {"Kreise": 1, "Terme": 3}
 az2 = D.Arbeitsstaende()

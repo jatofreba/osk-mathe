@@ -909,6 +909,7 @@ def lzk_import_status(b, datum=None) -> bool:
     d = _to_date(datum)
     if d and not (b.halbjahr or "").strip():
         b.halbjahr = halbjahr_fuer_datum(d)
+    bearbeitung_nachfuehren(b, "Ausstehend")
     return True
 
 
@@ -938,10 +939,11 @@ def lzk_abschluss_status(b, vorgaben=None) -> bool:
     seiner letzten LZK. True, wenn sich der Status geaendert hat."""
     if not lzk_abschluss_faellig(b, vorgaben):
         return False
-    b.status = "Abgeschlossen"
+    vorher, b.status = b.status, "Abgeschlossen"
     if not (b.halbjahr or "").strip():
         termine = [d for d in (_to_date(getattr(b, f"lzk_datum_{nr}")) for nr in LZK_NUMMERN) if d]
         b.halbjahr = halbjahr_fuer_datum(max(termine) if termine else None)
+    bearbeitung_nachfuehren(b, vorher)
     return True
 
 
@@ -969,6 +971,7 @@ def lzk_zuordnen(student, z: dict, ziel, ziele=None, vorgaben=None, platz=None):
     if zustand == "gesperrt":
         raise ValueError(f"LZK {nummer} von „{b.name}“ {beschreibung}.")
     if ziel[0] == "neu":
+        bearbeitung_nachfuehren(b, "")
         student.bausteine.append(b)
     ergebnisse_vorher = [getattr(b, f"lzk_ergebnis_{nr}") for nr in LZK_NUMMERN]
     alt_d = _to_date(getattr(b, f"lzk_datum_{nummer}"))
@@ -1059,6 +1062,7 @@ def lzk_umziehen(student, t: dict) -> str:
     neu = ziel is None
     if neu:
         ziel = Baustein(name=alt.name, status="In Bearbeitung", halbjahr=hj)
+        bearbeitung_nachfuehren(ziel, "")
         student.bausteine.append(ziel)
     setattr(ziel, f"lzk_datum_{nummer}", d)
     erg = getattr(alt, f"lzk_ergebnis_{nummer}") or ""
@@ -1100,6 +1104,107 @@ def hj_nach_statuswechsel(status_vorher: str, status_neu: str, hj_vorher: str, h
     if hj_auto is not None and hj_feld == hj_auto:
         return hj_vorher, None
     return hj_feld, hj_auto
+
+
+# Beginn und Ende der Bearbeitung (Nutzerwunsch 2026-11-09): der Wechsel auf "In
+# Bearbeitung" setzt den Beginn, der auf einen dieser Zustaende das Ende.
+STATUS_BEGINN = "In Bearbeitung"
+STATUS_ENDE = ("Abgeschlossen", "Nicht bestanden")
+
+
+def bearbeitung_nach_statuswechsel(status_vorher: str, status_neu: str, beginn, ende,
+                                   halbjahr: str = "", heute: Optional[date] = None):
+    """Beginn und Ende der Bearbeitung nach einem Wechsel von `status_vorher` auf
+    `status_neu` -> (beginn, ende); `beginn` und `ende` sind die Werte vor dem Wechsel.
+
+    Auf "In Bearbeitung": Beginn heute, wenn noch keiner steht (ein frueherer bleibt),
+    ein Ende faellt weg - der Baustein laeuft wieder. Auf "Abgeschlossen" oder "Nicht
+    bestanden" (von einem anderen Zustand): Ende heute, wenn noch keins steht. Sonst
+    bleibt beides. Heute ist nur ein sinnvoller Tag, wenn der Baustein im laufenden
+    Halbjahr steht (oder in keinem): wird ein frueheres Halbjahr nachgetragen, bleibt
+    der Tag offen statt falsch."""
+    status_vorher, status_neu = (status_vorher or "").strip(), (status_neu or "").strip()
+    if status_neu == status_vorher:
+        return beginn, ende
+    heute = heute or date.today()
+    hj = (halbjahr or "").strip()
+    tag = heute if not hj or hj == halbjahr_fuer_datum(heute) else None
+    if status_neu == STATUS_BEGINN:
+        return beginn or tag, None
+    if status_neu in STATUS_ENDE and status_vorher not in STATUS_ENDE:
+        return beginn, ende or tag
+    return beginn, ende
+
+
+def bearbeitung_nachfuehren(b, status_vorher: str, heute: Optional[date] = None):
+    """Beginn und Ende am Baustein nach einem Statuswechsel nachfuehren - fuer die
+    automatischen Wege (LZK zugeordnet, alle LZK bestanden, umgezogen)."""
+    b.beginn, b.ende = bearbeitung_nach_statuswechsel(status_vorher, b.status, b.beginn, b.ende,
+                                                       b.halbjahr, heute)
+
+
+def status_wechseln(b, neu: str, verlauf: Optional[list] = None, heute: Optional[date] = None) -> list:
+    """Status ohne Formular wechseln (Rechtsklick in der Bausteintabelle, Nutzerwunsch
+    2026-11-09) - mit denselben Folgen wie im Formular: das Halbjahr folgt dem Status
+    (hj_nach_statuswechsel; nicht bei App-Zeilen - der Abruf findet sie ueber ihr
+    Halbjahr wieder, sonst stuende eine zweite da), Beginn und Ende der Bearbeitung
+    ebenso (bearbeitung_nach_statuswechsel).
+
+    `verlauf` ist, was der vorige Wechsel an diesem Baustein zurueckgab. Geht es auf den
+    Status vor dem letzten Wechsel zurueck und steht der Baustein noch so da, wie ihn
+    dieser hinterlassen hat, kehren auch Halbjahr, Beginn und Ende zurueck - ein
+    Fehlklick kostet nichts. Rueckgabe: der Verlauf fuer den naechsten Wechsel."""
+    def stand():
+        return (b.status or "", b.halbjahr or "", b.beginn, b.ende)
+    jetzt = stand()
+    verlauf = list(verlauf or [])
+    if verlauf and verlauf[-1][1] != jetzt:
+        verlauf = []                    # seither anders geaendert (Formular, Abruf ...)
+    if verlauf and (neu or "").strip() == verlauf[-1][0][0].strip():
+        b.status, b.halbjahr, b.beginn, b.ende = verlauf.pop()[0]
+        return verlauf
+    status0, hj0, beginn0, ende0 = jetzt
+    hj = hj0
+    if not _ist_app_zeile(b):
+        feld = hj_nach_statuswechsel(status0, neu, hj0.strip(), hj0.strip(), None, heute)[0]
+        hj = hj0 if feld == hj0.strip() else feld
+    b.status, b.halbjahr = neu, hj
+    b.beginn, b.ende = bearbeitung_nach_statuswechsel(status0, neu, beginn0, ende0, hj, heute)
+    return verlauf + [(jetzt, stand())]
+
+
+def _dauer_text(tage: int) -> str:
+    if tage == 1:
+        return "1 Tag"
+    return f"{tage} Tage" + (f" ≈ {round(tage / 7)} Wochen" if tage >= 14 else "")
+
+
+def bearbeitung_text(b, heute: Optional[date] = None) -> str:
+    """Beginn, Ende und Dauer der Bearbeitung in Worten ("" ohne Angaben)."""
+    beginn, ende = _to_date(getattr(b, "beginn", None)), _to_date(getattr(b, "ende", None))
+    if beginn and ende:
+        tage = (ende - beginn).days
+        dauer = "" if tage < 0 else " (am selben Tag)" if tage == 0 else f" ({_dauer_text(tage)})"
+        return f"bearbeitet {_fmt_kurz(beginn)} – {_fmt_kurz(ende)}{dauer}"
+    if beginn and (b.status or "").strip() == STATUS_BEGINN:
+        tage = ((heute or date.today()) - beginn).days
+        if tage == 0:
+            return f"seit heute ({_fmt_kurz(beginn)})"
+        return f"seit {_fmt_kurz(beginn)}" + (f" (bisher {_dauer_text(tage)})" if tage > 0 else "")
+    if beginn:
+        return f"begonnen am {_fmt_kurz(beginn)}"
+    if ende:
+        return f"beendet am {_fmt_kurz(ende)}"
+    return ""
+
+
+def status_mit_bearbeitung(b, heute: Optional[date] = None) -> str:
+    """Status mit Beginn, Ende und Dauer: "In Bearbeitung seit 09.11.2026 (bisher 12 Tage)",
+    "Abgeschlossen, bearbeitet 09.11.2026 – 02.12.2026 (23 Tage ≈ 3 Wochen)"."""
+    status, zeit = (b.status or "").strip(), bearbeitung_text(b, heute)
+    if not zeit:
+        return status
+    return f"{status} {zeit}" if zeit.startswith("seit") else f"{status}, {zeit}"
 
 
 def lt_freie_lzk_senden(student, konto: dict, heute: Optional[date] = None, titel_je_key=None):
@@ -1517,7 +1622,8 @@ def _clean(value):
 JSON_FORMAT = "osk-arbeitsstaende"
 # 2 (2026-10-31): LZK 3 und 4, LZK-Anzahl je Baustein und in der Vorlage. Eine aeltere
 # Anwendung warnt beim Oeffnen, dass sie diese Angaben beim Speichern verlieren wuerde.
-JSON_VERSION = 2
+# 3 (2026-11-09): Beginn und Ende der Bearbeitung je Baustein.
+JSON_VERSION = 3
 JSON_ENDUNGEN = (".json",)
 
 
@@ -1945,7 +2051,8 @@ def hj_zusammenfassung_text(student, z: dict) -> str:
     if not z["bausteine"]:
         zeilen.append("  keine")
     for b in z["bausteine"]:
-        teile = [b.status]
+        # Mit Beginn, Ende und Dauer der Bearbeitung (Nutzerwunsch 2026-11-09).
+        teile = [status_mit_bearbeitung(b)]
         if b.bausteinarbeit:
             teile.append(b.bausteinarbeit)
         zeilen.append(f"• {b.name} — " + ", ".join(teile))
@@ -2262,6 +2369,12 @@ class Baustein:
     lzk_online_4: Optional[dict] = None
     lzk_punkte_4: str = ""
     lzk_max_4: str = ""
+    # Beginn und Ende der Bearbeitung (Nutzerwunsch 2026-11-09): der Tag, an dem der
+    # Baustein auf "In Bearbeitung" wechselte bzw. auf "Abgeschlossen"/"Nicht bestanden"
+    # (bearbeitung_nach_statuswechsel), im Formular aenderbar. Daraus zeigt die
+    # HJ-Zusammenfassung, wie lange am Baustein gearbeitet wurde. Nur in der Arbeitsdatei.
+    beginn: Optional[date] = None
+    ende: Optional[date] = None
 
 
 @dataclass
@@ -2317,6 +2430,8 @@ def baustein_als_dict(b: Baustein) -> dict:
         "status": b.status,
         "bausteinarbeit": b.bausteinarbeit,
         "halbjahr": b.halbjahr,
+        "beginn": _iso(b.beginn),
+        "ende": _iso(b.ende),
         "bemerkung": b.bemerkung,
     }
     for nr in LZK_NUMMERN:
@@ -2409,6 +2524,8 @@ def baustein_aus_dict(d: dict) -> Baustein:
         bausteinarbeit=d.get("bausteinarbeit") or "",
         halbjahr=d.get("halbjahr") or "",
         bemerkung=d.get("bemerkung") or "",
+        beginn=_to_date(d.get("beginn")),
+        ende=_to_date(d.get("ende")),
     )
     for nr in LZK_NUMMERN:
         lzk = d.get(f"lzk_{nr}") or {}

@@ -93,8 +93,8 @@ Danach reicht ein Doppelklick auf diese Datei.
   Datum; kommt die Frist aus einer LZK, steht dort "LZK". Angezeigt wird
   immer der nächstliegende der beiden Termine, und die Spalte **Anlass**
   lässt sich wie jede andere über ihren Kopf sortieren.
-- **Baustein-Formular**: Baustein, Status, Halbjahr, Bemerkung, **Anzahl LZK**,
-  dann so viele LZK-Blöcke (Datum, Ergebnis, Punkte, Bemerkung). Die Knöpfe **Übernehmen**/**Abbrechen** stehen fest unten und sind immer
+- **Baustein-Formular**: Baustein, Status, Halbjahr, **Beginn und Ende der
+  Bearbeitung**, Bemerkung, **Anzahl LZK**, dann so viele LZK-Blöcke (Datum, Ergebnis, Punkte, Bemerkung). Die Knöpfe **Übernehmen**/**Abbrechen** stehen fest unten und sind immer
   zu sehen; reicht der Bildschirm nicht, scrollt das Formular darüber. Das frühere
   Feld **Bausteinarbeit** gibt es nicht mehr (seit 2026-10-04): was dort stand,
   steht verlustfrei als eigene Zeile „Bausteinarbeit: …“ am Ende der Bemerkung.
@@ -118,6 +118,28 @@ Danach reicht ein Doppelklick auf diese Datei.
   setzt nur du. Verkleinerst du in der Vorlage die Anzahl, fragt die App, ob die
   Bausteine, die damit fertig sind, abgeschlossen werden sollen. Rückwirkend beim
   Laden ändert sich nichts.
+- **Status per Rechtsklick** (seit 2026-11-09): Rechtsklick auf einen Baustein
+  in der Tabelle (Mac: rechte Maustaste oder Ctrl-Klick) zeigt Namen, Beginn
+  bzw. Dauer der Bearbeitung und alle Zustände – der jetzige ist angehakt; ein
+  Klick setzt den neuen. Sind mehrere Zeilen markiert (Strg/Cmd-Klick) und
+  klickst du auf eine davon, gilt die Wahl für alle. Es geschieht dasselbe wie
+  im Formular: das Halbjahr folgt dem Status, Beginn und Ende ebenso (die
+  Statuszeile unten sagt, was mitging). **Ein Fehlklick kostet nichts:** wählst
+  du gleich wieder den vorigen Status, kehren auch Halbjahr, Beginn und Ende
+  zurück. Bei Zeilen aus der App (Lerntheken, Talks) ändert sich nur der Status –
+  ihr Halbjahr bleibt, denn daran findet der Abruf sie wieder (das gilt jetzt
+  auch im Formular; vorher entstand dort beim nächsten Abruf eine zweite Zeile).
+- **Beginn und Ende der Bearbeitung** (seit 2026-11-09): Wechselt ein Baustein
+  auf „In Bearbeitung“, steht als Beginn der heutige Tag (ein früherer Beginn
+  bleibt). Wechselt er auf „Abgeschlossen“ oder „Nicht bestanden“, steht dort
+  das Ende. Das gilt für Rechtsklick, Formular und die automatischen Wechsel
+  (LZK aus OSKlar zugeordnet, alle LZK bestanden). Wird ein abgeschlossener
+  Baustein wieder geöffnet, fällt das Ende weg, der Beginn bleibt. Liegt der
+  Baustein in einem früheren Halbjahr, bleibt der Tag leer – „heute“ wäre dort
+  falsch. Im Formular siehst du beide Felder sofort und kannst sie ändern (auch
+  nachtragen). Die HJ-Zusammenfassung zeigt daraus je Baustein Zeitraum und
+  Dauer. Bausteine von vor dem 09.11.2026 haben (noch) keine Angaben. Beginn und
+  Ende stehen nur in der Arbeitsdatei, nicht im Excel-Export.
 - **Bemerkung zur LZK 1 / 2** (im Baustein-Formular): kurze Notiz zur
   jeweiligen Leistungszielkontrolle ("nur Teil 1", "Nachschreibtermin").
   Sie erscheint in der Baustein-Tabelle hinter dem jeweiligen Datum.
@@ -346,8 +368,10 @@ werden alle Noten aus ihren Punkten neu berechnet.
 ## Halbjahres-Zusammenfassung
 
 Der Knopf **„Zusammenfassung…“** oben rechts bei einer Person zeigt alles aus einem
-Halbjahr (voreingestellt: das laufende): bearbeitete Bausteine mit Status und
-Kommentaren, die LZK mit Note, Ergebnis und Bemerkung, die Zahl der
+Halbjahr (voreingestellt: das laufende): bearbeitete Bausteine mit Status,
+**Zeitraum und Dauer der Bearbeitung** („Abgeschlossen, bearbeitet 03.10.2026 –
+31.10.2026 (28 Tage ≈ 4 Wochen)“, „In Bearbeitung seit 01.11.2026 (bisher 8
+Tage)“) und Kommentaren, die LZK mit Note, Ergebnis und Bemerkung, die Zahl der
 Fachbüro-Besuche (mit Daten) und die Mathe-Talks. Oben lässt sich das Halbjahr
 wechseln und die **HJ-Note** für genau dieses Halbjahr eintragen. Sie wird
 übernommen, sobald man das Halbjahr wechselt oder das Fenster schließt. „Text
@@ -357,7 +381,8 @@ kopieren“ legt die Zusammenfassung in die Zwischenablage.
 den Status auf „In Bearbeitung“ oder „Abgeschlossen“, springt das Feld Halbjahr
 sofort auf das laufende Halbjahr – sichtbar, du kannst es vor dem Übernehmen noch
 ändern. Ein selbst eingetragenes Halbjahr wird nie überschrieben; stellst du den
-Status zurück, kehrt der alte Wert zurück.
+Status zurück, kehrt der alte Wert zurück. Beginn und Ende der Bearbeitung folgen
+dem Status genauso (seit 2026-11-09).
 
 Die HJ-Note wird jetzt pro Halbjahr gespeichert. Das Feld „HJ-Note (lfd. HJ)“ im
 Personenkopf ist die Note des laufenden Halbjahres. Eine Note aus einer älteren
