@@ -32,7 +32,9 @@ const HERF = await neu('herf', 'admin');
 // --- Helfer und Handler aus dem Quelltext --------------------------------
 // Talk-Bausteine (TALK_MITVORTRAG_JSON u.a.) braucht der Kalender-Handler mit.
 const talkBausteine = src.slice(src.indexOf('const TALK_MAX_VORTRAGENDE'), src.indexOf('// Vorgegebene Auswahl für die Qualitäts-Bewertung'));
-const hilfen = talkBausteine + src.slice(src.indexOf("const LZK_STATUS = "), src.indexOf("app.get('/api/lzk',"));
+// ... und seit 2026-11-18 die Felder der Veranstaltungen.
+const vstFelder = src.slice(src.indexOf('const VERANSTALTUNG_FELDER'), src.indexOf('// Eingaben pruefen: { fehler }'));
+const hilfen = talkBausteine + vstFelder + src.slice(src.indexOf("const LZK_STATUS = "), src.indexOf("app.get('/api/lzk',"));
 function handler(marke) {
   const a = src.indexOf(marke);
   if (a < 0) throw new Error('nicht gefunden: ' + marke);

@@ -119,7 +119,7 @@ const fristTag = lauf(`(() => { const m = lwMonday(); m.setDate(m.getDate() + 63
 klick(fristTag, 0);
 pruefe('R8 ... und sagt dann bis wann planbar ist, ohne Knopf',
   menue().hidden === false && menue().innerHTML.includes('Liegt hinter der 8-Wochen-Frist – planbar bis')
-  && !menue().innerHTML.includes('<button'), menue().innerHTML);
+  && !menue().innerHTML.includes('awSchnellAnlegen('), menue().innerHTML);
 zu();
 
 // ── K) Klicken ───────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ for (const [d, bi, was] of [[T[0], 3, 'eigener Englisch-Termin'], [T[0], 4, 'Mat
   [T[1], 0, 'Mathe 08:45-10:15'], [T[1], 1, 'hineinreichender Mathe-Termin']]) {
   klick(d, bi);
   pruefe(`K6 voll (${was}): Hinweis, kein Knopf`, menue().innerHTML.includes('In diesem Feld ist für Mathe keine Zeit mehr frei.')
-    && !menue().innerHTML.includes('<button'), menue().innerHTML);
+    && !menue().innerHTML.includes('awSchnellAnlegen('), menue().innerHTML);
 }
 lauf(`openModal = (id) => { __offen.push(id); }`);
 lauf(`__offen.length = 0; awSchnellAnlegen('input')`); await ruhe();

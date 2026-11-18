@@ -505,6 +505,14 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
 .aw-schnell-knopf{text-align:left;padding:7px 8px;border:none;border-radius:6px;background:none;
   font:inherit;color:var(--md-on-surface);cursor:pointer;}
 .aw-schnell-knopf:hover,.aw-schnell-knopf:focus-visible{background:var(--md-surface-container);outline:none;}
+.aw-schnell-trenner{height:1px;margin:3px 6px;background:var(--md-outline-variant);}
+/* Veranstaltungen (2026-11-18): grau und gestrichelt - eine Zeit, in der etwas anderes ist,
+   kein Angebot. */
+.lw-chip.vst-chip{border-left:3px dashed var(--md-on-surface-variant);background:var(--md-surface-container);color:var(--md-on-surface);}
+.lw-chip.vst-chip[role="button"]{cursor:pointer;}
+.cal-ev.cal-ev-vst{background:var(--md-surface-container);color:var(--md-on-surface-variant);border:1px dashed var(--md-outline-variant);}
+.vst-zeile{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--md-outline-variant);}
+.vst-kollision{font-size:12.5px;line-height:1.45;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
 /* Taskcards-Einbettung über die volle Breite unter Login + Wochenübersicht
    (nur sichtbar, wenn TASKCARDS_EMBED_URL gesetzt ist). */
 .login-taskcards{
@@ -1427,6 +1435,7 @@ textarea.form-input{
       <div id="cal-admin-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="btn-act btn-green" onclick="openInputSlotModal()">+ FaBü-Termin</button>
         <button class="btn-act btn-outline" onclick="openDeadlineModal()">+ Deadline</button>
+        <button class="btn-act btn-outline" onclick="openVeranstaltungen()">📌 Veranstaltungen</button>
         <button class="btn-act btn-outline" onclick="openTermineVerwalten()">☰ Termine verwalten</button>
         <button class="btn-act btn-outline" onclick="loadCalendar()">↺ Laden</button>
       </div>
@@ -1876,6 +1885,73 @@ textarea.form-input{
 </div>
 
 <!-- ══ MODAL: Fachbüro-Termin freischalten (Admin) ═══════════════════════════════ -->
+<!-- ══ MODAL: Veranstaltungen - Liste (Lernbegleitung, 2026-11-18) ═════════════════ -->
+<div class="overlay" id="modal-veranstaltungen">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">📌 Veranstaltungen</div>
+    <div style="font-size:12.5px;color:var(--md-on-surface-variant);line-height:1.45;margin-bottom:10px;">
+      Besondere Zeiten wie ILePs, Forumstheater oder Laienreanimation – für die ganze Gruppe oder einen Teil davon.
+      Wer dabei ist, kann in der Zeit nichts buchen und nicht dazukommen; bei der ganzen Gruppe wird dort auch nichts angelegt.
+    </div>
+    <div id="vstl-inhalt"></div>
+    <div class="modal-actions">
+      <button class="btn-act btn-outline" onclick="openVeranstaltungNeu()">+ Neue Veranstaltung</button>
+      <button class="btn-act btn-blue" onclick="closeModal('modal-veranstaltungen')">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Veranstaltung eintragen/bearbeiten ═══════════════════════════════════ -->
+<div class="overlay" id="modal-veranstaltung">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title" id="vst-kopf">📌 Veranstaltung eintragen</div>
+    <div class="form-group">
+      <label class="form-label" for="vst-titel">Was?</label>
+      <input class="form-input" id="vst-titel" maxlength="80" placeholder="z.B. ILePs, Forumstheater, Laienreanimation" oninput="vstGeaendert()">
+    </div>
+    <div class="form-group" style="display:flex;gap:10px;">
+      <div style="flex:1;"><label class="form-label" for="vst-von-tag">Von</label><input class="form-input" id="vst-von-tag" type="date" onchange="vstVonTagGeaendert()"></div>
+      <div style="flex:1;"><label class="form-label" for="vst-bis-tag">Bis</label><input class="form-input" id="vst-bis-tag" type="date" onchange="vstGeaendert()"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="vst-zeit">Wann am Tag?</label>
+      <select class="form-input" id="vst-zeit" onchange="vstZeitUmschalten()">
+        <option value="tag">Ganzer Tag</option>
+        <option value="bloecke">Nur bestimmte Blöcke</option>
+      </select>
+      <div id="vst-bloecke" style="display:none;gap:10px;margin-top:6px;">
+        <div style="flex:1;"><label class="form-label" for="vst-block-von">ab</label><select class="form-input" id="vst-block-von" onchange="vstGeaendert()"></select></div>
+        <div style="flex:1;"><label class="form-label" for="vst-block-bis">bis einschließlich</label><select class="form-input" id="vst-block-bis" onchange="vstGeaendert()"></select></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="form-label" id="vst-wer-lbl">Wer ist dabei?</div>
+      <div role="radiogroup" aria-labelledby="vst-wer-lbl">
+        <label style="display:flex;align-items:center;gap:6px;padding:2px 0;"><input type="radio" name="vst-wer" id="vst-alle" onchange="vstWerUmschalten()"> Ganze Gruppe</label>
+        <label style="display:flex;align-items:center;gap:6px;padding:2px 0;"><input type="radio" name="vst-wer" id="vst-einzelne" onchange="vstWerUmschalten()"> Nur ein Teil der Gruppe</label>
+      </div>
+      <div id="vst-personen-box" style="display:none;margin-top:6px;">
+        <input class="form-input personen-suche" id="vst-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
+               aria-label="Schüler:innen nach Namen filtern" aria-controls="vst-personen"
+               oninput="personenFiltern('vst-personen', this.value)">
+        <label class="personen-alle" id="vst-personen-alle-zeile">
+          <input type="checkbox" id="vst-personen-alle" aria-controls="vst-personen"
+                 onchange="personenAlleWaehlen('vst-personen', this.checked); vstGeaendert()">
+          <span id="vst-personen-alle-text">Alle auswählen</span></label>
+        <div id="vst-personen-keiner" class="personen-keiner" hidden>Niemand gefunden.</div>
+        <div role="group" aria-labelledby="vst-wer-lbl" id="vst-personen" style="max-height:200px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div id="vst-kollisionen"></div>
+    <div id="vst-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-act btn-red" id="vst-loeschen" onclick="vstLoeschen()" style="margin-right:auto;">Löschen</button>
+      <button class="btn-cancel" onclick="closeModal('modal-veranstaltung')">Abbrechen</button>
+      <button class="btn-act btn-blue" id="vst-speichern" onclick="vstSpeichern()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Schnellanlegen in "Meine Woche" der Lernbegleitung: kleines Menue am angetippten Feld -->
 <div id="aw-schnell" class="aw-schnell" hidden aria-label="Termin hier anlegen"></div>
 
@@ -4288,6 +4364,7 @@ function mwAktion(s) {
   // warten, bis die Lernbegleitung entscheidet. Jetzt kann man sie selbst zurueckziehen.
   if (st === 'requested') return { text: 'Anfrage zurückziehen', ruf: `calWithdrawRequest(${s.myInvitationId})` };
   if (st === 'conflict') {
+    if (s._conflict && s._conflict.veranstaltung) return { hinweis: `✕ In dieser Zeit bist du bei „${s._conflict.veranstaltung.titel}“.` };
     const eigen = s._conflict && s._conflict.slot;
     const was = eigen
       ? `${subjectById(eigen.subjectId).name}-${eigen.typ === 'input' ? 'Fachbüro' : 'Talk'}${eigen.uhrzeit ? ' um ' + eigen.uhrzeit : ''}`
@@ -4446,6 +4523,9 @@ async function loadMyWeek() {
   // Eigene LZK dieser Woche (der Server liefert Schueler:innen nur die eigenen).
   const weekLzk = (data.lzk || []).filter(l => l.datumIso && dayStrs.includes(l.datumIso) && l.anfrage !== 'abgelehnt');
 
+  // Veranstaltungen, bei denen man dabei ist (der Server liefert nur die eigenen).
+  const vr = vstRaster(data.veranstaltungen, dayStrs);
+
   // Termine, die sich mit einer eigenen Buchung ueberschneiden, werden NICHT mehr
   // ausgeblendet, sondern ausgegraut angezeigt: so sieht man, dass es das Angebot
   // gibt und warum es fuer einen selbst nicht in Frage kommt. Offene Einladungen
@@ -4469,6 +4549,11 @@ async function loadMyWeek() {
     const bis = von + (parseInt(s.dauer, 10) || 45);
     // Objekt statt true: mwState() prueft nur auf "wahr", die Leiste kann den Termin nennen.
     s._conflict = busy.find(b => b.datum === s.datum && von < b.bis && b.von < bis) || false;
+    // Eine Veranstaltung, bei der man dabei ist (2026-11-18), sperrt die Zeit ebenso.
+    if (!s._conflict) {
+      const v = vstAm(vr.woche, s.datum).find(x => vstTrifft(x, von, bis - von));
+      if (v) s._conflict = { veranstaltung: v };
+    }
   });
   const visible = weekSlots;
   // Fuer die Aktionsleiste: sie arbeitet mit der Termin-ID aus der angetippten Kachel.
@@ -4498,7 +4583,7 @@ async function loadMyWeek() {
   const blockRows = LW_BLOCKS.map((b, bi) => {
     const { trenner, zebra } = lwZeilenStil(bi);
     return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${mwZelleHtml(cells[bi][di])}</div>`).join('');
+      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${vr.block[bi][di].map(v => vstChip(v, false)).join('')}${mwZelleHtml(cells[bi][di])}</div>`).join('');
   }).join('');
 
   // LZK sind ganztaegig: eine eigene Zeile ueber den Zeitbloecken, nur wenn es welche gibt.
@@ -4537,8 +4622,8 @@ async function loadMyWeek() {
         <button class="mw-serie-knopf" type="button" onclick="openLzkEintragModal()">📝 LZK anfragen</button>
       </div>
     </div>
-    ${(weekSlots.length || weekLzk.length)
-      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${lzkZeile}${blockRows}</div></div>`
+    ${(weekSlots.length || weekLzk.length || vr.woche.length)
+      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${lzkZeile}${vstGanztagsZeile(vr, false)}${blockRows}</div></div>`
       : '<div class="lw-empty">In dieser Woche sind noch keine Termine angelegt.</div>'}
     <div class="mw-legend">
       <span>Buchstabe/Farbe = Fach</span>
@@ -4547,7 +4632,8 @@ async function loadMyWeek() {
       <span><b>✓ von dir gebucht</b></span>
       <span><span class="lw-legende-feld ist-frei"></span> frei = noch buchbar · noch Plätze frei = Fachbüro, du kannst mitmachen</span>
       <span><span class="lw-legende-feld ist-vergeben"></span> vergeben</span>
-      ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine</span>' : ''}
+      ${conflictCount ? '<span>ausgegraut = überschneidet sich mit einem deiner Termine oder einer Veranstaltung</span>' : ''}
+      ${vr.woche.length ? '<span>📌 Veranstaltung – in der Zeit bist du verhindert</span>' : ''}
       ${weekLzk.length ? '<span>📝 LZK – ganztägig, antippen öffnet den Tag im Kalender</span>' : ''}
       <span>Termin antippen, dann erscheint unten, was damit geht.</span>
       <span>Kacheln wie „6 × 15 Min" fassen aufeinanderfolgende Termine zusammen – antippen zeigt sie einzeln.</span>
@@ -5944,6 +6030,13 @@ function calItemsByDay() {
   (calData.slots || []).filter(calImKalenderZeigen).forEach(s => { (map[s.datum] = map[s.datum] || []).push({ kind: 'slot', ...s }); });
   (calData.deadlines || []).forEach(d => { (map[d.datum] = map[d.datum] || []).push({ kind: 'deadline', ...d }); });
   (calData.lzk || []).filter(calLzkZeigen).forEach(l => { (map[l.datumIso] = map[l.datumIso] || []).push({ kind: 'lzk', ...l }); });
+  // Veranstaltungen an jedem ihrer Tage (2026-11-18); ganztaegige sortieren nach vorn.
+  (calData.veranstaltungen || []).forEach(v => {
+    for (const d = new Date(v.datumVon + 'T00:00:00'); calDateStr(d) <= v.datumBis; d.setDate(d.getDate() + 1)) {
+      const ds = calDateStr(d);
+      (map[ds] = map[ds] || []).push({ kind: 'vst', ...v, uhrzeit: v.von || '' });
+    }
+  });
   return map;
 }
 
@@ -6423,6 +6516,7 @@ function renderCalendar() {
     const platz = lzks.length ? 2 : 3;
     const evs = (lzks.length ? calLzkChip(lzks, isAdminView) : '') + rest.slice(0, platz).map(it => {
       if (it.kind === 'deadline') return `<div class="cal-ev cal-ev-deadline" title="${escHtml(it.titel)}">⏰ ${escHtml(it.titel)}</div>`;
+      if (it.kind === 'vst') return `<div class="cal-ev cal-ev-vst" title="${escHtml(it.titel + ' · ' + vstZeitText(it))}">📌 ${escHtml(it.titel)}</div>`;
       const subj = subjectById(it.subjectId);
       // Piktogramm als SVG statt Emoji: 📘/🎤 sind immer gleich eingefaerbt, egal zu
       // welchem Fach der Termin gehoert - dadurch sah das ganze Raster blau aus. Das
@@ -6468,6 +6562,14 @@ function renderCalDetail() {
 
   const rows = items.map(it => {
     if (it.kind === 'lzk') return calLzkZeile(it, isAdmin);
+    if (it.kind === 'vst') {
+      const wer = isAdmin ? vstWerText(it) : (it.alle ? 'ganze Gruppe' : 'du bist dabei');
+      return `<div class="stat-card" style="margin-bottom:8px;border-left:3px dashed var(--md-on-surface-variant);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div>📌 <strong>${escHtml(it.titel)}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${escHtml(vstZeitText(it))} · ${escHtml(wer)}</span></div>
+          ${isAdmin ? `<button class="btn-icon" onclick="openVeranstaltung(${it.id})" title="Veranstaltung bearbeiten" aria-label="Veranstaltung bearbeiten">✎</button>` : ''}
+        </div></div>`;
+    }
     if (it.kind === 'deadline') {
       return `<div class="stat-card" style="margin-bottom:8px;border-left:3px solid #1d4ed8;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -6928,6 +7030,7 @@ async function submitInputSlot() {
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { errEl.textContent = d.error || 'Fehler.'; errEl.style.display = 'block'; return; }
   if (d.gekuerzt) alert(planGekuerztText(d));
+  if (d.gesperrt && d.gesperrt.length) alert(vstGesperrtText(d.gesperrt));
   // Kam der Termin aus einem Wunsch, werden jetzt die Interessierten eingeladen.
   // Bei einer Serie haengt der Wunsch am ersten Termin.
   if (_wunschFuerTermin && d.ids && d.ids.length) {
@@ -7941,6 +8044,220 @@ async function awVortrag(sessionId, status) {
   loadCalendar();
 }
 
+// ── Veranstaltungen (Nutzerwunsch 2026-11-18) ─────────────────────────────────────
+// Besondere Zeiten (ILePs, Forumstheater, Laienreanimation ...) fuer die ganze Gruppe oder einen
+// Teil davon. Wer dabei ist, kann in der Zeit nichts buchen und nicht dazukommen; bei der ganzen
+// Gruppe wird dort auch nichts angelegt - das prueft der Server, die Seite zeigt es nur an.
+// Daten: calData.veranstaltungen bzw. die Woche der Schueler:innen (beides /api/calendar).
+// Zeitfenster an jedem Tag in Minuten - dieselbe Regel wie veranstaltungFenster/-Trifft in server.js.
+function vstFenster(v) {
+  const a = lwMin(v.von), b = lwMin(v.bis);
+  return (a === null || b === null) ? [0, 24 * 60] : [a, b];
+}
+function vstTrifft(v, start, dauer) {
+  const [a, b] = vstFenster(v);
+  return start === null ? (a === 0 && b === 24 * 60) : (start < b && a < start + dauer);
+}
+function vstAm(liste, datum) { return (liste || []).filter(v => v.datumVon <= datum && datum <= v.datumBis); }
+function vstZeitText(v) { return v.von ? `${v.von}–${v.bis}` : 'ganzer Tag'; }
+function vstTageText(v) { return v.datumVon === v.datumBis ? lwFmtDay(v.datumVon) : `${lwFmtDay(v.datumVon)} – ${lwFmtDay(v.datumBis)}`; }
+// Wer dabei ist - fuer Lernbegleitungen: "ganze Gruppe", bis drei Namen, sonst die Anzahl.
+function vstWerText(v) {
+  if (v.alle) return 'ganze Gruppe';
+  const namen = (v.personen || []).map(p => p.username);
+  return namen.length <= 3 ? namen.join(', ') : `${namen.length} Personen`;
+}
+// Kachel im Wochenraster; fuer Lernbegleitungen antippbar (bearbeiten).
+function vstChip(v, admin) {
+  const wer = admin ? vstWerText(v) : (v.alle ? 'ganze Gruppe' : 'du bist dabei');
+  const tip = escHtml([v.titel, vstTageText(v), vstZeitText(v), wer].join(' · '));
+  const klick = admin ? ` role="button" tabindex="0" onclick="openVeranstaltung(${v.id})"`
+    + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVeranstaltung(${v.id});}"` : '';
+  return `<div class="lw-chip vst-chip" title="${tip}" aria-label="${tip}"${klick}>
+    <div class="lw-chip-time">📌 ${escHtml(v.titel)}</div>
+    <div class="lw-chip-meta">${escHtml(vstZeitText(v))} · ${escHtml(wer)}</div></div>`;
+}
+// Veranstaltungen einer Woche fuers Raster: ganztaegige in einer eigenen Zeile ueber den Bloecken
+// (wie die LZK), die uebrigen als Kachel in jedem Block, den sie beruehren.
+function vstRaster(liste, dayStrs) {
+  const woche = (liste || []).filter(v => dayStrs.some(d => v.datumVon <= d && d <= v.datumBis));
+  return {
+    woche,
+    ganz: dayStrs.map(d => vstAm(woche, d).filter(v => !v.von)),
+    block: LW_BLOCKS.map(b => dayStrs.map(d => vstAm(woche, d)
+      .filter(v => v.von && vstTrifft(v, lwMin(b.von), lwMin(b.bis) - lwMin(b.von))))),
+  };
+}
+function vstGanztagsZeile(vr, admin) {
+  if (!vr.ganz.some(x => x.length)) return '';
+  return `<div class="lw-blockhead">📌 Veranstaltung<span>ganztägig</span></div>`
+    + vr.ganz.map(liste => `<div class="lw-cell">${liste.map(v => vstChip(v, admin)).join('')}</div>`).join('');
+}
+// Eine Reihe hat Tage einer Veranstaltung fuer die ganze Gruppe ausgelassen.
+function vstGesperrtText(gesperrt) {
+  return 'Nicht angelegt, weil dort eine Veranstaltung für die ganze Gruppe ist:\n'
+    + gesperrt.map(g => `· ${lwFmtDay(g.datum)}: ${g.titel}`).join('\n');
+}
+
+// Liste aller Veranstaltungen (Knopf in Mein Kalender).
+function openVeranstaltungen() { vstListeRender(); openModal('modal-veranstaltungen'); }
+function vstListeRender() {
+  const el = document.getElementById('vstl-inhalt');
+  if (!el) return;
+  const heute = calDateStr(new Date());
+  const alle = calData.veranstaltungen || [];
+  const kommend = alle.filter(v => v.datumBis >= heute);
+  const vorbei = alle.filter(v => v.datumBis < heute).reverse();
+  const zeile = v => `<div class="vst-zeile"><div style="flex:1;min-width:0;"><strong>📌 ${escHtml(v.titel)}</strong>
+      <div style="font-size:12px;color:var(--md-on-surface-variant);">${escHtml(vstTageText(v))} · ${escHtml(vstZeitText(v))} · ${escHtml(vstWerText(v))}</div></div>
+      <button class="btn-icon" onclick="openVeranstaltung(${v.id})" title="Bearbeiten" aria-label="${escHtml(v.titel)} bearbeiten">✎</button></div>`;
+  el.innerHTML = (kommend.length ? kommend.map(zeile).join('') : '<div class="lw-empty">Keine anstehenden Veranstaltungen.</div>')
+    + (vorbei.length ? `<details style="margin-top:10px;"><summary>Vergangene (${vorbei.length})</summary>${vorbei.map(zeile).join('')}</details>` : '');
+}
+
+// Formular: neu (vor = Vorbelegung aus dem angetippten Feld) oder bearbeiten.
+let _vst = null;   // { id | null, geprueft: die zuletzt gepruefte Eingabe (JSON) | null }
+function openVeranstaltungNeu(vor) {
+  const v = vor || {};
+  const tag = v.datumVon || calSelected || calDateStr(new Date());
+  vstFormular({ id: null, titel: '', datumVon: tag, datumBis: v.datumBis || tag, von: v.von || null, bis: v.bis || null,
+    alle: true, personen: [] });
+}
+function openVeranstaltung(id) {
+  const v = (calData.veranstaltungen || []).find(x => x.id === id);
+  if (v) vstFormular(v);
+}
+function vstFormular(v) {
+  _vst = { id: v.id || null, geprueft: null };
+  document.getElementById('vst-kopf').textContent = v.id ? '📌 Veranstaltung bearbeiten' : '📌 Veranstaltung eintragen';
+  document.getElementById('vst-titel').value = v.titel || '';
+  document.getElementById('vst-von-tag').value = v.datumVon;
+  document.getElementById('vst-bis-tag').value = v.datumBis || v.datumVon;
+  const von = document.getElementById('vst-block-von'), bis = document.getElementById('vst-block-bis');
+  von.innerHTML = LW_BLOCKS.map((b, i) => `<option value="${i}">${escHtml(b.label)} (ab ${b.von})</option>`).join('');
+  bis.innerHTML = LW_BLOCKS.map((b, i) => `<option value="${i}">${escHtml(b.label)} (bis ${b.bis})</option>`).join('');
+  const iVon = LW_BLOCKS.findIndex(b => b.von === v.von), iBis = LW_BLOCKS.findIndex(b => b.bis === v.bis);
+  von.value = String(iVon === -1 ? 0 : iVon);
+  bis.value = String(iBis === -1 ? LW_BLOCKS.length - 1 : iBis);
+  document.getElementById('vst-zeit').value = v.von ? 'bloecke' : 'tag';
+  document.getElementById('vst-alle').checked = v.alle !== false;
+  document.getElementById('vst-einzelne').checked = v.alle === false;
+  const dabei = new Set((v.personen || []).map(p => p.id));
+  document.getElementById('vst-suche').value = '';
+  document.getElementById('vst-personen-keiner').hidden = true;
+  document.getElementById('vst-personen').innerHTML = (calClassmates || []).map(c =>
+    `<label data-name="${personenName(c)}" style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+      <input type="checkbox" value="${c.id}" class="vst-p-cb"${dabei.has(c.id) ? ' checked' : ''} onchange="personenAlleStand('vst-personen'); vstGeaendert()"> ${escHtml(c.username)}
+    </label>`).join('') || '<span style="color:var(--md-on-surface-variant);font-size:13px;">Keine Schüler:innen gefunden.</span>';
+  document.getElementById('vst-loeschen').style.display = v.id ? '' : 'none';
+  document.getElementById('vst-kollisionen').innerHTML = '';
+  document.getElementById('vst-error').style.display = 'none';
+  document.getElementById('vst-speichern').textContent = 'Speichern';
+  vstZeitUmschalten();
+  vstWerUmschalten();
+  openModal('modal-veranstaltung');
+}
+function vstZeitUmschalten() {
+  document.getElementById('vst-bloecke').style.display = document.getElementById('vst-zeit').value === 'bloecke' ? 'flex' : 'none';
+  vstGeaendert();
+}
+function vstWerUmschalten() {
+  document.getElementById('vst-personen-box').style.display = document.getElementById('vst-einzelne').checked ? '' : 'none';
+  personenAlleStand('vst-personen');
+  vstGeaendert();
+}
+function vstVonTagGeaendert() {
+  const von = document.getElementById('vst-von-tag').value, bis = document.getElementById('vst-bis-tag');
+  if (von && (!bis.value || bis.value < von)) bis.value = von;
+  vstGeaendert();
+}
+// Nach dem Pruefen geaendert: die Liste darunter passt nicht mehr - beim Speichern neu pruefen.
+function vstGeaendert() {
+  if (!_vst || !_vst.geprueft) return;
+  _vst.geprueft = null;
+  document.getElementById('vst-kollisionen').innerHTML = '';
+  document.getElementById('vst-speichern').textContent = 'Speichern';
+}
+function vstLesen() {
+  const titel = document.getElementById('vst-titel').value.trim();
+  if (!titel) return { fehler: 'Bitte angeben, was stattfindet.' };
+  const datumVon = document.getElementById('vst-von-tag').value;
+  if (!datumVon) return { fehler: 'Bitte ein Datum angeben.' };
+  const datumBis = document.getElementById('vst-bis-tag').value || datumVon;
+  let von = null, bis = null;
+  if (document.getElementById('vst-zeit').value === 'bloecke') {
+    const i = parseInt(document.getElementById('vst-block-von').value), j = parseInt(document.getElementById('vst-block-bis').value);
+    if (j < i) return { fehler: 'Der letzte Block liegt vor dem ersten.' };
+    von = LW_BLOCKS[i].von; bis = LW_BLOCKS[j].bis;
+  }
+  const alle = document.getElementById('vst-alle').checked;
+  const personen = alle ? [] : [...document.querySelectorAll('.vst-p-cb')].filter(b => b.checked).map(b => parseInt(b.value));
+  if (!alle && !personen.length) return { fehler: 'Bitte wählen, wer dabei ist – oder „Ganze Gruppe“.' };
+  return { titel, datumVon, datumBis, von, bis, alle, personen };
+}
+function vstKollisionenHtml(k) {
+  const termin = x => `${escHtml(lwFmtDay(x.datum))} ${escHtml(x.uhrzeit || '')} · ${escHtml((x.fach || '') + (x.typ === 'input' ? '-FaBü' : '-Talk'))}`;
+  const n = k.frei.length;
+  return `<div class="vst-kollision"><strong>In dieser Zeit liegt schon etwas:</strong>
+    ${n ? `<div style="margin-top:6px;">${n} freie${n === 1 ? 'r' : ''} Termin${n === 1 ? '' : 'e'}: ${k.frei.map(termin).join(' · ')}</div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:4px;"><input type="checkbox" id="vst-frei-loeschen" checked> Die freien gleich löschen – buchen kann sie ohnehin niemand mehr</label>` : ''}
+    ${k.gebucht.length ? `<div style="margin-top:6px;">Gebucht – bleibt stehen, bitte selbst klären (z.B. 🤒 oder „☰ Termine verwalten“):
+      <ul style="margin:4px 0 0 18px;padding:0;">${k.gebucht.map(x => `<li>${termin(x)}${x.personen.length ? ' – ' + escHtml(x.personen.join(', ')) : ''}</li>`).join('')}</ul></div>` : ''}
+  </div>`;
+}
+// Speichern in zwei Schritten: erst nachsehen, was in der Zeit schon liegt - liegt etwas da,
+// steht es unter dem Formular und der Knopf heisst "Trotzdem speichern".
+async function vstSpeichern() {
+  const fehler = document.getElementById('vst-error');
+  const zeige = t => { fehler.textContent = t; fehler.style.display = t ? 'block' : 'none'; };
+  zeige('');
+  if (!_vst) return;
+  const body = vstLesen();
+  if (body.fehler) return zeige(body.fehler);
+  const url = _vst.id ? `/api/admin/veranstaltungen/${_vst.id}` : '/api/admin/veranstaltungen';
+  const sende = async extra => {
+    const r = await fetch(url, { method: _vst.id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ...body, ...extra }) });
+    return { r, d: await r.json().catch(() => ({})) };
+  };
+  const eingabe = JSON.stringify(body);
+  if (_vst.geprueft !== eingabe) {
+    const { r, d } = await sende({ pruefen: true });
+    if (!r.ok) return zeige(d.error || 'Fehler beim Prüfen.');
+    const k = d.kollisionen || { frei: [], gebucht: [] };
+    if (k.frei.length || k.gebucht.length) {
+      _vst.geprueft = eingabe;
+      document.getElementById('vst-kollisionen').innerHTML = vstKollisionenHtml(k);
+      document.getElementById('vst-speichern').textContent = 'Trotzdem speichern';
+      return;
+    }
+  }
+  const loeschen = document.getElementById('vst-frei-loeschen');
+  const { r, d } = await sende({ freieLoeschen: !!(loeschen && loeschen.checked) });
+  if (!r.ok) return zeige(d.error || 'Fehler beim Speichern.');
+  closeModal('modal-veranstaltung');
+  await vstNeuLaden();
+}
+async function vstLoeschen() {
+  if (!_vst || !_vst.id) return;
+  const v = (calData.veranstaltungen || []).find(x => x.id === _vst.id);
+  if (!confirm(`„${v ? v.titel : 'Veranstaltung'}“ löschen? Die Zeit ist danach wieder frei.`)) return;
+  const r = await fetch(`/api/admin/veranstaltungen/${_vst.id}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    const fehler = document.getElementById('vst-error');
+    fehler.textContent = d.error || 'Fehler beim Löschen.'; fehler.style.display = 'block';
+    return;
+  }
+  closeModal('modal-veranstaltung');
+  await vstNeuLaden();
+}
+// Danach: Kalender und Woche neu - und ist die Liste offen, zeigt sie gleich den neuen Stand.
+async function vstNeuLaden() {
+  await loadCalendar();
+  vstListeRender();
+}
+
 // ── Schnellanlegen in der Woche der Lernbegleitung (Nutzerwunsch 2026-11-09) ──────
 // Freie Stelle in einem Feld antippen (oder Rechtsklick) -> kleines Menue "＋ Mathe-FaBü /
 // ＋ Mathe-Talk". Daraus oeffnet das bekannte Anlege-Fenster, vorausgefuellt mit dem Tag und
@@ -7977,8 +8294,11 @@ function awFeldZustand(datum, bi) {
   const belegt = (calData.slots || [])
     .filter(s => s.datum === datum && (s.subjectId === fach.id || (me && s.teacherId === me.userId)))
     .map(s => { const a = lwMin(s.uhrzeit); return a === null ? null : [a, a + (parseInt(s.dauer, 10) || 45)]; })
-    .filter(Boolean)
-    .sort((x, y) => x[0] - y[0]);
+    .filter(Boolean);
+  // Eine Veranstaltung fuer die ganze Gruppe belegt fuer alle Faecher - dort wird nichts angelegt.
+  const sperren = vstAm(calData.veranstaltungen, datum).filter(v => v.alle);
+  sperren.forEach(v => belegt.push(vstFenster(v)));
+  belegt.sort((x, y) => x[0] - y[0]);
   const frei = [];
   for (const [a, e] of belegt) {
     if (e <= von) continue;
@@ -7988,7 +8308,9 @@ function awFeldZustand(datum, bi) {
   }
   if (von < bis) frei.push([von, bis]);
   const lang = frei.filter(([a, e]) => e - a >= 5);
-  return { art: lang.length ? 'frei' : 'voll', fach, frei: lang };
+  if (lang.length) return { art: 'frei', fach, frei: lang };
+  const v = sperren.find(x => vstTrifft(x, lwMin(b.von), lwMin(b.bis) - lwMin(b.von)));
+  return v ? { art: 'veranstaltung', fach, frei: [], veranstaltung: v } : { art: 'voll', fach, frei: [] };
 }
 
 function awFeldKlick(e, datum, bi) {
@@ -8003,6 +8325,7 @@ function awSchnellZeigen(datum, bi, x, y) {
   const menue = document.getElementById('aw-schnell');
   if (!menue) return;
   _awSchnell = null;
+  _awSchnellFeld = { datum, bi };
   const z = awFeldZustand(datum, bi);
   if (z.art === 'vorbei') { awSchnellZu(); return; }
   const fach = z.fach;
@@ -8010,6 +8333,8 @@ function awSchnellZeigen(datum, bi, x, y) {
   let inhalt;
   if (z.art === 'frist') {
     inhalt = `<div class="aw-schnell-hinweis">Liegt hinter der ${PLAN_WOCHEN}-Wochen-Frist – planbar bis ${escHtml(planTagText(planStichtagClient()))}.</div>`;
+  } else if (z.art === 'veranstaltung') {
+    inhalt = `<div class="aw-schnell-hinweis">📌 ${escHtml(z.veranstaltung.titel)} (ganze Gruppe) – hier wird nichts angelegt.</div>`;
   } else if (z.art === 'voll') {
     inhalt = `<div class="aw-schnell-hinweis">In diesem Feld ist für ${escHtml(fach.name)} keine Zeit mehr frei.</div>`;
   } else {
@@ -8023,6 +8348,9 @@ function awSchnellZeigen(datum, bi, x, y) {
       // Lernberatung & Co. werden zugeordnet - Talks gibt es dort nicht.
       + (fach.nurZugewiesen ? '' : knopf('talk', `${fach.name}-Talk`));
   }
+  // Eine Veranstaltung laesst sich in jedes Feld eintragen (2026-11-18) - Tag und Block stehen schon drin.
+  inhalt += '<div class="aw-schnell-trenner"></div>'
+    + '<button type="button" class="aw-schnell-knopf" onclick="awSchnellVeranstaltung()">📌 Veranstaltung eintragen …</button>';
   menue.innerHTML = kopf + inhalt;
   menue.hidden = false;
   // Am Klickpunkt, aber nie aus dem Bild heraus.
@@ -8038,6 +8366,12 @@ function awSchnellZu() {
   if (menue) { menue.hidden = true; menue.innerHTML = ''; }
 }
 
+let _awSchnellFeld = null;   // { datum, bi } des zuletzt angetippten Felds
+function awSchnellVeranstaltung() {
+  const f = _awSchnellFeld;
+  awSchnellZu();
+  if (f) openVeranstaltungNeu({ datumVon: f.datum, von: LW_BLOCKS[f.bi].von, bis: LW_BLOCKS[f.bi].bis });
+}
 function awSchnellAnlegen(typ) {
   const v = _awSchnell;
   awSchnellZu();
@@ -8093,6 +8427,7 @@ function renderAdminWeek() {
     </div>`
   ).join('');
 
+  const vr = vstRaster(calData.veranstaltungen, dayStrs);
   const blockRows = LW_BLOCKS.map((b, bi) => {
     const { trenner, zebra } = lwZeilenStil(bi);
     return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>` +
@@ -8104,7 +8439,7 @@ function renderAdminWeek() {
         const klasse = feld.art === 'vorbei' ? '' : feld.art === 'frei' ? ' aw-feld aw-feld-frei' : ' aw-feld';
         const attr = feld.art === 'vorbei' ? ''
           : `${feld.art === 'frei' ? ' title="Hier einen Termin anlegen"' : ''} onclick="${ruf}" oncontextmenu="${ruf}"`;
-        return `<div class="lw-cell${zebra}${klasse}"${attr}>${awZelleHtml(cells[bi][di])}</div>`;
+        return `<div class="lw-cell${zebra}${klasse}"${attr}>${vr.block[bi][di].map(v => vstChip(v, true)).join('')}${awZelleHtml(cells[bi][di])}</div>`;
       }).join('');
   }).join('');
 
@@ -8134,8 +8469,8 @@ function renderAdminWeek() {
         <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
       </div>
     </div>
-    <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
-    ${weekSlots.length
+    <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${vstGanztagsZeile(vr, true)}${blockRows}</div></div>
+    ${(weekSlots.length || vr.woche.length)
       ? `<div class="mw-legend">
            <span>Buchstabe/Farbe = Fach</span>
            <span>${lwBadge('talk', 'M', 'var(--md-on-surface-variant)')} ${lwIcon('talk')} Talk – runder Fach-Buchstabe</span>
@@ -8151,6 +8486,7 @@ function renderAdminWeek() {
            <span>Termin antippen zeigt alle Namen – beim FaBü trägst du dort Leute ein und aus und vermerkst ab dem Termintag, wer unentschuldigt gefehlt hat.</span>
            <span>Kacheln wie „3 × 15 Min" fassen freie Termine zusammen – gebuchte stehen immer einzeln.</span>
            <span>＋ freie Stelle in einem Feld antippen: Termin dort anlegen – Tag, Uhrzeit und noch freie Zeit sind schon eingetragen.</span>
+           ${vr.woche.length ? '<span>📌 Veranstaltung – ganze Gruppe: dort wird nichts angelegt; sonst sind nur die Genannten verhindert. Antippen bearbeitet sie.</span>' : ''}
          </div>`
       : '<div class="lw-empty">Diese Woche sind keine Termine angelegt – freie Stelle in einem Feld antippen legt einen an.</div>'}
     <div class="mw-bar" id="aw-actionbar"></div>
@@ -8934,6 +9270,7 @@ async function submitTalkingSlot() {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { alert(d.error || 'Fehler beim Anlegen.'); return; }
   if (d.gekuerzt) alert(planGekuerztText(d));
+  if (d.gesperrt && d.gesperrt.length) alert(vstGesperrtText(d.gesperrt));
   closeModal('modal-talking-slot');
   if (_tslotQuelle === 'kalender') loadCalendar(); else loadTalkingAdmin();
 }

@@ -506,6 +506,30 @@ async function initDB() {
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_infos_klasse ON infos(klasse, art);
+    -- Veranstaltungen (2026-11-18): besondere Zeiten des Tandems (ILePs, Forumstheater,
+    -- Laienreanimation ...) fuer die ganze Gruppe (alle) oder einzelne Schueler:innen
+    -- (veranstaltung_personen). Betroffene koennen in der Zeit nichts buchen und nicht
+    -- dazukommen; bei "alle" wird dort auch nichts angelegt. Gilt an jedem Tag von datum_von
+    -- bis datum_bis, von/bis 'HH:MM' - beide NULL = ganzer Tag.
+    CREATE TABLE IF NOT EXISTS veranstaltungen (
+      id         SERIAL PRIMARY KEY,
+      klasse     TEXT NOT NULL,
+      titel      TEXT NOT NULL,
+      datum_von  DATE NOT NULL,
+      datum_bis  DATE NOT NULL,
+      von        TEXT,
+      bis        TEXT,
+      alle       BOOLEAN NOT NULL DEFAULT true,
+      admin_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_veranstaltungen_klasse ON veranstaltungen(klasse, datum_von);
+    CREATE TABLE IF NOT EXISTS veranstaltung_personen (
+      veranstaltung_id INTEGER NOT NULL REFERENCES veranstaltungen(id) ON DELETE CASCADE,
+      user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (veranstaltung_id, user_id)
+    );
     CREATE TABLE IF NOT EXISTS user_subject_kurs (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -833,18 +857,63 @@ async function studentOccupiedIntervals(uid, excludeSlotId) {
     .filter(row => row.start !== null);
 }
 
-// true, wenn der Slot mit einem bereits belegten Zeitfenster der Person kollidiert.
-// Slots ohne parsebare Uhrzeit lösen nie einen Konflikt aus.
+// ── Veranstaltungen (Nutzerwunsch 2026-11-18) ──────────────────────────────────
+// Zeitfenster einer Veranstaltung an jedem ihrer Tage in Minuten, [von, bis); ohne Zeiten der
+// ganze Tag. Dieselbe Regel steht als vstFenster/vstTrifft in public/index.html.
+function veranstaltungFenster(v) {
+  const von = parseUhrzeitMin(v.von), bis = parseUhrzeitMin(v.bis);
+  return (von === null || bis === null) ? [0, 24 * 60] : [von, bis];
+}
+// Beruehrt die Veranstaltung [start, start+dauer)? Ohne Uhrzeit (start null) nur eine ganztaegige.
+function veranstaltungTrifft(v, start, dauer) {
+  const [a, b] = veranstaltungFenster(v);
+  if (start === null) return a === 0 && b === 24 * 60;
+  return start < b && a < start + dauer;
+}
+// Eine Veranstaltung FUER DIE GANZE GRUPPE an dem Tag in dieser Zeit? Dann wird dort nichts
+// angelegt (Nutzerwunsch 2026-11-18). null oder die Veranstaltung.
+async function veranstaltungFuerAlle(klasse, datum, uhrzeit, dauer) {
+  const r = await pool.query(`SELECT id, titel, von, bis FROM veranstaltungen
+    WHERE klasse=$1 AND $2::date BETWEEN datum_von AND datum_bis AND alle ORDER BY id`, [klasse, datum]);
+  const start = parseUhrzeitMin(uhrzeit);
+  return r.rows.find(v => veranstaltungTrifft(v, start, dauer || 45)) || null;
+}
+// Hat die Person an dem Tag in dieser Zeit eine Veranstaltung (ganze Gruppe oder sie steht auf
+// der Liste)? null oder die Veranstaltung.
+async function veranstaltungFuerPerson(uid, klasse, datum, start, dauer) {
+  const r = await pool.query(`SELECT v.id, v.titel, v.von, v.bis FROM veranstaltungen v
+    WHERE v.klasse=$1 AND $2::date BETWEEN v.datum_von AND v.datum_bis
+      AND (v.alle OR EXISTS (SELECT 1 FROM veranstaltung_personen vp WHERE vp.veranstaltung_id = v.id AND vp.user_id = $3))
+    ORDER BY v.id`, [klasse, datum, uid]);
+  return r.rows.find(v => veranstaltungTrifft(v, start, dauer)) || null;
+}
+const tagKurz = iso => `${String(iso).slice(8, 10)}.${String(iso).slice(5, 7)}.`;
+
+// Zeitkonflikt einer Person mit einem Slot: null = frei, sonst ein Objekt - { veranstaltung:
+// 'ILePs' }, wenn sie in der Zeit eine Veranstaltung hat (seit 2026-11-18), { veranstaltung: null }
+// bei einem anderen Termin. Die Aufrufer pruefen weiter nur auf "wahr"; konfliktText() macht
+// daraus die Meldung. Slots ohne parsebare Uhrzeit kollidieren nur mit einer ganztaegigen
+// Veranstaltung, nie mit Terminen.
 async function hasScheduleConflict(uid, slotId) {
   const t = await pool.query(
-    `SELECT to_char(datum,'YYYY-MM-DD') AS datum, uhrzeit, dauer FROM talking_slots WHERE id=$1`, [slotId]);
-  if (!t.rows.length) return false;
+    `SELECT to_char(datum,'YYYY-MM-DD') AS datum, uhrzeit, dauer, klasse FROM talking_slots WHERE id=$1`, [slotId]);
+  if (!t.rows.length) return null;
   const start = parseUhrzeitMin(t.rows[0].uhrzeit);
-  if (start === null) return false;
   const dauer = t.rows[0].dauer || 45;
   const datum = t.rows[0].datum;
+  const v = await veranstaltungFuerPerson(uid, t.rows[0].klasse, datum, start, dauer);
+  if (v) return { veranstaltung: v.titel };
+  if (start === null) return null;
   const occ = await studentOccupiedIntervals(uid, slotId);
-  return occ.some(o => o.datum === datum && start < o.start + o.dauer && o.start < start + dauer);
+  return occ.some(o => o.datum === datum && start < o.start + o.dauer && o.start < start + dauer)
+    ? { veranstaltung: null } : null;
+}
+// Meldung zu einem Zeitkonflikt: bei einer Veranstaltung ihr Name, sonst der bisherige Text.
+// wer: undefined = "du", ein Name = diese Person, '' = ohne (fuer Listen "ada: ...").
+function konfliktText(k, sonst, wer) {
+  if (!k || !k.veranstaltung) return sonst;
+  if (wer === '') return `📌 in dieser Zeit bei „${k.veranstaltung}“`;
+  return `📌 In dieser Zeit ${wer ? 'ist ' + wer : 'bist du'} bei „${k.veranstaltung}“.`;
 }
 
 // Räumt eine Session weg, an der niemand mehr hängt: keine vortragende Person und keine
@@ -875,8 +944,9 @@ async function assignStudentsToSlot(klasse, slotId, studentIds) {
   const okIds = [];
   for (const id of ids) {
     if (!byId[id]) continue; // ungültige/fremde ID wird stillschweigend übersprungen
-    if (await hasScheduleConflict(id, slotId)) {
-      conflicts.push({ userId: id, username: byId[id], reason: 'Zeitkonflikt: bereits ein anderer Termin zu dieser Uhrzeit' });
+    const k = await hasScheduleConflict(id, slotId);
+    if (k) {
+      conflicts.push({ userId: id, username: byId[id], reason: konfliktText(k, 'Zeitkonflikt: bereits ein anderer Termin zu dieser Uhrzeit', '') });
     } else {
       okIds.push(id);
     }
@@ -2547,9 +2617,10 @@ app.post('/api/talking-sessions', requireLogin, async (req, res) => {
       }
     }
     // Überschneidungsschutz: der/die Buchende darf zu dieser Zeit nicht schon belegt sein.
-    if (await hasScheduleConflict(req.session.userId, slotId)) {
+    const konflikt = await hasScheduleConflict(req.session.userId, slotId);
+    if (konflikt) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen anderen Termin.' });
+      return res.status(409).json({ error: konfliktText(konflikt, 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen anderen Termin.') });
     }
     const alleIds = [...ids, ...mitIds];
     if (alleIds.length) {
@@ -2764,8 +2835,9 @@ app.post('/api/talking-slots/:id/request', requireLogin, async (req, res) => {
       if (vorhanden && vorhanden.status === 'angenommen')
         return res.status(409).json({ error: 'Du bist bei diesem Termin schon eingetragen' });
     }
-    if (await hasScheduleConflict(req.session.userId, s.id))
-      return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit schon einen Termin' });
+    const konflikt = await hasScheduleConflict(req.session.userId, s.id);
+    if (konflikt)
+      return res.status(409).json({ error: konfliktText(konflikt, 'Zeitkonflikt: Du hast zu dieser Uhrzeit schon einen Termin') });
     // Eine alte Anfrage, eine offene Einladung oder eine Absage wird zur Teilnahme.
     if (vorhanden) {
       await pool.query(`UPDATE talking_invitations SET status='angenommen', updated_at=NOW() WHERE id=$1`, [vorhanden.id]);
@@ -2817,8 +2889,9 @@ app.post('/api/admin/talking-invitations/:id/decide', requireAdmin, async (req, 
       await dropEmptySession(row.sessionId);
       return res.json({ ok: true, accepted: false });
     }
-    if (await hasScheduleConflict(row.listenerId, row.slotId))
-      return res.status(409).json({ error: `Zeitkonflikt: ${row.username} hat zu dieser Uhrzeit inzwischen einen anderen Termin` });
+    const konflikt = await hasScheduleConflict(row.listenerId, row.slotId);
+    if (konflikt)
+      return res.status(409).json({ error: konfliktText(konflikt, `Zeitkonflikt: ${row.username} hat zu dieser Uhrzeit inzwischen einen anderen Termin`, row.username) });
     await pool.query(`UPDATE talking_invitations SET status='angenommen', updated_at=NOW() WHERE id=$1`, [req.params.id]);
     res.json({ ok: true, accepted: true });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
@@ -2885,8 +2958,9 @@ app.post('/api/talking-invitations/:id/respond', requireLogin, async (req, res) 
         JOIN talking_sessions ts ON ts.id = ti.session_id
         WHERE ti.id=$1 AND ti.listener_id=$2 AND ts.presented_status='ausstehend'
       `, [req.params.id, req.session.userId]);
-      if (slot.rows.length && await hasScheduleConflict(req.session.userId, slot.rows[0].slot_id))
-        return res.status(409).json({ error: 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen anderen Termin.' });
+      const konflikt = slot.rows.length && await hasScheduleConflict(req.session.userId, slot.rows[0].slot_id);
+      if (konflikt)
+        return res.status(409).json({ error: konfliktText(konflikt, 'Zeitkonflikt: Du hast zu dieser Uhrzeit bereits einen anderen Termin.') });
     }
     const status = accept ? 'angenommen' : 'abgelehnt';
     const r = await pool.query(`
@@ -2949,8 +3023,17 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     const stichtag = planStichtag();
     const imRahmen = dates.filter(d => d <= stichtag);
     if (!imRahmen.length) return res.status(400).json({ error: planFristText(stichtag), stichtag });
-    const neueIds = [];
+    // Veranstaltung fuer die ganze Gruppe (2026-11-18): dort wird nichts angelegt - eine Reihe
+    // laesst diese Tage aus und meldet sie (gesperrt), ein einzelner Termin wird abgelehnt.
+    const gesperrt = [], anlegen = [];
     for (const d of imRahmen) {
+      const v = await veranstaltungFuerAlle(req.session.klasse, d, uhrzeit, slotDauer);
+      if (v) gesperrt.push({ datum: d, titel: v.titel }); else anlegen.push(d);
+    }
+    if (!anlegen.length)
+      return res.status(409).json({ error: `📌 Am ${tagKurz(gesperrt[0].datum)} ist in dieser Zeit „${gesperrt[0].titel}“ für die ganze Gruppe – da wird nichts angelegt.`, gesperrt });
+    const neueIds = [];
+    for (const d of anlegen) {
       const r = await pool.query(`
         INSERT INTO talking_slots (klasse, datum, uhrzeit, ort, halbjahr, admin_id, typ, dauer, subject_id, thema)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id
@@ -2960,7 +3043,7 @@ app.post('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     }
     // ids: damit der Aufrufer den erzeugten Termin weiterverwenden kann (z.B. einen
     // Wunsch daran haengen). Bei einer Serie ist der erste der frueheste.
-    res.json({ ok: true, count: imRahmen.length, ids: neueIds, gekuerzt: dates.length - imRahmen.length, stichtag });
+    res.json({ ok: true, count: anlegen.length, ids: neueIds, gekuerzt: dates.length - imRahmen.length, stichtag, gesperrt });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
@@ -2994,6 +3077,17 @@ app.post('/api/admin/talking-slots/:id/reschedule', requireAdmin, async (req, re
         return res.status(409).json({ error: 'Terminkonflikt: Diese Lernbegleitung hat zu dieser Zeit bereits einen eigenen Termin.' });
     }
     const slotDauer = Math.min(600, Math.max(5, parseInt(dauer) || 45));
+    // Nicht in eine Veranstaltung fuer die ganze Gruppe verschieben (2026-11-18). Bleiben Tag,
+    // Uhrzeit und Dauer, wird nichts geprueft - ein Termin von vor der Veranstaltung laesst
+    // sich weiter bearbeiten (z.B. der Ort).
+    const vorher = await pool.query(
+      `SELECT to_char(datum,'YYYY-MM-DD') AS d, uhrzeit, dauer FROM talking_slots WHERE id=$1`, [req.params.id]);
+    const v0 = vorher.rows[0];
+    if (!v0 || v0.d !== String(datum).slice(0, 10) || (v0.uhrzeit || '') !== (uhrzeit || '') || (v0.dauer || 45) !== slotDauer) {
+      const sperre = await veranstaltungFuerAlle(req.session.klasse, String(datum).slice(0, 10), uhrzeit, slotDauer);
+      if (sperre)
+        return res.status(409).json({ error: `📌 In dieser Zeit ist „${sperre.titel}“ für die ganze Gruppe – dorthin lässt sich nichts verschieben.` });
+    }
     const r = await pool.query(
       // Das Thema wird nur angefasst, wenn es mitgeschickt wurde - sonst wuerde ein
       // Dialog ohne Themafeld (Talk oder schon gebucht) das ausgeschriebene loeschen.
@@ -3218,8 +3312,9 @@ app.post('/api/admin/talking-slots/:id/einteilen', requireAdmin, async (req, res
     const wer = await client.query(
       `SELECT id FROM users WHERE id=$1 AND role='student' AND klasse=$2 AND aktiv=true`, [uid, req.session.klasse]);
     if (!wer.rows.length) return await fehler(400, 'Ungültige Person');
-    if (await hasScheduleConflict(uid, sl.id))
-      return await fehler(409, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.');
+    const konflikt = await hasScheduleConflict(uid, sl.id);
+    if (konflikt)
+      return await fehler(409, konfliktText(konflikt, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.', 'die Person'));
     const s = await client.query(
       'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,$2,$3) RETURNING id', [sl.id, uid, thema]);
     await client.query('COMMIT');
@@ -3376,8 +3471,9 @@ app.post('/api/admin/talking-sessions/:id/presenter', requireAdmin, async (req, 
       `SELECT id, attended_status FROM talking_invitations WHERE session_id=$1 AND listener_id=$2`, [s.id, neuId]);
     if (zeile.rows.length && zeile.rows[0].attended_status !== 'ausstehend')
       return await fehler(409, 'Für diese Person ist hier schon eine Bewertung eingetragen - erst zurücksetzen.');
-    if (!zeile.rows.length && await hasScheduleConflict(neuId, s.slotId))
-      return await fehler(409, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.');
+    const konflikt = !zeile.rows.length && await hasScheduleConflict(neuId, s.slotId);
+    if (konflikt)
+      return await fehler(409, konfliktText(konflikt, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.', 'die Person'));
     // Die neue Person steht jetzt an der Buchung, nicht mehr auf der Liste.
     if (zeile.rows.length) await client.query('DELETE FROM talking_invitations WHERE id=$1', [zeile.rows[0].id]);
     await client.query('UPDATE talking_sessions SET presenter_id=$1 WHERE id=$2', [neuId, s.id]);
@@ -3530,6 +3626,122 @@ app.delete('/api/admin/talking-sessions/:id', requireAdmin, async (req, res) => 
 });
 
 // ── Deadlines (Termine der Lernbegleitung, klassenweit) ────────────────────────
+// ── Veranstaltungen (Nutzerwunsch 2026-11-18) ──────────────────────────────────
+// Besondere Zeiten des Tandems (ILePs, Forumstheater, Laienreanimation ...). Wie die Infos fuer
+// alle Lernbegleitungen des Tandems gemeinsam: jede darf jede eintragen, aendern und loeschen.
+const VERANSTALTUNG_FELDER = `v.id, v.titel, to_char(v.datum_von,'YYYY-MM-DD') AS "datumVon",
+  to_char(v.datum_bis,'YYYY-MM-DD') AS "datumBis", v.von, v.bis, v.alle`;
+
+// Eingaben pruefen: { fehler } oder { v: {titel, datumVon, datumBis, von, bis, alle}, personen }.
+function veranstaltungLesen(body) {
+  const titel = String(body.titel || '').trim().slice(0, 80);
+  if (!titel) return { fehler: 'Bitte einen Titel angeben.' };
+  const iso = x => /^\d{4}-\d{2}-\d{2}$/.test(String(x || '')) && !isNaN(new Date(x)) ? String(x) : null;
+  const datumVon = iso(body.datumVon), datumBis = iso(body.datumBis) || datumVon;
+  if (!datumVon) return { fehler: 'Bitte ein Datum angeben.' };
+  if (datumBis < datumVon) return { fehler: 'Das Ende liegt vor dem Anfang.' };
+  if ((new Date(datumBis) - new Date(datumVon)) / 864e5 > 62) return { fehler: 'Höchstens zwei Monate am Stück.' };
+  let von = null, bis = null;
+  if (body.von || body.bis) {
+    const a = parseUhrzeitMin(body.von), b = parseUhrzeitMin(body.bis);
+    if (a === null || b === null || b <= a) return { fehler: 'Bitte eine gültige Zeit angeben (Ende nach Beginn).' };
+    const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    von = hhmm(a); bis = hhmm(b);
+  }
+  const alle = body.alle !== false;
+  const personen = alle ? [] : [...new Set((Array.isArray(body.personen) ? body.personen : []).map(Number))].filter(Boolean);
+  if (!alle && !personen.length) return { fehler: 'Bitte wählen, wer dabei ist – oder „ganze Gruppe“.' };
+  return { v: { titel, datumVon, datumBis, von, bis, alle }, personen };
+}
+
+// Was liegt schon in der Zeit? frei = Termine ohne Buchung (nur bei "ganze Gruppe" - die gibt
+// es dann nicht mehr), gebucht = Termine mit Betroffenen (bei "ganze Gruppe" alle Beteiligten,
+// sonst nur die ausgewaehlten). Gebuchte bleiben stehen, die Lernbegleitung klaert sie selbst.
+async function veranstaltungKollisionen(db, klasse, v, personen) {
+  const r = await db.query(`
+    SELECT s.id, to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.typ, sub.name AS fach,
+           ts.id AS "sessionId",
+           COALESCE((SELECT json_agg(json_build_object('id', x.id, 'name', x.username) ORDER BY x.username) FROM (
+             SELECT u.id, u.username FROM users u WHERE u.id = ts.presenter_id
+             UNION SELECT u.id, u.username FROM talking_invitations ti JOIN users u ON u.id = ti.listener_id
+               WHERE ti.session_id = ts.id AND ti.status <> 'abgelehnt') x), '[]') AS leute
+    FROM talking_slots s LEFT JOIN subjects sub ON sub.id = s.subject_id
+    LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+    WHERE s.klasse=$1 AND s.datum BETWEEN $2 AND $3
+    ORDER BY s.datum, s.uhrzeit, s.id`, [klasse, v.datumVon, v.datumBis]);
+  const frei = [], gebucht = [];
+  for (const s of r.rows) {
+    if (!veranstaltungTrifft(v, parseUhrzeitMin(s.uhrzeit), s.dauer || 45)) continue;
+    const zeile = { id: s.id, datum: s.datum, uhrzeit: s.uhrzeit, typ: s.typ, fach: s.fach };
+    if (!s.sessionId) { if (v.alle) frei.push(zeile); continue; }
+    const leute = v.alle ? s.leute : s.leute.filter(x => personen.includes(x.id));
+    if (v.alle || leute.length) gebucht.push({ ...zeile, personen: leute.map(x => x.name) });
+  }
+  return { frei, gebucht };
+}
+
+// Anlegen (id null) oder aendern. pruefen:true sieht nur nach, was in der Zeit schon liegt (die
+// Seite zeigt es vor dem Speichern). freieLoeschen:true loescht beim Speichern die freien Termine
+// in der Zeit (nur "ganze Gruppe") - in derselben Transaktion, und nur, was dann noch frei ist.
+async function veranstaltungSpeichern(req, res, id) {
+  const e = veranstaltungLesen(req.body);
+  if (e.fehler) return res.status(400).json({ error: e.fehler });
+  const { v, personen } = e;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Immer mit "return await fehler(...)" - wie beim Austauschen der buchenden Person.
+    const fehler = async (code, text) => { await client.query('ROLLBACK'); return res.status(code).json({ error: text }); };
+    if (personen.length) {
+      const da = await client.query(`SELECT count(*)::int AS n FROM users WHERE id = ANY($1::int[]) AND role='student' AND klasse=$2`,
+        [personen, req.session.klasse]);
+      if (da.rows[0].n !== personen.length) return await fehler(400, 'Ungültige Person');
+    }
+    if (id) {
+      const alt = await client.query('SELECT id FROM veranstaltungen WHERE id=$1 AND klasse=$2 FOR UPDATE', [id, req.session.klasse]);
+      if (!alt.rows.length) return await fehler(404, 'Nicht gefunden');
+    }
+    const kollisionen = await veranstaltungKollisionen(client, req.session.klasse, v, personen);
+    if (req.body.pruefen) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: true, kollisionen });
+    }
+    let vid = id;
+    const werte = [v.titel, v.datumVon, v.datumBis, v.von, v.bis, v.alle, req.session.userId];
+    if (id) {
+      await client.query(`UPDATE veranstaltungen SET titel=$1, datum_von=$2, datum_bis=$3, von=$4, bis=$5, alle=$6,
+        admin_id=$7, updated_at=NOW() WHERE id=$8`, [...werte, id]);
+    } else {
+      vid = (await client.query(`INSERT INTO veranstaltungen (titel, datum_von, datum_bis, von, bis, alle, admin_id, klasse)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [...werte, req.session.klasse])).rows[0].id;
+    }
+    await client.query('DELETE FROM veranstaltung_personen WHERE veranstaltung_id=$1', [vid]);
+    for (const uid of personen)
+      await client.query('INSERT INTO veranstaltung_personen (veranstaltung_id, user_id) VALUES ($1,$2)', [vid, uid]);
+    let geloescht = 0;
+    if (req.body.freieLoeschen && v.alle && kollisionen.frei.length) {
+      const d = await client.query(`DELETE FROM talking_slots s WHERE s.id = ANY($1::int[]) AND s.klasse=$2
+        AND NOT EXISTS (SELECT 1 FROM talking_sessions ts WHERE ts.slot_id = s.id)`,
+        [kollisionen.frei.map(x => x.id), req.session.klasse]);
+      geloescht = d.rowCount;
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, id: Number(vid), geloescht, kollisionen });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally { client.release(); }
+}
+app.post('/api/admin/veranstaltungen', requireAdmin, (req, res) => veranstaltungSpeichern(req, res, null));
+app.put('/api/admin/veranstaltungen/:id', requireAdmin, (req, res) => veranstaltungSpeichern(req, res, req.params.id));
+app.delete('/api/admin/veranstaltungen/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM veranstaltungen WHERE id=$1 AND klasse=$2 RETURNING id', [req.params.id, req.session.klasse]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Serverfehler' }); }
+});
+
 app.post('/api/admin/deadlines', requireAdmin, async (req, res) => {
   try {
     const { datum, titel } = req.body;
@@ -3907,7 +4119,7 @@ app.post('/api/admin/infos/:id/verschieben', requireAdmin, async (req, res) => {
 app.get('/api/calendar', requireLogin, async (req, res) => {
   try {
     const uid = req.session.userId;
-    const [slots, deadlines, nurZugewiesen, lzkRows] = await Promise.all([
+    const [slots, deadlines, nurZugewiesen, lzkRows, vstRows] = await Promise.all([
       pool.query(`
         SELECT s.id, s.typ, s.subject_id AS "subjectId", to_char(s.datum,'YYYY-MM-DD') AS datum, s.uhrzeit, s.dauer, s.ort, s.halbjahr,
                s.thema AS "slotThema", s.geschlossen,
@@ -3944,6 +4156,16 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
         ? pool.query(`SELECT ${LZK_FELDER}, u.username FROM lzk l JOIN users u ON u.id = l.user_id
                       WHERE u.klasse=$1 AND u.role='student' AND u.aktiv=true`, [req.session.klasse])
         : pool.query(`SELECT ${LZK_FELDER} FROM lzk l WHERE l.user_id=$1`, [uid]),
+      // Veranstaltungen (2026-11-18): Lernbegleitungen sehen alle des Tandems mit den Betroffenen,
+      // Schueler:innen nur die, die sie betreffen - ohne die Namen der anderen.
+      req.session.role === 'admin'
+        ? pool.query(`SELECT ${VERANSTALTUNG_FELDER},
+            COALESCE((SELECT json_agg(json_build_object('id', u.id, 'username', u.username) ORDER BY u.username)
+              FROM veranstaltung_personen vp JOIN users u ON u.id = vp.user_id WHERE vp.veranstaltung_id = v.id), '[]') AS personen
+            FROM veranstaltungen v WHERE v.klasse=$1 ORDER BY v.datum_von, v.von NULLS FIRST, v.id`, [req.session.klasse])
+        : pool.query(`SELECT ${VERANSTALTUNG_FELDER} FROM veranstaltungen v WHERE v.klasse=$1
+            AND (v.alle OR EXISTS (SELECT 1 FROM veranstaltung_personen vp WHERE vp.veranstaltung_id = v.id AND vp.user_id = $2))
+            ORDER BY v.datum_von, v.von NULLS FIRST, v.id`, [req.session.klasse, uid]),
     ]);
     const nurZugewiesenIds = new Set(nurZugewiesen.rows.map(r => r.id));
     const rows = slots.rows.map(s => ({
@@ -3967,7 +4189,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
       // Termine eines "nur zugewiesen"-Fachs (Lernberatung) vergibt die Lernbegleitung.
       return !nurZugewiesenIds.has(s.subjectId);
     });
-    res.json({ slots: rows, deadlines: deadlines.rows, lzk: lzkRows.rows });
+    res.json({ slots: rows, deadlines: deadlines.rows, lzk: lzkRows.rows, veranstaltungen: vstRows.rows });
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
