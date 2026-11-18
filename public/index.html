@@ -3081,9 +3081,14 @@ function mwChip(s) {
   // Beim freien faellt ein fuehrendes "frei" weg (der Status sagt es schon).
   const themaRoh = (s.booked ? s.thema : s.slotThema) || '';
   const themaText = s.booked ? themaRoh : lwThemaOhneFrei(themaRoh);
+  // Am gebuchten Talk: wer ihn haelt (2026-11-18) - wie in der Leiste nach dem Antippen.
+  const vortragende = s.typ === 'talk' && s.booked
+    ? [s.mineAsPresenter ? 'Du' : s.presenterUsername,
+       ...(s.coPresenters || []).map(c => (me && c.userId === me.userId) ? 'Du' : c.username)]
+      .filter(Boolean).join(' & ') : '';
   const full = [subj.name, typLabel, s.uhrzeit, s.ort,
     s.teacherUsername ? 'Lernbegleitung: ' + formatTeacherShort(s.teacherUsername) : '',
-    themaText ? 'Thema: ' + themaText : '', label]
+    themaText ? 'Thema: ' + themaText : '', vortragende ? 'Vortrag: ' + vortragende : '', label]
     .filter(Boolean).join(' · ');
   const desc = `title="${escHtml(full)}" aria-label="${escHtml(full)}"`;
   const badge = lwBadge(s.typ, subjLetter, neutral ? 'var(--md-outline-variant)' : color);
@@ -4300,7 +4305,7 @@ function mwAktion(s) {
       : { text: istFabue ? 'Fachbüro buchen' : 'Talk anmelden', ruf: `mwBuchen(${s.id})` };
   }
   if (istFabue) return { text: 'Mitmachen', ruf: `calRequestJoin(${s.id})` };
-  return { hinweis: 'Schon vergeben – sprich die Lernbegleitung an.' };
+  return { hinweis: 'Schon vergeben – frag die Vortragenden, ob du zuhören darfst.' };
 }
 
 function mwRenderBar() {
@@ -4313,10 +4318,15 @@ function mwRenderBar() {
   const kopf = [lwFmtDay(s.datum), lwTimeRange(s.uhrzeit, s.dauer),
     subj.name + (s.typ === 'input' ? '-FaBü' : '-Talk'), s.ort].filter(Boolean).join(' · ');
   const a = mwAktion(s);
+  // Am gebuchten Talk steht, wer ihn haelt (Wunsch einer Kollegin, 2026-11-18): so weiss man,
+  // wen man fragen kann, ob man noch zuhoeren darf. Wer noch nicht zugesagt hat, traegt ⏳.
+  const vortrag = s.typ === 'talk' && s.booked
+    ? `<div class="mw-bar-thema">🎤 ${talkVortragendeText(s.mineAsPresenter ? 'Du' : escHtml(s.presenterUsername || ''), s.coPresenters)}</div>` : '';
   bar.style.display = 'flex';
   bar.innerHTML = `<div>
       <div class="mw-bar-kopf">${escHtml(kopf)}</div>
       ${themaText ? `<div class="mw-bar-thema">„${escHtml(themaText)}“</div>` : ''}
+      ${vortrag}
     </div>
     ${a.ruf ? `<button class="mw-bar-btn" onclick="${a.ruf}">${escHtml(a.text)}</button>`
             : `<span class="mw-bar-hint">${escHtml(a.hinweis)}</span>`}`;
