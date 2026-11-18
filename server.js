@@ -2703,7 +2703,9 @@ app.delete('/api/admin/talking-invitations/:id', requireAdmin, async (req, res) 
     // wenn schon "da gewesen" oder "gefehlt" eingetragen ist.
     // Dass der Vortrag der buchenden Person schon bewertet ist, sperrt nichts: nachtraeglich
     // korrigieren, wer dabei war, soll gehen - geschuetzt ist nur die eigene Bewertung der Zeile.
-    if ((row.typ || 'talk') !== 'input' && row.attended_status !== 'ausstehend')
+    // Ein ✗ (nicht_erledigt) traegt nie Flammen (talkErgebnis) und sperrt deshalb nicht: wer
+    // krank war und versehentlich ✗ bekam, kommt mit 🤒 trotzdem heraus (2026-11-18).
+    if ((row.typ || 'talk') !== 'input' && row.attended_status === 'erledigt')
       return res.status(409).json({ error: 'Teilnahme bereits bewertet, kann nicht mehr entfernt werden - erst die Bewertung auf "ausstehend" zurücksetzen' });
     await pool.query('DELETE FROM talking_invitations WHERE id=$1', [req.params.id]);
     // Ohne vortragende Person und ohne verbliebene Teilnehmende hängt am Termin nichts
@@ -3348,6 +3350,48 @@ app.post('/api/admin/talking-sessions/:id/presenter', requireAdmin, async (req, 
     }
     await client.query('COMMIT');
     res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally { client.release(); }
+});
+
+// Die buchende Person eines Talks war krank/entschuldigt (🤒, Wunsch einer Kollegin 2026-11-18):
+// die erste weitere vortragende Person uebernimmt die Buchung - mit IHRER Bewertung, die von
+// der Einladung an die Buchung umzieht (sie gehoert ihr, es geht nichts verloren). Die bisherige
+// Person faellt ohne Spur heraus, wie beim × am Fachbuero. Traegt sonst niemand vor, faellt der
+// Talk aus: 409 mit keinVortrag - die Seite bietet dann das Loeschen an. Mit Flammen (oder ○)
+// am Vortrag bleibt alles stehen.
+app.post('/api/admin/talking-sessions/:id/entschuldigt', requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Immer mit "return await fehler(...)" - wie beim Austauschen der buchenden Person.
+    const fehler = async (code, text, extra) => { await client.query('ROLLBACK'); return res.status(code).json({ error: text, ...extra }); };
+    const sess = await client.query(
+      `SELECT ts.id, ts.presented_status AS "presentedStatus", sl.typ
+       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
+       WHERE ts.id=$1 AND sl.klasse=$2 FOR UPDATE OF ts`, [req.params.id, req.session.klasse]);
+    if (!sess.rows.length) return await fehler(404, 'Nicht gefunden');
+    const s = sess.rows[0];
+    if ((s.typ || 'talk') !== 'talk') return await fehler(400, 'Nur bei Talks.');
+    if (s.presentedStatus === 'erledigt')
+      return await fehler(409, 'Der Vortrag ist schon bewertet - erst die Bewertung zurücksetzen.');
+    // Wer mit vortraegt: zugesagt oder schon bewertet (wie TALK_MITVORTRAG_JSON, ohne Absagen).
+    const nach = await client.query(
+      `SELECT id, listener_id AS uid, attended_status AS status, pokale, quality_emoji AS emoji
+       FROM talking_invitations
+       WHERE session_id=$1 AND rolle='vortrag' AND status <> 'abgelehnt'
+         AND (status='angenommen' OR attended_status <> 'ausstehend')
+       ORDER BY id LIMIT 1 FOR UPDATE`, [s.id]);
+    if (!nach.rows.length) return await fehler(409, 'Sonst trägt niemand vor - der Talk fällt aus.', { keinVortrag: true });
+    const n = nach.rows[0];
+    await client.query('DELETE FROM talking_invitations WHERE id=$1', [n.id]);
+    await client.query(
+      `UPDATE talking_sessions SET presenter_id=$1, presented_status=$2, pokale=$3, quality_emoji=$4, updated_at=NOW()
+       WHERE id=$5`, [n.uid, n.status, n.pokale || 0, n.emoji, s.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true, neuId: n.uid });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: 'Serverfehler' });

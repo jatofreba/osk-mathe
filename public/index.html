@@ -7778,13 +7778,12 @@ function awRenderBar() {
   // Entfernen ist etwas anderes als "hat unentschuldigt gefehlt": der Eintrag verschwindet
   // ganz, es bleibt kein Fehlen stehen - wer entschuldigt fehlte oder faelschlich auf dem
   // Termin stand, soll keins bekommen.
-  // Geht nur, solange nichts bewertet ist; genau so prueft es auch der Server.
   const weg = (id) => ` <button type="button" class="aw-btn aw-btn-weg" onclick="calRemoveInvitee(${id})" title="Aus dem Termin entfernen" aria-label="Aus dem Termin entfernen">×</button>`;
   // Am Fachbüro bleibt Entfernen IMMER moeglich - ein "da gewesen"/"gefehlt" ist dort
   // reine Anwesenheit und kein Ergebnis, das verloren gehen koennte. Bei Talks haengen
-  // Flammen an der Bewertung, deshalb dort nur solange nichts bewertet ist.
-  const entfernbar = iv => darf && iv.id && (s.typ === 'input'
-    || (iv.attendedStatus === 'ausstehend' && s.presentedStatus === 'ausstehend'));
+  // Flammen an der Bewertung, deshalb dort nur, solange die Person keine hat (✗ traegt nie
+  // welche) - genau so prueft es der Server (DELETE talking-invitations).
+  const entfernbar = iv => darf && iv.id && (s.typ === 'input' || iv.attendedStatus !== 'erledigt');
   // Beim Fachbüro auch die buchende Person (z.B. krank) - der Termin findet mit den
   // anderen trotzdem statt. Bei Talks tauscht man sie im Fenster "Beteiligte" aus.
   const wegBuchend = darf && s.typ === 'input' && s.session_id
@@ -9017,7 +9016,8 @@ function talkBeteiligteRender() {
   const zustand = x => x.attendedStatus === 'erledigt' ? '✓ bewertet' : x.attendedStatus === 'nicht_erledigt' ? '✗ gefehlt'
     : x.status === 'angenommen' ? '' : x.status === 'abgelehnt' ? 'abgesagt' : x.status === 'angefragt' ? 'fragt an' : '⏳ noch keine Antwort';
   // Bewertete Zeilen nicht entfernen - daran haengen Flammen (erst die Bewertung zuruecksetzen).
-  const weg = x => x.attendedStatus === 'ausstehend'
+  // Ein ✗ traegt keine, das sperrt nicht (wie der Server).
+  const weg = x => x.attendedStatus !== 'erledigt'
     ? ` <button class="btn-icon red" title="Aus dem Talk nehmen" aria-label="${escHtml(x.username)} aus dem Talk nehmen" onclick="talkBeteiligteEntfernen(${x.id})">✕</button>` : '';
   const zeile = (name, text, knopf) => `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;">
       <span>${escHtml(name)}</span>${text ? `<span style="color:var(--md-on-surface-variant);font-size:12px;">${escHtml(text)}</span>` : ''}${knopf || ''}</div>`;
@@ -9222,7 +9222,7 @@ function talkZuBewertenHtml(slots, auswahl, heute, herkunft, bewertetOffen) {
   const unten = imOben ? fertig.filter(x => x.session_id !== sel.session_id)
     : (imUnten && !hat(fertig, sel)) ? [...fertig, sel].sort(talkSpaeter) : fertig;
   const kopf = `<h3 class="lzk-ue-kopf">✍️ Noch zu bewerten <span class="pill">${offen.length}</span></h3>
-    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · ○ hat stattgefunden, ohne Flamme · 🔥 bis 🔥🔥🔥🔥 (Zuhören bis 🔥🔥) hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji).</div>`;
+    <div class="lzk-ue-erkl">Ab dem Termintag. Talk antippen, dann je Person: ✗ nicht gehalten bzw. nicht teilgenommen · 🤒 krank/entschuldigt – nimmt die Person aus dem Talk (zählt nicht, kein ✗) · ○ hat stattgefunden, ohne Flamme · 🔥 bis 🔥🔥🔥🔥 (Zuhören bis 🔥🔥) hat stattgefunden. Nochmal tippen setzt zurück; ✎ öffnet alle Angaben (Emoji).</div>`;
   const obenHtml = oben.length ? oben.map(s => talkZbTalkHtml(s, s.session_id === auswahl, 'offen')).join('')
     : '<div class="lzk-ue-leer">Nichts zu bewerten.</div>';
   const untenHtml = !unten.length ? '' : `<details class="lzk-ue-bewertet"${(bewertetOffen || imUnten) ? ' open' : ''} ontoggle="talkBewertetUmschalten(this.open)">
@@ -9267,21 +9267,47 @@ function talkZbTalkHtml(s, offen, herkunft) {
 // "🗑 Termin löschen" (Nutzerwunsch 2026-11-05): ein Talk, der entschuldigt nicht stattgefunden
 // hat, verschwindet ganz - Termin, Buchung und Einladungen; er zaehlt fuer niemanden. Ist schon
 // jemand bewertet, bleibt er (der Server prueft dasselbe) - sonst gingen Flammen still verloren.
-async function talkZbLoeschen(slotId) {
+// grund: ein Satz davor, wenn das Loeschen aus 🤒 kommt ("... sonst traegt niemand vor").
+async function talkZbLoeschen(slotId, grund) {
   const s = (talkingAdminSlots || []).find(x => x.id === slotId);
   if (!s) return;
   const leute = talkPersonen(s);
   if (leute.some(p => p.status !== 'ausstehend')) {
-    alert('Hier ist schon jemand bewertet – erst die Bewertungen zurücksetzen (nochmal tippen), dann löschen.');
+    alert((grund ? grund + '\n\n' : '') + 'Hier ist schon jemand bewertet – erst die Bewertungen zurücksetzen (nochmal tippen), dann löschen.');
     return;
   }
   const namen = leute.filter(p => p.einladung !== 'abgelehnt').map(p => p.name).join(', ');
-  if (!confirm(`Talk am ${fmtTalkingDatum(s.datum)}${s.uhrzeit ? ' um ' + s.uhrzeit : ''}${s.thema ? ' „' + s.thema + '“' : ''} ganz löschen?\n\n`
+  if (!confirm((grund ? grund + '\n\n' : '') + `Talk am ${fmtTalkingDatum(s.datum)}${s.uhrzeit ? ' um ' + s.uhrzeit : ''}${s.thema ? ' „' + s.thema + '“' : ''} ganz löschen?\n\n`
     + `Termin, Buchung und Einladungen${namen ? ' (' + namen + ')' : ''} sind danach weg – der Talk zählt für niemanden. `
     + 'Das lässt sich nicht rückgängig machen.')) return;
   const r = await fetch(`/api/admin/talking-slots/${slotId}?mitBuchung=1`, { method: 'DELETE' });
   if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Löschen.'); return; }
   if (_talkZbAuswahl === s.session_id) _talkZbAuswahl = null;
+  await talkingAdminAktualisieren();
+}
+// 🤒 krank/entschuldigt (Wunsch einer Kollegin, 2026-11-18) - wie das × beim Fachbuero: die
+// Person kommt aus dem Talk, ohne ✗ und ohne Spur; der Talk zaehlt fuer sie nicht, ihre Pflicht
+// bleibt offen. Die buchende Person gibt die Buchung an die erste weitere vortragende Person ab
+// (Server: .../entschuldigt); traegt sonst niemand vor, faellt der Talk aus - dann das Loeschen.
+async function talkZbEntschuldigt(typ, id) {
+  let p = null, s = null;
+  (talkingAdminSlots || []).some(x => (p = talkPersonen(x).find(y => y.typ === typ && y.id === id)) && (s = x));
+  if (!p || !s || p.status === 'erledigt') return;
+  let url, opt;
+  if (typ === 'presented') {
+    // Nachfolge wie auf dem Server: die erste weitere vortragende Person, die zugesagt hat oder
+    // schon bewertet ist (coPresenters kommt nach Einladung sortiert, ohne Absagen).
+    const nach = (s.coPresenters || []).find(c => c.status === 'angenommen' || c.attendedStatus !== 'ausstehend');
+    if (!nach) return talkZbLoeschen(s.id, `${p.name} ist krank/entschuldigt, und sonst trägt niemand vor – der Talk fällt aus.`);
+    if (!confirm(`${p.name} ist krank/entschuldigt?\n\n${nach.username} übernimmt die Buchung (mit der eigenen Bewertung). `
+      + `${p.name} kommt aus dem Talk – ohne ✗, der Talk zählt für ${p.name} nicht.`)) return;
+    url = `/api/admin/talking-sessions/${id}/entschuldigt`; opt = { method: 'POST' };
+  } else {
+    if (!confirm(`${p.name} ist krank/entschuldigt?\n\n${p.name} kommt aus diesem Talk – ohne ✗, der Talk zählt für ${p.name} nicht.`)) return;
+    url = `/api/admin/talking-invitations/${id}`; opt = { method: 'DELETE' };
+  }
+  const r = await fetch(url, opt);
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Fehler beim Austragen.'); }
   await talkingAdminAktualisieren();
 }
 function talkZbPersonHtml(p) {
@@ -9291,7 +9317,15 @@ function talkZbPersonHtml(p) {
     + ` aria-label="${name}: ${titel}" aria-pressed="${an(n)}" onclick="talkZbBewerten('${p.typ}', ${p.id}, ${n})">${text}</button>`;
   // ○ = hat stattgefunden, ohne Flamme (Nutzerwunsch 2026-11-05) - vorher nur ueber ✎, und
   // dafuer stand eine eigene Pille "✓ ohne Flamme" am Namen; jetzt zeigt der gedrueckte Knopf es.
-  const knoepfe = [k(-1, '✗', p.vortrag ? 'nicht gehalten' : 'nicht teilgenommen'),
+  // 🤒 = krank/entschuldigt (2026-11-18): kein Bewertungs-Knopf, sondern "aus dem Talk nehmen" -
+  // deshalb nie gedrueckt. Mit Flammen oder ○ gesperrt (erst zuruecksetzen), damit an der
+  // Stelle keine Bewertung verloren geht; ausgegraut statt weg, damit die Knoepfe untereinander
+  // in einer Flucht bleiben.
+  const krankTitel = p.status === 'erledigt' ? 'krank/entschuldigt – erst die Bewertung zurücksetzen'
+    : 'krank/entschuldigt – aus dem Talk nehmen (zählt nicht, kein ✗)';
+  const krank = `<button type="button" class="lzk-pokal-btn" title="${krankTitel}" aria-label="${name}: ${krankTitel}"`
+    + `${p.status === 'erledigt' ? ' disabled' : ''} onclick="talkZbEntschuldigt('${p.typ}', ${p.id})">🤒</button>`;
+  const knoepfe = [k(-1, '✗', p.vortrag ? 'nicht gehalten' : 'nicht teilgenommen'), krank,
     k(0, '○', 'hat stattgefunden – ohne Flamme')];
   for (let n = 1; n <= p.max; n++) knoepfe.push(k(n, '🔥'.repeat(n), `hat stattgefunden – ${n} Flamme${n > 1 ? 'n' : ''}`));
   const emoji = p.status === 'erledigt' && p.emoji ? ' ' + p.emoji : '';
