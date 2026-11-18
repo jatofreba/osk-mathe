@@ -510,6 +510,9 @@ body.plenum-voll .topbar,body.plenum-voll #app-tabs{display:none !important;}
    kein Angebot. */
 .lw-chip.vst-chip{border-left:3px dashed var(--md-on-surface-variant);background:var(--md-surface-container);color:var(--md-on-surface);}
 .lw-chip.vst-chip[role="button"]{cursor:pointer;}
+/* Ein Feld, das eine Veranstaltung sperrt, ist gestreift - ueber einen ganzen Tag zieht sich das
+   als Band durch alle Felder (Wunsch des Users 2026-11-18). Steht nach .lw-zeile-b, damit es gewinnt. */
+.lw-cell.vst-band{background:repeating-linear-gradient(135deg,var(--md-surface-container) 0 6px,var(--md-surface-container-low) 6px 12px);}
 .cal-ev.cal-ev-vst{background:var(--md-surface-container);color:var(--md-on-surface-variant);border:1px dashed var(--md-outline-variant);}
 .vst-zeile{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--md-outline-variant);}
 .vst-kollision{font-size:12.5px;line-height:1.45;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
@@ -4583,7 +4586,7 @@ async function loadMyWeek() {
   const blockRows = LW_BLOCKS.map((b, bi) => {
     const { trenner, zebra } = lwZeilenStil(bi);
     return `${trenner}<div class="lw-blockhead${zebra}">${b.label}<span>${b.von}–${b.bis}</span></div>` +
-      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}">${vr.block[bi][di].map(v => vstChip(v, false)).join('')}${mwZelleHtml(cells[bi][di])}</div>`).join('');
+      LW_DAY_NAMES.map((_, di) => `<div class="lw-cell${zebra}${vstBand(vr.block[bi][di], false)}">${vr.block[bi][di].map(v => vstChip(v, false)).join('')}${mwZelleHtml(cells[bi][di])}</div>`).join('');
   }).join('');
 
   // LZK sind ganztaegig: eine eigene Zeile ueber den Zeitbloecken, nur wenn es welche gibt.
@@ -4623,7 +4626,7 @@ async function loadMyWeek() {
       </div>
     </div>
     ${(weekSlots.length || weekLzk.length || vr.woche.length)
-      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${lzkZeile}${vstGanztagsZeile(vr, false)}${blockRows}</div></div>`
+      ? `<div class="lw-grid-wrap"><div class="lw-grid">${headRow}${lzkZeile}${blockRows}</div></div>`
       : '<div class="lw-empty">In dieser Woche sind noch keine Termine angelegt.</div>'}
     <div class="mw-legend">
       <span>Buchstabe/Farbe = Fach</span>
@@ -8077,21 +8080,21 @@ function vstChip(v, admin) {
     <div class="lw-chip-time">📌 ${escHtml(v.titel)}</div>
     <div class="lw-chip-meta">${escHtml(vstZeitText(v))} · ${escHtml(wer)}</div></div>`;
 }
-// Veranstaltungen einer Woche fuers Raster: ganztaegige in einer eigenen Zeile ueber den Bloecken
-// (wie die LZK), die uebrigen als Kachel in jedem Block, den sie beruehren.
+// Veranstaltungen einer Woche fuers Raster: als Kachel in jedem Block, den sie beruehren - eine
+// ganztaegige also in allen Feldern des Tages (Wunsch des Users 2026-11-18; vorher stand sie in
+// einer eigenen Zeile ueber den Bloecken).
 function vstRaster(liste, dayStrs) {
   const woche = (liste || []).filter(v => dayStrs.some(d => v.datumVon <= d && d <= v.datumBis));
   return {
     woche,
-    ganz: dayStrs.map(d => vstAm(woche, d).filter(v => !v.von)),
     block: LW_BLOCKS.map(b => dayStrs.map(d => vstAm(woche, d)
-      .filter(v => v.von && vstTrifft(v, lwMin(b.von), lwMin(b.bis) - lwMin(b.von))))),
+      .filter(v => vstTrifft(v, lwMin(b.von), lwMin(b.bis) - lwMin(b.von))))),
   };
 }
-function vstGanztagsZeile(vr, admin) {
-  if (!vr.ganz.some(x => x.length)) return '';
-  return `<div class="lw-blockhead">📌 Veranstaltung<span>ganztägig</span></div>`
-    + vr.ganz.map(liste => `<div class="lw-cell">${liste.map(v => vstChip(v, admin)).join('')}</div>`).join('');
+// Streifen fuer ein Feld: Lernbegleitungen sehen ihn, wo eine Veranstaltung der ganzen Gruppe liegt
+// (dort wird nichts angelegt), Schueler:innen bei jeder eigenen - die Zeit ist fuer sie verplant.
+function vstBand(liste, admin) {
+  return liste.some(v => !admin || v.alle) ? ' vst-band' : '';
 }
 // Eine Reihe hat Tage einer Veranstaltung fuer die ganze Gruppe ausgelassen.
 function vstGesperrtText(gesperrt) {
@@ -8439,7 +8442,7 @@ function renderAdminWeek() {
         const klasse = feld.art === 'vorbei' ? '' : feld.art === 'frei' ? ' aw-feld aw-feld-frei' : ' aw-feld';
         const attr = feld.art === 'vorbei' ? ''
           : `${feld.art === 'frei' ? ' title="Hier einen Termin anlegen"' : ''} onclick="${ruf}" oncontextmenu="${ruf}"`;
-        return `<div class="lw-cell${zebra}${klasse}"${attr}>${vr.block[bi][di].map(v => vstChip(v, true)).join('')}${awZelleHtml(cells[bi][di])}</div>`;
+        return `<div class="lw-cell${zebra}${klasse}${vstBand(vr.block[bi][di], true)}"${attr}>${vr.block[bi][di].map(v => vstChip(v, true)).join('')}${awZelleHtml(cells[bi][di])}</div>`;
       }).join('');
   }).join('');
 
@@ -8469,7 +8472,7 @@ function renderAdminWeek() {
         <button class="mw-book-btn" onclick="openInputSlotModal()">+ FaBü-Termin</button>
       </div>
     </div>
-    <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${vstGanztagsZeile(vr, true)}${blockRows}</div></div>
+    <div class="lw-grid-wrap"><div class="lw-grid">${headRow}${blockRows}</div></div>
     ${(weekSlots.length || vr.woche.length)
       ? `<div class="mw-legend">
            <span>Buchstabe/Farbe = Fach</span>

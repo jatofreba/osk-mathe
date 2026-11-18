@@ -68,14 +68,18 @@ const woche = async () => { await lauf(`_awWoche = 1; loadCalendar()`); await ru
 
 // ── W) Admin-Woche ───────────────────────────────────────────────────────────
 let h = await woche();
-const ganz = h.slice(h.indexOf('📌 Veranstaltung<span>ganztägig</span>'), h.indexOf('1. Block (1/2)'));
-pruefe('W1 ganztaegige Zeile: ILePs am Montag, antippbar', ganz.includes(`onclick="openVeranstaltung(${ilepsId})"`)
-  && ganz.includes('📌 ILePs') && ganz.includes('ganzer Tag · ganze Gruppe') && !ganz.includes('Laienreanimation'), ganz.slice(0, 600));
 const zellen = [...h.matchAll(/<div class="lw-cell[^>]*>/g)].map(m => m.index);
-const zelle = (bi, di) => { const i = 5 + bi * 5 + di; return h.slice(zellen[i], zellen[i + 1] || h.length); };  // erste 5 = ganztaegige Zeile
-pruefe('W2 Laienreanimation steht Do im 2. Block (beide Haelften), mit den Namen', [2, 3].every(bi => zelle(bi, 3).includes('📌 Laienreanimation')
-  && zelle(bi, 3).includes('10:45–12:15 · ada, bo')) && !zelle(1, 3).includes('Laienreanimation') && !zelle(4, 3).includes('Laienreanimation'), zelle(2, 3).slice(0, 400));
-pruefe('W3 Forumstheater Fr im 1. Block', [0, 1].every(bi => zelle(bi, 4).includes('📌 Forumstheater')) && !zelle(2, 4).includes('Forumstheater'));
+const zelle = (bi, di) => { const i = bi * 5 + di; return h.slice(zellen[i], zellen[i + 1] || h.length); };
+const kopf = (bi, di) => zelle(bi, di).slice(0, zelle(bi, di).indexOf('>') + 1);
+// Seit dem Wunsch des Users (2026-11-18) zieht sich ein ganzer Tag durch alle Felder - keine eigene Zeile.
+pruefe('W1 ILePs (ganzer Tag) steht in allen fuenf Feldern des Montags, gestreift und antippbar - keine Extra-Zeile',
+  [0, 1, 2, 3, 4].every(bi => zelle(bi, 0).includes(`onclick="openVeranstaltung(${ilepsId})"`) && zelle(bi, 0).includes('ganzer Tag · ganze Gruppe')
+    && kopf(bi, 0).includes(' vst-band')) && zellen.length === 25 && !h.includes('ganztägig</span>')
+  && !kopf(1, 1).includes('vst-band'), [kopf(0, 0), zellen.length]);
+pruefe('W2 Laienreanimation steht Do im 2. Block (beide Haelften), mit den Namen - ungestreift (nur einzelne)', [2, 3].every(bi => zelle(bi, 3).includes('📌 Laienreanimation')
+  && zelle(bi, 3).includes('10:45–12:15 · ada, bo') && !kopf(bi, 3).includes('vst-band')) && !zelle(1, 3).includes('Laienreanimation') && !zelle(4, 3).includes('Laienreanimation'), zelle(2, 3).slice(0, 400));
+pruefe('W3 Forumstheater Fr im 1. Block, gestreift', [0, 1].every(bi => zelle(bi, 4).includes('📌 Forumstheater') && kopf(bi, 4).includes(' vst-band'))
+  && !zelle(2, 4).includes('Forumstheater') && !kopf(2, 4).includes('vst-band'));
 pruefe('W4 Montag (ILePs, ganze Gruppe): kein ＋ in den Feldern; Do 2. Block (nur einzelne) schon',
   [0, 1, 2, 3, 4].every(bi => !zelle(bi, 0).includes('aw-feld-frei')) && zelle(2, 3).includes('aw-feld-frei'), zelle(0, 0).slice(0, 200));
 pruefe('W5 Legende erklaert 📌', h.includes('📌 Veranstaltung – ganze Gruppe: dort wird nichts angelegt'));
@@ -186,9 +190,12 @@ const schuelerWoche = async name => {
   return html('home-myweek');
 };
 h = await schuelerWoche('ada');
-pruefe('S1 ada: ILePs in der ganztaegigen Zeile, Laienreanimation im Do-Block - nicht antippbar',
-  h.includes('📌 ILePs') && h.includes('📌 Laienreanimation') && h.includes('10:45–12:15 · du bist dabei') && !h.includes('openVeranstaltung(')
-  && !h.includes('Schulkonzert'), h.slice(0, 400));
+const sZellen = [...h.matchAll(/<div class="lw-cell[^>]*>/g)].map(m => m.index);
+const sZelle = (bi, di) => { const i = bi * 5 + di; return h.slice(sZellen[i], sZellen[i + 1] || h.length); };
+pruefe('S1 ada: ILePs in allen Montagsfeldern, Laienreanimation im Do-Block - beides gestreift, nicht antippbar',
+  [0, 1, 2, 3, 4].every(bi => sZelle(bi, 0).includes('📌 ILePs') && sZelle(bi, 0).startsWith('<div class="lw-cell') && /^<div class="lw-cell[^"]* vst-band"/.test(sZelle(bi, 0)))
+  && [2, 3].every(bi => sZelle(bi, 3).includes('10:45–12:15 · du bist dabei') && /^<div class="lw-cell[^"]* vst-band"/.test(sZelle(bi, 3)))
+  && !/^<div class="lw-cell[^"]* vst-band"/.test(sZelle(1, 3)) && !h.includes('openVeranstaltung(') && !h.includes('Schulkonzert'), sZelle(0, 0).slice(0, 300));
 lauf(`mwSelect(${fbDo})`);
 pruefe('S2 ada: das FaBue in der Laienreanimation ist gesperrt - mit Grund', lauf(`mwState(_mwSlots.find(s => s.id === ${fbDo}))`) === 'conflict'
   && html('mw-actionbar').includes('✕ In dieser Zeit bist du bei „Laienreanimation“.'), html('mw-actionbar'));

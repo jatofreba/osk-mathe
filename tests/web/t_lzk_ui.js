@@ -293,7 +293,7 @@ function dialog(me, calData, calClassmates) {
     pruefe('W1c per Tastatur bedienbar', c.includes('tabindex="0"') && c.includes("event.key==='Enter'"), c);
     const woche = schneide('async function loadMyWeek() {');
     pruefe('W2 "Meine Woche" nimmt nur eigene LZK dieser Woche', woche.includes('const weekLzk = (data.lzk || []).filter(l => l.datumIso && dayStrs.includes(l.datumIso)'), '');
-    pruefe('W2b in einer Ganztags-Zeile ueber den Zeitbloecken', woche.includes('${headRow}${lzkZeile}${vstGanztagsZeile(vr, false)}${blockRows}'), '');
+    pruefe('W2b in einer Ganztags-Zeile ueber den Zeitbloecken', woche.includes('${headRow}${lzkZeile}${blockRows}'), '');
     pruefe('W2c das Raster erscheint auch, wenn es nur LZK gibt', woche.includes('(weekSlots.length || weekLzk.length || vr.woche.length)'), '');
     pruefe('W3 von dort laesst sich eine LZK anfragen', woche.includes('onclick="openLzkEintragModal()">📝 LZK anfragen'), '');
   }
