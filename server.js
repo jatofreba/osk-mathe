@@ -3192,6 +3192,46 @@ app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Serverfehler' }); }
 });
 
+// Lernbegleitung teilt einen freien TALK-Termin fest ein (Wunsch einer Kollegin, 2026-11-18): sie
+// bestimmt, wer den Talk haelt - damit ist der Termin vergeben und kann nicht mehr von anderen
+// gebucht werden. Wer mit vortraegt und wer zuhoert, traegt sie danach im Fenster "Beteiligte" ein
+// (POST .../assign). Die Grenzen des Fachs gelten nur fuer Schueler:innen beim Buchen, der
+// Zeitkonflikt auch hier. Rechte wie bei den anderen Zuweisungen (Klasse, keine Termin-Eigentuemerschaft).
+app.post('/api/admin/talking-slots/:id/einteilen', requireAdmin, async (req, res) => {
+  const uid = parseInt(req.body.userId);
+  if (!uid) return res.status(400).json({ error: 'Bitte wählen, wer den Talk hält.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Immer mit "return await fehler(...)" - wie beim Austauschen der buchenden Person.
+    const fehler = async (code, text) => { await client.query('ROLLBACK'); return res.status(code).json({ error: text }); };
+    const slot = await client.query(
+      `SELECT id, typ, thema FROM talking_slots WHERE id=$1 AND klasse=$2 FOR UPDATE`, [req.params.id, req.session.klasse]);
+    if (!slot.rows.length) return await fehler(404, 'Termin nicht gefunden');
+    const sl = slot.rows[0];
+    if ((sl.typ || 'talk') !== 'talk') return await fehler(400, 'Nur bei Talks - beim Fachbüro über „+ einladen“.');
+    // Ein ausgeschriebenes Thema gilt, wenn nichts anderes kommt - wie beim Buchen.
+    const thema = (req.body.thema || '').trim() || (sl.thema || '').trim();
+    if (!thema) return await fehler(400, 'Bitte ein Thema angeben.');
+    const schon = await client.query('SELECT 1 FROM talking_sessions WHERE slot_id=$1', [sl.id]);
+    if (schon.rows.length) return await fehler(409, 'Termin bereits gebucht');
+    const wer = await client.query(
+      `SELECT id FROM users WHERE id=$1 AND role='student' AND klasse=$2 AND aktiv=true`, [uid, req.session.klasse]);
+    if (!wer.rows.length) return await fehler(400, 'Ungültige Person');
+    if (await hasScheduleConflict(uid, sl.id))
+      return await fehler(409, 'Zeitkonflikt: Die Person hat zu dieser Uhrzeit schon einen anderen Termin.');
+    const s = await client.query(
+      'INSERT INTO talking_sessions (slot_id, presenter_id, thema) VALUES ($1,$2,$3) RETURNING id', [sl.id, uid, thema]);
+    await client.query('COMMIT');
+    res.json({ ok: true, sessionId: s.rows[0].id });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    // Gleichzeitig gebucht (slot_id ist eindeutig) - wie beim Buchen durch Schueler:innen.
+    if (e.code === '23505') return res.status(409).json({ error: 'Termin bereits gebucht' });
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally { client.release(); }
+});
+
 // Weitere Schüler:innen nachträglich zu einer bestehenden Session zuweisen (Talk oder Input),
 // mit derselben Terminkonflikt-Prüfung + Feedback wie bei der Erstellung.
 // Thema einer Buchung nachschaerfen (Lernbegleitung). Gesetzt hat es urspruenglich die

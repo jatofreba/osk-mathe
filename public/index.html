@@ -1709,6 +1709,33 @@ textarea.form-input{
 </div>
 
 <!-- ══ MODAL: Beteiligte eines Talks bearbeiten (Lernbegleitung) ═════════════ -->
+<!-- ══ MODAL: freien Talk-Termin fest einteilen (Lernbegleitung, 2026-11-18) ══════════ -->
+<div class="overlay" id="modal-talk-einteilen">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title" id="tein-titel">🎤 Talk einteilen</div>
+    <div id="tein-info" style="font-size:13px;color:var(--md-on-surface-variant);margin-bottom:12px;"></div>
+    <div class="form-group">
+      <label class="form-label" for="tein-thema">Thema</label>
+      <input class="form-input" id="tein-thema" placeholder="z.B. Satz des Pythagoras">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="tein-person">Wer hält den Talk?</label>
+      <input class="form-input personen-suche" id="tein-suche" type="search" placeholder="🔍 Name suchen…" autocomplete="off"
+             aria-label="Personen nach Namen filtern" aria-controls="tein-person" oninput="talkEinteilenOptionen()">
+      <select class="form-input" id="tein-person"></select>
+    </div>
+    <div style="font-size:12px;color:var(--md-on-surface-variant);line-height:1.4;margin-bottom:8px;">
+      Damit ist der Termin vergeben – niemand sonst kann ihn buchen. Gleich danach trägst du ein,
+      wer mit vorträgt und wer zuhört.
+    </div>
+    <div id="tein-error" style="color:var(--md-error);font-size:13px;display:none;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-talk-einteilen')">Abbrechen</button>
+      <button class="btn-act btn-blue" onclick="submitTalkEinteilen()">Einteilen</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-talk-beteiligte">
   <div class="modal" style="max-width:460px;">
     <div class="modal-title">👥 Beteiligte bearbeiten</div>
@@ -6522,6 +6549,12 @@ function renderCalDetail() {
           + `${it.geschlossen ? 'Wieder öffnen' : 'Keine weiteren Anmeldungen'}</button> ` + actions;
         actions = `<button class="btn-act btn-blue" onclick="openInputAssignModal(${it.id})">${it.booked ? '+ weitere einladen' : '+ einladen'}</button> ` + actions;
       }
+      // Talks (2026-11-18): gebucht -> Beteiligte eintragen; frei -> fest einteilen, wer vortraegt.
+      if (it.typ === 'talk' && mayManage) {
+        actions = (it.booked && it.session_id
+          ? `<button class="btn-act btn-blue" onclick="openTalkBeteiligte(${it.session_id}, 'kalender')">👥 Beteiligte / einladen</button> `
+          : `<button class="btn-act btn-blue" onclick="openTalkEinteilen(${it.id}, 'kalender')">+ einteilen</button> `) + actions;
+      }
     }
     // Schueler:innen sehen nur, wo sie noch etwas tun koennen - oder was ihnen selbst
     // gehoert. Das trifft beide Terminarten richtig: ein fremder Talk ist mit der
@@ -7861,7 +7894,8 @@ function awRenderBar() {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       ${einladbar ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openInputAssignModal(${s.id})">${slotVorbei(s) ? '+ nachtragen' : s.booked ? '+ weitere einladen' : '+ einladen'}</button>` : ''}
-      ${(darf && s.typ === 'talk' && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openTalkBeteiligte(${s.session_id}, 'kalender')">👥 Beteiligte</button>` : ''}
+      ${(darf && s.typ === 'talk' && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openTalkBeteiligte(${s.session_id}, 'kalender')">👥 Beteiligte / einladen</button>` : ''}
+      ${(darf && s.typ === 'talk' && !s.booked) ? `<button class="mw-bar-btn mw-bar-btn-blau" onclick="openTalkEinteilen(${s.id}, 'kalender')">+ einteilen</button>` : ''}
       ${schliessbar ? `<button class="mw-bar-btn" onclick="calSlotGeschlossen(${s.id}, ${!s.geschlossen})">${s.geschlossen ? 'Wieder öffnen' : 'Keine weiteren Anmeldungen'}</button>` : ''}
       ${darf ? `<button class="mw-bar-btn" onclick="openTalkingSlotEditModal(${s.id},'calendar')">Bearbeiten</button>` : ''}
       ${(darf && s.booked && s.session_id) ? `<button class="mw-bar-btn mw-bar-btn-rot" onclick="calCancelSession(${s.session_id})">Stornieren</button>` : ''}
@@ -8745,11 +8779,13 @@ function renderTalkingAdmin() {
         ${booked ? `
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span>${s.thema ? `„${escHtml(s.thema)}“` : 'Talk'}</span>
-            <button class="btn-icon" onclick="openTalkBeteiligte(${s.session_id}, 'talks')" title="Beteiligte bearbeiten" aria-label="Beteiligte bearbeiten">👥</button>
+            <button class="btn-icon" onclick="openTalkBeteiligte(${s.session_id}, 'talks')" title="Beteiligte bearbeiten / einladen" aria-label="Beteiligte bearbeiten / einladen">👥</button>
             <button class="btn-icon red" onclick="cancelTalkingSession(${s.session_id})" title="Buchung stornieren">🗑</button>
           </div>
           <div class="tzb-karte">${talkKarteHtml(s, today)}</div>
-        ` : `<div style="margin-top:8px;color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</div>`}
+        ` : `<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="color:var(--md-on-surface-variant);font-size:13px;">Offen – noch nicht gebucht.</span>
+            <button class="btn-sm" onclick="openTalkEinteilen(${s.id}, 'talks')">+ einteilen</button></div>`}
       </div>`;
   };
 
@@ -9052,19 +9088,75 @@ function talkBeteiligteOptionen() {
   const d = talkBeteiligteDaten();
   const sel = document.getElementById('tbet-person');
   if (!d || !sel) return;
-  const t = String(document.getElementById('tbet-suche').value || '').trim().toLowerCase();
   const rolleVon = {};
   d.coPresenters.forEach(c => { rolleVon[c.username] = 'trägt vor'; });
   d.invitees.forEach(iv => { rolleVon[iv.username] = iv.status === 'abgelehnt' ? 'hat abgesagt' : 'hört zu'; });
-  const passend = d.roster.filter(p => p.username !== d.presenter
-    && (!t || String(p.username || '').toLowerCase().includes(t)));
+  personenOptionen(sel, d.roster.filter(p => p.username !== d.presenter),
+    document.getElementById('tbet-suche').value, p => rolleVon[p.username] ? ' (' + rolleVon[p.username] + ')' : '');
+}
+// Auswahlliste mit Suchfeld davor ("Beteiligte", "Talk einteilen"): bleibt genau eine Person
+// uebrig, ist sie gleich gewaehlt; eine passende alte Wahl bleibt stehen. zusatz(p) haengt z.B.
+// die Rolle an den Namen.
+function personenOptionen(sel, leute, suchtext, zusatz) {
+  const t = String(suchtext || '').trim().toLowerCase();
+  const passend = leute.filter(p => !t || String(p.username || '').toLowerCase().includes(t));
   const vorher = sel.value;
   sel.innerHTML = (passend.length === 1 ? ''
     : `<option value="">${t && !passend.length ? '– niemand gefunden –' : '– Person wählen –'}</option>`) +
-    passend.map(p =>
-      `<option value="${p.id}">${escHtml(p.username)}${rolleVon[p.username] ? ' (' + rolleVon[p.username] + ')' : ''}</option>`).join('');
+    passend.map(p => `<option value="${p.id}">${escHtml(p.username)}${zusatz ? zusatz(p) : ''}</option>`).join('');
   sel.value = passend.length === 1 ? String(passend[0].id)
     : passend.some(p => String(p.id) === vorher) ? vorher : '';
+}
+
+// ── Talk einteilen (Wunsch einer Kollegin, 2026-11-18) ────────────────────────────
+// Ein freier Talk-Termin: die Lernbegleitung bestimmt, wer ihn haelt - damit ist er fest vergeben
+// und kann nicht mehr von anderen gebucht werden. Gleich danach oeffnet "Beteiligte", um weitere
+// Vortragende und Zuhoerende fest einzutragen (die gelten als dabei, ohne Zusage).
+let _tein = null;   // { slotId, quelle: 'kalender' | 'talks' }
+function talkEinteilenSlot() {
+  if (!_tein) return null;
+  return ((_tein.quelle === 'kalender' ? calData.slots : talkingAdminSlots) || []).find(x => x.id === _tein.slotId) || null;
+}
+function openTalkEinteilen(slotId, quelle) {
+  _tein = { slotId, quelle };
+  const s = talkEinteilenSlot();
+  if (!s) return;
+  const subj = quelle === 'kalender' ? subjectById(s.subjectId) : subjectByKey(activeSubject);
+  document.getElementById('tein-titel').textContent = `🎤 ${subj.name}-Talk einteilen`;
+  document.getElementById('tein-info').textContent = [fmtTalkingDatum(s.datum), s.uhrzeit, s.ort].filter(Boolean).join(' · ');
+  // Ein ausgeschriebenes Thema steht schon drin (aenderbar).
+  document.getElementById('tein-thema').value = s.slotThema || '';
+  document.getElementById('tein-suche').value = '';
+  document.getElementById('tein-person').value = '';
+  document.getElementById('tein-error').style.display = 'none';
+  talkEinteilenOptionen();
+  openModal('modal-talk-einteilen');
+}
+function talkEinteilenOptionen() {
+  const sel = document.getElementById('tein-person');
+  if (!sel || !_tein) return;
+  personenOptionen(sel, (_tein.quelle === 'kalender' ? calClassmates : talkingAdminRoster) || [],
+    document.getElementById('tein-suche').value);
+}
+async function submitTalkEinteilen() {
+  const fehler = document.getElementById('tein-error');
+  const zeige = t => { fehler.textContent = t; fehler.style.display = t ? 'block' : 'none'; };
+  zeige('');
+  if (!_tein) return;
+  const userId = parseInt(document.getElementById('tein-person').value);
+  if (!userId) return zeige('Bitte wählen, wer den Talk hält.');
+  const thema = document.getElementById('tein-thema').value.trim();
+  if (!thema) return zeige('Bitte ein Thema angeben.');
+  const r = await fetch(`/api/admin/talking-slots/${_tein.slotId}/einteilen`, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ userId, thema })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return zeige(d.error || 'Fehler beim Einteilen.');
+  const quelle = _tein.quelle;
+  closeModal('modal-talk-einteilen');
+  if (quelle === 'kalender') await loadCalendar(); else await talkingAdminAktualisieren();
+  // Gleich weiter: wer traegt mit vor, wer hoert zu.
+  openTalkBeteiligte(d.sessionId, quelle);
 }
 function talkBeteiligteFehler(t) {
   const el = document.getElementById('tbet-error');
