@@ -4006,40 +4006,43 @@ async function halbjahrOverview(klasse, onlyUid) {
     s.lastInput = maxD(s.lastInput, r.datum);
   };
 
-  presented.rows.forEach(r => {
-    if (r.typ === 'input') return fabueEintragen(r, 'selbst gebucht', {});
-    if (r.status !== 'erledigt') return;
+  // Talks (seit 2026-11-18): in talkDetails steht JEDER Talk, auf dem die Person steht, mit
+  // status erledigt / nicht_erledigt / ausstehend - ob ein ausstehender noch kommt oder schon
+  // vorbei ist, entscheidet die Seite am Datum. So zeigt die Halbjahr-Uebersicht auch ✗ und
+  // schon angemeldete Talks. Gezaehlt (talksPresented/-Listened, Flammen, lastTalk) wird weiter
+  // nur, was stattgefunden hat - darauf bauen Sortierung, "ohne Aktivitaet" und das Tool.
+  const talkEintragen = (r, role, extra) => {
     const hj = slotHj(r); if (!hj) return;
     halbjahre.add(hj);
     const s = ensureSubject(r.uid, hj, r.subjectId);
-    s.talksPresented++; s.pokalePresented += r.pokale || 0;
-    s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale, ...(r.mit ? { mit: r.mit } : {}) });
+    const status = TALKING_STATUS_VALUES.includes(r.status) ? r.status : 'ausstehend';
+    s.talkDetails.push({ datum: r.datum, role, thema: r.thema, pokale: r.pokale, status, ...extra });
+    if (status !== 'erledigt') return;
+    if (role === 'gehalten') { s.talksPresented++; s.pokalePresented += r.pokale || 0; }
+    else { s.talksListened++; s.pokaleListened += r.pokale || 0; }
     s.lastTalk = maxD(s.lastTalk, r.datum);
+  };
+  // Eingeladene stehen erst mit ihrer Zusage auf dem Talk - oder sobald die Lernbegleitung
+  // sie bewertet hat. Offene Einladungen und Absagen sind keine Anmeldung.
+  const talkEinladungDabei = r => r.einladung === 'angenommen' || (r.status && r.status !== 'ausstehend');
+
+  presented.rows.forEach(r => {
+    if (r.typ === 'input') return fabueEintragen(r, 'selbst gebucht', {});
+    talkEintragen(r, 'gehalten', r.mit ? { mit: r.mit } : {});
   });
   attended.rows.forEach(r => {
     // Mit-Vortrag: ein gehaltener Talk der Person, kein Zuhoeren.
     if (r.typ !== 'input' && r.rolle === 'vortrag') {
-      if (r.status !== 'erledigt') return;
-      const hj = slotHj(r); if (!hj) return;
-      halbjahre.add(hj);
-      const s = ensureSubject(r.uid, hj, r.subjectId);
-      s.talksPresented++; s.pokalePresented += r.pokale || 0;
+      if (!talkEinladungDabei(r)) return;
       const mit = [r.presenter, r.mit_andere].filter(Boolean).join(', ');
-      s.talkDetails.push({ datum: r.datum, role: 'gehalten', thema: r.thema, pokale: r.pokale, ...(mit ? { mit } : {}) });
-      s.lastTalk = maxD(s.lastTalk, r.datum);
-      return;
+      return talkEintragen(r, 'gehalten', mit ? { mit } : {});
     }
     // "angemeldet" statt "teilgenommen": die Rolle sagt nur, dass die Person auf der
     // Liste steht. Ob sie da war, steht daneben im Status - "teilgenommen · noch offen"
     // las sich wie ein Widerspruch.
     if (r.typ === 'input') return fabueEintragen(r, 'angemeldet', { presenter: r.presenter });
-    if (r.status !== 'erledigt') return;
-    const hj = slotHj(r); if (!hj) return;
-    halbjahre.add(hj);
-    const s = ensureSubject(r.uid, hj, r.subjectId);
-    s.talksListened++; s.pokaleListened += r.pokale || 0;
-    s.talkDetails.push({ datum: r.datum, role: 'zugehört', thema: r.thema, presenter: r.presenter, pokale: r.pokale });
-    s.lastTalk = maxD(s.lastTalk, r.datum);
+    if (!talkEinladungDabei(r)) return;
+    talkEintragen(r, 'zugehört', { presenter: r.presenter });
   });
   lzkRows.rows.forEach(r => {
     const hj = halbjahrForDate(r.datum); if (!hj) return;

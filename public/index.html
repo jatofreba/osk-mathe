@@ -8204,7 +8204,26 @@ function renderHalbjahr() {
   const bucketOf = (s) => (s.byHalbjahr || {})[hjSelected] || emptyB;
   const dash = '<span style="color:var(--md-on-surface-variant);">–</span>';
   const sub = (d) => d ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">${hjFmtDate(d)}</div>` : '';
-  const lastRole = (details, role) => { const f = (details||[]).filter(x => x.role === role); return f.length ? f[0].datum : null; };
+  // Talks je Rolle (Wunsch einer Kollegin, 2026-11-18): jeder Talk einzeln, der neueste zuerst -
+  // 🔥 je Flamme, ○ = hat stattgefunden ohne Flamme, ✗ = nicht gehalten bzw. nicht teilgenommen.
+  // Dahinter, was noch aussteht: ⏳ = vorbei, aber noch nicht bewertet, 📅 = angemeldet, kommt
+  // noch. Darunter das Datum des letzten bewerteten Talks. Sortiert wird weiter nach der Zahl
+  // der Talks, die stattgefunden haben (talksPresented/-Listened).
+  const heute = calDateStr(new Date());
+  const talkZelle = (sd, role) => {
+    const talks = (sd.talkDetails || []).filter(t => t.role === role);
+    const bewertet = talks.filter(t => t.status === 'erledigt' || t.status === 'nicht_erledigt');
+    const offen = talks.filter(t => t.status === 'ausstehend' && t.datum <= heute).length;
+    const kommt = talks.filter(t => t.status === 'ausstehend' && t.datum > heute).length;
+    if (!bewertet.length && !offen && !kommt) return dash;
+    const marke = t => `<span title="${escHtml([hjFmtDate(t.datum), t.thema].filter(Boolean).join(' · '))}"`
+      + (t.status === 'nicht_erledigt' ? ' style="color:var(--md-error);">✗' : `>${t.pokale ? '🔥'.repeat(t.pokale) : '○'}`) + '</span>';
+    return [
+      bewertet.map(marke).join(' · '),
+      offen ? `<span style="color:#a16207;" title="vorbei, noch nicht bewertet">⏳${offen}</span>` : '',
+      kommt ? `<span style="color:var(--md-on-surface-variant);" title="angemeldet, steht noch an">📅${kommt}</span>` : '',
+    ].filter(Boolean).join(' ') + sub(bewertet.length ? bewertet[0].datum : null);
+  };
   // LZK gibt es seit 2026-09-24 in jedem Fach. Eintraege von vorher tragen kein Fach
   // und sind Mathe (Lerntheken-LZK).
   const lzkDesFachs = (b, subj) => (b.lzk || []).filter(l => l.subjectId == null ? subj.key === 'mathe' : l.subjectId === subj.id);
@@ -8276,8 +8295,8 @@ function renderHalbjahr() {
         <td>${b.stationsCompleted ? '📚 ' + b.stationsCompleted + sub(b.lastStation) : dash}</td>` : '');
       return `<tr style="cursor:pointer;${nothing ? 'background:#fef2f2;' : ''}" onclick="openHjDetail(${s.id},'${subj.key}')" title="Details anzeigen">
         <td><strong>${escHtml(s.username)}</strong>${isMathe && b.lastActivity ? `<div style="font-size:10px;color:var(--md-on-surface-variant);">zuletzt aktiv ${hjFmtDate(b.lastActivity)}</div>` : ''}</td>
-        <td>${sd.talksPresented ? '🎤 ' + sd.talksPresented + sub(lastRole(sd.talkDetails,'gehalten')) : dash}</td>
-        <td>${sd.talksListened ? '👂 ' + sd.talksListened + sub(lastRole(sd.talkDetails,'zugehört')) : dash}</td>
+        <td>${talkZelle(sd, 'gehalten')}</td>
+        <td>${talkZelle(sd, 'zugehört')}</td>
         <td>${teilnahmeZelle(sd, '📘 ')}</td>${extraCols}
       </tr>`;
     }).join('');
@@ -8305,7 +8324,7 @@ function renderHalbjahr() {
 
   el.innerHTML = `
     <div style="font-size:11px;color:var(--md-on-surface-variant);margin-bottom:4px;">
-      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 📘 FaBü bzw. ✓ Teilgenommen: Zahl = teilgenommen (wer eingetragen war), ✗ = unentschuldigt gefehlt, 📅 = steht noch an. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Spaltenkopf anklicken sortiert (nochmal klicken dreht um, ein drittes Mal zurück auf alphabetisch), Zeile anklicken zeigt Details.
+      Halbjahr ${escHtml(hjSelected)} · Talks nach zugewiesenem Halbjahr (Slot-Feld), Fachbüro/LZK/Stationen nach Datum. 🎤 Gehalten / 👂 Zugehört: je Talk die Flammen (neueste zuerst), ○ = ohne Flamme, ✗ = nicht gehalten bzw. nicht teilgenommen, ⏳ = vorbei, noch nicht bewertet, 📅 = angemeldet, steht noch an. 📘 FaBü bzw. ✓ Teilgenommen: Zahl = teilgenommen (wer eingetragen war), ✗ = unentschuldigt gefehlt, 📅 = steht noch an. 📚 Stationen zählen erst seit Einführung der Erfassung (kein Altbestand). Spaltenkopf anklicken sortiert (nochmal klicken dreht um, ein drittes Mal zurück auf alphabetisch), Zeile anklicken zeigt Details.
     </div>
     ${sections}`;
 }
@@ -8320,7 +8339,6 @@ function renderHalbjahr() {
 function hjDetailHtml(s, subjectKey) {
   const b = (s.byHalbjahr || {})[hjSelected] || { lzk:[], stationDetails:[], stationsCompleted:0, bySubject:{} };
   const list = (items, render, empty) => (items && items.length) ? items.map(render).join('') : `<div style="font-size:12px;color:var(--md-on-surface-variant);font-style:italic;margin-bottom:6px;">${empty}</div>`;
-  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.mit?' mit '+escHtml(t.mit):''}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}${t.pokale?' · '+'🔥'.repeat(t.pokale):''}</span></div>`;
   // "noch offen" heisst: Termin war, die Lernbegleitung hat aber nichts eingetragen.
   // Ein Termin, der erst noch kommt, ist etwas anderes - sonst sieht es aus, als waere
   // da etwas liegengeblieben.
@@ -8329,6 +8347,15 @@ function hjDetailHtml(s, subjectKey) {
     : t.status === 'nicht_erledigt' ? '<span class="pill pill-red" style="font-size:10px;">✗ unentschuldigt gefehlt</span>'
     : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
     : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch offen</span>';
+  // Talks: Flammen bzw. Status wie in der Tabelle (seit 2026-11-18 stehen auch ✗, noch nicht
+  // bewertete und angemeldete Talks in der Liste).
+  const talkStand = t => t.status === 'erledigt'
+      ? (t.pokale ? '🔥'.repeat(t.pokale) : '<span class="pill pill-green" style="font-size:10px;">○ ohne Flamme</span>')
+    : t.status === 'nicht_erledigt'
+      ? `<span class="pill pill-red" style="font-size:10px;">✗ ${t.role === 'gehalten' ? 'nicht gehalten' : 'nicht teilgenommen'}</span>`
+    : (t.datum && t.datum > heuteHj) ? '<span class="pill pill-blue" style="font-size:10px;">📅 steht noch an</span>'
+    : '<span class="pill pill-yellow" style="font-size:10px;">⏳ noch nicht bewertet</span>';
+  const talkRow = t => `<div class="stat-card" style="margin-bottom:6px;">${t.role==='gehalten'?'🎤':'👂'} <strong>${escHtml(t.thema||'')}</strong> ${talkStand(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.role}${t.mit?' mit '+escHtml(t.mit):''}${t.presenter?' bei '+escHtml(t.presenter):''} · ${hjFmtDate(t.datum)}</span></div>`;
   // Lernberatung: kein Fachbüro, einfach ein Termin, an dem man teilgenommen hat (oder nicht).
   const teilnahmePill = t => t.status === 'erledigt' ? '<span class="pill pill-green" style="font-size:10px;">✓ teilgenommen</span>' : fabuePill(t);
   const teilnahmeRow = t => `<div class="stat-card" style="margin-bottom:6px;"><strong>${escHtml(t.thema||'Termin')}</strong> ${teilnahmePill(t)} <span style="color:var(--md-on-surface-variant);font-size:12px;">· ${t.presenter?'bei '+escHtml(t.presenter)+' · ':''}${hjFmtDate(t.datum)}</span></div>`;
