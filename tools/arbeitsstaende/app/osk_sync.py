@@ -260,8 +260,12 @@ class AppClient:
 
     def mathe_talks(self) -> List[dict]:
         """Alle Mathe-Talk-Termine des Tandems mit Buchung, Vortragenden und
-        Zuhoerenden (dieselbe Liste wie in der Talk-Verwaltung der App)."""
-        return self._get("/api/admin/talking-slots?typ=talk&subject=mathe")
+        Zuhoerenden (dieselbe Liste wie in der Talk-Verwaltung der App).
+
+        Ausgefallene Termine (Lernbegleitung krank, seit 2026-11-19) fehlen: sie zaehlen
+        in der App nirgends - das Tool behandelt sie deshalb wie online geloeschte."""
+        return [t for t in (self._get("/api/admin/talking-slots?typ=talk&subject=mathe") or [])
+                if not t.get("ausfall")]
 
     def talk_bewerten(self, rolle: str, online_id, status: str, flammen: int, emoji: str) -> None:
         """Bewertung eines Talks setzen. Das Emoji schreibt der Endpunkt nur, wenn es

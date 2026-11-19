@@ -282,6 +282,15 @@ async function initDB() {
         ALTER TABLE talking_slots ADD COLUMN geschlossen BOOLEAN NOT NULL DEFAULT false;
       END IF;
     END $$;
+    -- Ausfall (2026-11-19): 'krank' = die Lernbegleitung ist krank, der Termin faellt aus. Er bleibt
+    -- sichtbar (durchgestrichen), zaehlt aber nirgends, belegt keine Zeit und nimmt niemanden mehr auf.
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='talking_slots' AND column_name='ausfall') THEN
+        ALTER TABLE talking_slots ADD COLUMN ausfall TEXT;
+        ALTER TABLE talking_slots ADD COLUMN ausfall_am TIMESTAMPTZ;
+        ALTER TABLE talking_slots ADD COLUMN ausfall_von INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
     -- Deadlines/Termine der Lernbegleitungen (klassenweit sichtbar im Kalender, alles Mathe = blau).
     CREATE TABLE IF NOT EXISTS math_deadlines (
       id         SERIAL PRIMARY KEY,
@@ -843,13 +852,13 @@ async function studentOccupiedIntervals(uid, excludeSlotId) {
   const r = await pool.query(`
     SELECT sl.id AS slot_id, to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.uhrzeit, sl.dauer
     FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
-    WHERE ts.presenter_id = $1
+    WHERE ts.presenter_id = $1 AND sl.ausfall IS NULL
     UNION
     SELECT sl.id AS slot_id, to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.uhrzeit, sl.dauer
     FROM talking_invitations ti
     JOIN talking_sessions ts ON ts.id = ti.session_id
     JOIN talking_slots sl ON sl.id = ts.slot_id
-    WHERE ti.listener_id = $1 AND ti.status IN ('eingeladen','angenommen')
+    WHERE ti.listener_id = $1 AND ti.status IN ('eingeladen','angenommen') AND sl.ausfall IS NULL
   `, [uid]);
   return r.rows
     .filter(row => row.slot_id !== excludeSlotId)
@@ -896,8 +905,11 @@ const tagKurz = iso => `${String(iso).slice(8, 10)}.${String(iso).slice(5, 7)}.`
 // Veranstaltung, nie mit Terminen.
 async function hasScheduleConflict(uid, slotId) {
   const t = await pool.query(
-    `SELECT to_char(datum,'YYYY-MM-DD') AS datum, uhrzeit, dauer, klasse FROM talking_slots WHERE id=$1`, [slotId]);
+    `SELECT to_char(datum,'YYYY-MM-DD') AS datum, uhrzeit, dauer, klasse, ausfall FROM talking_slots WHERE id=$1`, [slotId]);
   if (!t.rows.length) return null;
+  // Faellt der Termin aus (Lernbegleitung krank, 2026-11-19), kommt niemand mehr dazu - jeder Weg
+  // hinein (buchen, mitmachen, zusagen, einladen, einteilen) laeuft durch diese Pruefung.
+  if (t.rows[0].ausfall) return { ausfall: true, veranstaltung: null };
   const start = parseUhrzeitMin(t.rows[0].uhrzeit);
   const dauer = t.rows[0].dauer || 45;
   const datum = t.rows[0].datum;
@@ -911,6 +923,7 @@ async function hasScheduleConflict(uid, slotId) {
 // Meldung zu einem Zeitkonflikt: bei einer Veranstaltung ihr Name, sonst der bisherige Text.
 // wer: undefined = "du", ein Name = diese Person, '' = ohne (fuer Listen "ada: ...").
 function konfliktText(k, sonst, wer) {
+  if (k && k.ausfall) return wer === '' ? 'der Termin fällt aus – die Lernbegleitung ist krank' : 'Dieser Termin fällt aus – die Lernbegleitung ist krank.';
   if (!k || !k.veranstaltung) return sonst;
   if (wer === '') return `📌 in dieser Zeit bei „${k.veranstaltung}“`;
   return `📌 In dieser Zeit ${wer ? 'ist ' + wer : 'bist du'} bei „${k.veranstaltung}“.`;
@@ -1818,14 +1831,15 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
       pool.query(`
         SELECT ts.presenter_id AS user_id, ts.presented_status AS "presentedStatus", ts.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
         FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE sl.typ = 'talk'
+        -- Ausgefallene Termine (Lernbegleitung krank) zaehlen nirgends (2026-11-19).
+        WHERE sl.typ = 'talk' AND sl.ausfall IS NULL
         UNION ALL
         -- Mit-Vortrag: ein eigener Vortrag der Person, bewertet an ihrer Einladung.
         SELECT ti.listener_id AS user_id, ti.attended_status AS "presentedStatus", ti.pokale, sl.halbjahr, sl.datum, sl.subject_id AS "subjectId"
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE sl.typ = 'talk' AND ti.rolle = 'vortrag'
+        WHERE sl.typ = 'talk' AND ti.rolle = 'vortrag' AND sl.ausfall IS NULL
           AND (ti.status = 'angenommen' OR ti.attended_status <> 'ausstehend')
       `),
       pool.query(`
@@ -1835,6 +1849,7 @@ app.get('/api/leaderboard', requireLogin, async (req, res) => {
         JOIN talking_slots sl ON sl.id = ts.slot_id
         -- wie talkZuhoerenZaehlt: zugesagt oder als "hat stattgefunden" bewertet
         WHERE (ti.status = 'angenommen' OR ti.attended_status = 'erledigt') AND sl.typ = 'talk' AND ti.rolle <> 'vortrag'
+          AND sl.ausfall IS NULL
       `),
       pool.query(`SELECT DISTINCT klasse, halbjahr, subject_id AS "subjectId" FROM talking_slots WHERE typ='talk'`),
       pool.query(`SELECT id, key, pflicht_praesentieren AS "pflichtP", pflicht_zuhoeren AS "pflichtZ" FROM subjects`),
@@ -2430,7 +2445,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         JOIN talking_slots sl ON sl.id = ts.slot_id
         LEFT JOIN talking_invitations ti ON ti.session_id = ts.id
         LEFT JOIN users u ON u.id = ti.listener_id
-        WHERE ts.presenter_id = $1 AND sl.typ = 'talk' AND sl.subject_id = $2
+        WHERE ts.presenter_id = $1 AND sl.typ = 'talk' AND sl.subject_id = $2 AND sl.ausfall IS NULL
         GROUP BY ts.id, sl.id
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid, subject.id]),
@@ -2447,7 +2462,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
         JOIN users pu ON pu.id = ts.presenter_id
-        WHERE ti.listener_id = $1 AND sl.typ = 'talk' AND sl.subject_id = $2 AND ti.rolle <> 'vortrag'
+        WHERE ti.listener_id = $1 AND sl.typ = 'talk' AND sl.subject_id = $2 AND ti.rolle <> 'vortrag' AND sl.ausfall IS NULL
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid, subject.id]),
       pool.query(`SELECT DISTINCT halbjahr FROM talking_slots WHERE klasse=$1 AND typ='talk' AND subject_id=$2`, [req.session.klasse, subject.id]),
@@ -2461,14 +2476,14 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         SELECT to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.halbjahr, sl.uhrzeit, sl.ort,
                ts.thema, ts.presented_status AS status, 'selbst gebucht' AS rolle
         FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE ts.presenter_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
+        WHERE ts.presenter_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE AND sl.ausfall IS NULL
         UNION ALL
         SELECT to_char(sl.datum,'YYYY-MM-DD') AS datum, sl.halbjahr, sl.uhrzeit, sl.ort,
                ts.thema, ti.attended_status AS status, 'angemeldet' AS rolle
         FROM talking_invitations ti
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
-        WHERE ti.listener_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE
+        WHERE ti.listener_id = $1 AND sl.typ = 'input' AND sl.subject_id = $2 AND sl.datum <= CURRENT_DATE AND sl.ausfall IS NULL
           -- nur Eingetragene: offene Einladungen/Anfragen und Absagen sind keine Teilnahme
           AND (ti.status = 'angenommen' OR ti.attended_status <> 'ausstehend')
         ORDER BY datum DESC
@@ -2492,7 +2507,7 @@ app.get('/api/talking-sessions/mine', requireLogin, async (req, res) => {
         JOIN talking_sessions ts ON ts.id = ti.session_id
         JOIN talking_slots sl ON sl.id = ts.slot_id
         LEFT JOIN users pu ON pu.id = ts.presenter_id
-        WHERE ti.listener_id = $1 AND ti.rolle = 'vortrag' AND sl.typ = 'talk' AND sl.subject_id = $2
+        WHERE ti.listener_id = $1 AND ti.rolle = 'vortrag' AND sl.typ = 'talk' AND sl.subject_id = $2 AND sl.ausfall IS NULL
         ORDER BY sl.datum DESC, sl.uhrzeit
       `, [uid, subject.id]),
     ]);
@@ -3118,7 +3133,7 @@ app.get('/api/admin/talking-slots', requireAdmin, async (req, res) => {
     const subjectKey = req.query.subject || 'mathe';
     const r = await pool.query(`
       SELECT s.id, s.datum, s.uhrzeit, s.ort, s.halbjahr, s.typ, s.dauer, s.subject_id AS "subjectId",
-             s.thema AS "slotThema", s.geschlossen,
+             s.thema AS "slotThema", s.geschlossen, s.ausfall,
              ts.id AS session_id, ts.thema, ts.presented_status AS "presentedStatus", ts.pokale, ts.quality_emoji AS "qualityEmoji", pu.username AS presenter_username,
              COALESCE(json_agg(json_build_object(
                'id', ti.id, 'listenerId', lu.id, 'username', lu.username,
@@ -3258,8 +3273,9 @@ app.post('/api/admin/talking-sessions', requireAdmin, async (req, res) => {
   try {
     const { slotId, thema, studentIds } = req.body;
     if (!slotId) return res.status(400).json({ error: 'Fehlende Angaben' });
-    const slot = await pool.query('SELECT id, thema FROM talking_slots WHERE id=$1 AND klasse=$2', [slotId, req.session.klasse]);
+    const slot = await pool.query('SELECT id, thema, ausfall FROM talking_slots WHERE id=$1 AND klasse=$2', [slotId, req.session.klasse]);
     if (!slot.rows.length) return res.status(404).json({ error: 'Termin nicht gefunden' });
+    if (slot.rows[0].ausfall) return res.status(409).json({ error: 'Dieser Termin fällt aus – die Lernbegleitung ist krank.' });
     // Ist am Termin schon ein Thema ausgeschrieben, muss es hier nicht wiederholt werden.
     const sessionThema = (thema || '').trim() || (slot.rows[0].thema || '').trim();
     if (!sessionThema) return res.status(400).json({ error: 'Fehlende Angaben' });
@@ -3336,6 +3352,44 @@ app.post('/api/admin/talking-slots/:id/einteilen', requireAdmin, async (req, res
 // Ein Fachbuero fuer weitere Anmeldungen schliessen (oder wieder oeffnen). Der Termin
 // bleibt bestehen; wer schon dabei ist, behaelt ihn. Nur Fachbueros - bei einem Talk
 // gibt es nichts zu schliessen, der ist mit der Buchung ohnehin vergeben.
+// Termin faellt aus, weil die Lernbegleitung krank ist (Nutzerwunsch 2026-11-19) - oder findet
+// doch statt (ausfall:false). ganzerTag: alle Termine dieser Lernbegleitung an dem Tag mit. Jede
+// Lernbegleitung des Tandems darf das - die kranke kann es ja gerade nicht. Termine mit einer
+// Bewertung bleiben, wie sie sind (sonst verschwaenden Flammen still): einzeln 409, beim ganzen
+// Tag uebersprungen und gemeldet. Buchungen bleiben stehen; sie zaehlen nur nirgends mehr.
+app.post('/api/admin/talking-slots/:id/ausfall', requireAdmin, async (req, res) => {
+  const an = req.body.ausfall !== false;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Immer mit "return await fehler(...)" - wie beim Austauschen der buchenden Person.
+    const fehler = async (code, text) => { await client.query('ROLLBACK'); return res.status(code).json({ error: text }); };
+    const s = await client.query(`SELECT id, admin_id AS "adminId", to_char(datum,'YYYY-MM-DD') AS datum
+      FROM talking_slots WHERE id=$1 AND klasse=$2`, [req.params.id, req.session.klasse]);
+    if (!s.rows.length) return await fehler(404, 'Nicht gefunden');
+    const { adminId, datum } = s.rows[0];
+    const ganzerTag = !!req.body.ganzerTag && adminId != null;
+    const r = await client.query(`
+      SELECT s.id, ${TERMIN_BEWERTET_SQL} AS bewertet
+      FROM talking_slots s LEFT JOIN talking_sessions ts ON ts.slot_id = s.id
+      WHERE s.klasse=$1 AND ${ganzerTag ? 's.admin_id=$2 AND s.datum=$3::date' : 's.id=$2'}
+      ORDER BY s.uhrzeit, s.id FOR UPDATE OF s`,
+      ganzerTag ? [req.session.klasse, adminId, datum] : [req.session.klasse, s.rows[0].id]);
+    const bewertet = an ? r.rows.filter(x => x.bewertet).map(x => x.id) : [];
+    const ids = r.rows.filter(x => !bewertet.includes(x.id)).map(x => x.id);
+    if (!ganzerTag && bewertet.length)
+      return await fehler(409, 'Hier ist schon jemand bewertet – erst die Bewertung zurücksetzen.');
+    await client.query(
+      `UPDATE talking_slots SET ausfall=$1, ausfall_am=$2, ausfall_von=$3 WHERE id = ANY($4::int[])`,
+      an ? ['krank', new Date(), req.session.userId, ids] : [null, null, null, ids]);
+    await client.query('COMMIT');
+    res.json({ ok: true, anzahl: ids.length, uebersprungen: bewertet.length });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally { client.release(); }
+});
+
 app.post('/api/admin/talking-slots/:id/geschlossen', requireAdmin, async (req, res) => {
   try {
     const geschlossen = req.body.geschlossen === true;
@@ -4125,7 +4179,7 @@ app.get('/api/calendar', requireLogin, async (req, res) => {
                s.thema AS "slotThema", s.geschlossen,
                ts.id AS session_id, ts.thema, ts.presenter_id AS "presenterId", ts.presented_status AS "presentedStatus",
                pu.username AS "presenterUsername",
-               tu.username AS "teacherUsername", s.admin_id AS "teacherId",
+               tu.username AS "teacherUsername", s.admin_id AS "teacherId", s.ausfall,
                (SELECT ti.id FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationId",
                (SELECT ti.status FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationStatus",
                (SELECT ti.herkunft FROM talking_invitations ti WHERE ti.session_id = ts.id AND ti.listener_id = $2) AS "myInvitationHerkunft",
@@ -4221,7 +4275,8 @@ async function halbjahrOverview(klasse, onlyUid) {
                  AND (ci.status = 'angenommen' OR ci.attended_status <> 'ausstehend')) AS mit
       FROM talking_sessions ts JOIN talking_slots sl ON sl.id = ts.slot_id
       JOIN users u ON u.id = ts.presenter_id
-      WHERE u.klasse = $1${uidFilter}
+      -- Ausgefallene Termine (Lernbegleitung krank) zaehlen nicht (2026-11-19).
+      WHERE u.klasse = $1${uidFilter} AND sl.ausfall IS NULL
     `, params),
     pool.query(`
       SELECT ti.listener_id AS uid, sl.typ, sl.halbjahr, sl.subject_id AS "subjectId", to_char(sl.datum,'YYYY-MM-DD') AS datum, ti.attended_status AS status, ti.status AS einladung, ts.thema, pu.username AS presenter, ti.pokale, ti.rolle,
@@ -4236,7 +4291,7 @@ async function halbjahrOverview(klasse, onlyUid) {
       -- vortragende Person (presenter_id IS NULL). Mit INNER JOIN fielen genau
       -- diese Teilnahmen lautlos aus der Auswertung.
       LEFT JOIN users pu ON pu.id = ts.presenter_id
-      WHERE u.klasse = $1${uidFilter}
+      WHERE u.klasse = $1${uidFilter} AND sl.ausfall IS NULL
     `, params),
     pool.query(`
       SELECT l.user_id AS uid, l.lerntheke, l.typ, l.status, l.pokale, to_char(l.datum,'YYYY-MM-DD') AS datum,
@@ -4447,6 +4502,8 @@ app.get('/api/public/week', async (req, res) => {
         WHERE s.klasse = $1 AND COALESCE(sub.nur_zugewiesen, false) = false
           AND s.datum >= $2::date
           AND s.datum <  $2::date + INTERVAL '7 days'
+          -- Ausgefallene Termine (Lernbegleitung krank) stehen dort nicht mehr (2026-11-19).
+          AND s.ausfall IS NULL
         ORDER BY s.datum, s.uhrzeit
       `, [PUBLIC_WEEK_KLASSE, weekStart]),
       pool.query(`
